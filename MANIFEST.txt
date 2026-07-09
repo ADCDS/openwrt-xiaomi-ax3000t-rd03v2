@@ -1,0 +1,81 @@
+Xiaomi Mi Router AX3000T v2 (RD03v2) OpenWrt port — overlay manifest
+=====================================================================
+Base:   openwrt/openwrt @ 25ee12629edcc38feffbd06255dd47840cd7af7e
+        ("uboot-tools: update to v2026.07")
+Device: IPQ5018 SoC (2.4 GHz radio) + QCN6122 (5 GHz) + Airoha AN8855 4-port switch
+Usage:  ./build.sh  (clones OpenWrt, checks out 25ee126, overlays files/, builds)
+
+Every path below is relative to files/ and lands at the same path inside
+the OpenWrt tree. Sizes in bytes. [bin] = binary, keep byte-identical.
+
+Deliberately excluded: target/linux/qualcommax/ipq60xx/config-default and
+ipq807x/config-default diffs from the source tree — they only add
+"# CONFIG_*AN8855* is not set" housekeeping for those sibling subtargets
+(new Kconfig symbols introduced by our kernel patches default to n anyway).
+Not needed for an ipq50xx-only build.
+
+package/
+--------
+  14070  package/firmware/ipq-wifi/Makefile
+         Registers the ipq-wifi-xiaomi_mi-router-ax3000t-v2 board-data
+         package; extends install-overlay to also pick up in-repo
+         files/board-* (our board files are not in the upstream tarball).
+ 131240  package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.ipq5018  [bin]
+         2.4 GHz ath11k board data (board-2.bin) for the IPQ5018 radio.
+ 131240  package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.qcn6122  [bin]
+         5 GHz ath11k board data for the QCN6122 radio (2.7-compatible).
+   1788  package/kernel/qca-nss-dp/patches/0001-nss_dp_main-tolerate-fixed-link-registration-failure.patch
+         nss-dp: don't fail probe when fixed-link registration fails
+         (swphy can't emulate >1G speeds; needed for the 2.5G-capable
+         fixed-link uplink to the AN8855 switch).
+
+target/linux/qualcommax/
+------------------------
+  12867  target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
+         Device tree: SoC, NAND partitions, AN8855 switch, QCN6122,
+         LEDs, buttons, MACs/caldata wiring.
+   7887  target/linux/qualcommax/image/ipq50xx.mk
+         Image recipe Device/xiaomi_mi-router-ax3000t-v2
+         (DTS config@mp03.3, KERNEL_IN_UBI, wifi fw + board-data pkgs).
+    695  target/linux/qualcommax/ipq50xx/config-default
+         Enables the AN8855 kernel symbols for ipq50xx: AIR_AN8855_PHY,
+         MDIO_AN8855, MFD_AIROHA_AN8855, NET_DSA_AN8855,
+         NET_DSA_TAG_MTK, NVMEM_AN8855_EFUSE.
+
+target/linux/qualcommax/ipq50xx/base-files/
+-------------------------------------------
+   1121  target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
+         Default interfaces: lan2/lan3/lan4 = LAN, wan = WAN.
+   4034  target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
+         Caldata extraction from 0:ART — 2.4 GHz @ 0x1000,
+         5 GHz (QCN6122) @ 0x26800, 0x20000 each.
+   5705  target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
+         sysupgrade/NAND-install + U-Boot boot-flags: initramfs prepare,
+         fw_setenv boot_wait/uart_en, flag_boot_rootfs toggle.
+
+AN8855 switch driver (kernel, via files/ + patches-6.12/)
+---------------------------------------------------------
+   7676  target/linux/qualcommax/files/drivers/mfd/airoha-an8855.c
+         AN8855 MFD core: shared regmap/register access for sub-drivers.
+  65699  target/linux/qualcommax/files/drivers/net/dsa/an8855.c
+         AN8855 DSA switch driver core (ports, VLAN, FDB, MIB).
+  29963  target/linux/qualcommax/files/drivers/net/dsa/an8855.h
+         AN8855 DSA driver header: register/field definitions.
+   6763  target/linux/qualcommax/files/drivers/net/dsa/an8855_nl.c
+         AN8855 netlink interface (debug/config access to switch regs).
+    844  target/linux/qualcommax/files/drivers/net/dsa/an8855_nl.h
+         Netlink interface header.
+   2786  target/linux/qualcommax/files/drivers/net/mdio/mdio-an8855.c
+         MDIO passthrough driver exposing the AN8855 internal MDIO bus.
+   7803  target/linux/qualcommax/files/drivers/net/phy/air_an8855.c
+         Airoha AN8855 internal gigabit PHY driver.
+   1674  target/linux/qualcommax/files/drivers/nvmem/an8855-efuse.c
+         AN8855 efuse NVMEM provider (PHY calibration cells).
+   1192  target/linux/qualcommax/files/include/linux/mfd/airoha-an8855-mfd.h
+         Shared MFD header used by the AN8855 sub-drivers.
+  12419  target/linux/qualcommax/patches-6.12/737-net-dsa-add-Airoha-AN8855.patch
+         Kernel wiring for the AN8855 drivers (Kconfig/Makefile hooks;
+         from the upstream "net: dsa: Add Airoha AN8855 support" v11 series).
+  44675  target/linux/qualcommax/patches-6.12/999-2757-net-dsa-add-an8855-v2p0p1-and-netlink-support.patch
+         AN8855 driver update to v2.0.1 + netlink support (openwrt PR
+         #2757 series); pairs with the sources under files/drivers/.
