@@ -235,9 +235,9 @@ define Device/xiaomi_mi-router-ax3000t-v2
 	DEVICE_VARIANT := v2
 	DEVICE_DTS_CONFIG := config@mp03.3
 	KERNEL_IN_UBI := 1
-	DEVICE_PACKAGES := ath11k-firmware-ipq5018-qcn6122 \
-		ipq-wifi-xiaomi_mi-router-ax3000t-v2 \
-		zram-swap kmod-zram
+	DEVICE_PACKAGES := kmod-ath11k-smallbuffers \
+		ath11k-firmware-ipq5018-qcn6122 \
+		ipq-wifi-xiaomi_mi-router-ax3000t-v2
 endef
 TARGET_DEVICES += xiaomi_mi-router-ax3000t-v2
 

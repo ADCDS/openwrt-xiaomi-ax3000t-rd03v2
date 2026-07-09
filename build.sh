@@ -26,17 +26,13 @@ cp -a ../files/. .
 
 # Seed config: qualcommax/ipq50xx, AX3000T v2 profile, plus initramfs
 # (the initramfs uImage.itb is what you TFTP/serial-boot first).
-# zram-swap/kmod-zram are pinned explicitly: this 256 MB board is tight
-# with two ath11k radios, so compressed swap is a required safety net.
-# (The device's DEVICE_PACKAGES also lists them, but pinning here avoids
-#  the CONFIG_DEFAULT-vs-CONFIG_PACKAGE defconfig quirk on a fresh tree.)
+# WiFi RAM: the device uses kmod-ath11k-smallbuffers (see files/ overlay) so
+# the two radios fit comfortably in 256 MB — no zram/memory-mode hacks needed.
 cat > .config <<'EOF'
 CONFIG_TARGET_qualcommax=y
 CONFIG_TARGET_qualcommax_ipq50xx=y
 CONFIG_TARGET_qualcommax_ipq50xx_DEVICE_xiaomi_mi-router-ax3000t-v2=y
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
-CONFIG_PACKAGE_zram-swap=y
-CONFIG_PACKAGE_kmod-zram=y
 EOF
 
 make defconfig

@@ -29,6 +29,20 @@ package/
          (swphy can't emulate >1G speeds; needed for the 2.5G-capable
          fixed-link uplink to the AN8855 switch).
 
+WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
+----------------------------------------------------------------------
+   1791  package/kernel/mac80211/patches/ath11k/951-wifi-ath11k-introduct-CONFIG_ATH11K_SMALLBUFFERS.patch
+         Ziyang Huang's patch (OpenWrt PR #21495, authorship preserved):
+         gates ath11k's DP ring-buffer sizes behind CONFIG_ATH11K_SMALLBUFFERS
+         so they shrink on low-RAM devices. Halves the ath11k footprint.
+  12707  package/kernel/mac80211/Makefile
+         Adds -DCONFIG_ATH11K_SMALLBUFFERS to the smallbuffers build variant
+         (mirrors the existing ath10k-smallbuffers define).
+  15461  package/kernel/mac80211/ath.mk
+         Splits kmod-ath11k into regular + smallbuffers variants
+         (kmod-ath11k-smallbuffers, PROVIDES kmod-ath11k). Our device
+         selects the smallbuffers variant in ipq50xx.mk DEVICE_PACKAGES.
+
 target/linux/qualcommax/
 ------------------------
   12867  target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
