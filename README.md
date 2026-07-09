@@ -32,6 +32,7 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 This port stands on the shoulders of prior work:
 
 - **[csharper2005](https://github.com/csharper2005/openwrt)** — the **Airoha AN8855 DSA switch driver**, the base device tree, and the `qca-nss-dp` phy-less-2500 fix. Without this, the 2.5 GbE switch (the hard part of this SoC) wouldn't work. The DTS and driver here are their work.
+- **[thmalmeida](https://forum.openwrt.org/t/adding-support-for-xiaomi-ax3000t-rd03v2/235136/28)** and the OpenWrt-forum thread **[“Adding support for Xiaomi AX3000T (RD03v2)”](https://forum.openwrt.org/t/adding-support-for-xiaomi-ax3000t-rd03v2/235136)** — the community reverse-engineering effort: board teardown, the annotated UART/chip photo used in this README, and much of the early legwork on this hardware revision.
 - **[OpenWrt](https://openwrt.org/)** — the `qualcommax/ipq50xx` target and everything underneath.
 
 **What this repo adds on top** (the pieces that were missing to make it a *usable, installable* router):
@@ -59,9 +60,27 @@ The install is a **UART + TFTP** procedure because the stock bootloader is locke
 
 ## Installation guide
 
+### Board layout & UART
+
+![AX3000T RD03v2 board — UART header and main ICs](docs/board.jpg)
+
+*Annotated board photo courtesy of **thmalmeida** ([OpenWrt forum](https://forum.openwrt.org/t/adding-support-for-xiaomi-ax3000t-rd03v2/235136/28)).*
+
+**UART header** (top-left, red box) — 3 pads, top→bottom: **Rx · Gnd · Tx**, **115200 8N1, 3.3 V**. The labels are the board's pins, so cross them to your adapter: board **Rx → adapter TX**, board **Tx → adapter RX**, **Gnd → Gnd** (leave the adapter's VCC unconnected). If you get no output or garbage, swap Rx/Tx.
+
+**Main ICs:**
+
+| | Chip | Role |
+|---|---|---|
+| IC1 | Qualcomm **IPQ5018** | SoC — dual Cortex-A53, integrated 2.4 GHz radio |
+| IC2 | Rayson **RS128M16V0DB** | 256 MB DDR3 SDRAM |
+| IC3 | **ESMT F50D1G41LB** | 128 MB SPI-NAND flash |
+| IC4 | Airoha **AN8855** | 2.5 GbE DSA switch (the 4 LAN/WAN ports) |
+| IC5 | Qualcomm **QCN6122** | 5 GHz WiFi radio (by the 5G antenna pads) |
+
 ### 0. What you need
 - The router, an RD03v2.
-- A **3.3 V USB-UART adapter** wired to the board UART: **TX↔RX, RX↔TX, GND↔GND** (leave VCC unconnected), **115200 8N1**.
+- A **3.3 V USB-UART adapter** wired to the board UART (see the photo above): **board Rx↔adapter TX, board Tx↔adapter RX, GND↔GND** (leave VCC unconnected), **115200 8N1**.
 - A Linux PC with an Ethernet port, `dnsmasq` (or any TFTP server), and a serial terminal (`screen`, `picocom`, …).
 - The **stock `recovery.bin`** for the RD03v2 (a full stock image — used to re-enable the bootloader console). *We don't redistribute Xiaomi firmware; obtain the matching stock image for your unit.*
 - The three OpenWrt images from Releases.
