@@ -12,6 +12,7 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 | Wired LAN data path | ✅ |
 | WiFi **2.4 GHz** (IPQ5018) | ✅ |
 | WiFi **5 GHz** (QCN6122) | ✅ |
+| Front status LED (blue/amber) | ✅ |
 | In-place updates via `sysupgrade` | ✅ |
 
 > Built against **OpenWrt `25ee126`** (Jul 2026 snapshot, kernel 6.12.94).
@@ -160,7 +161,7 @@ See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 ## Known limitations
 
 - **5 GHz board data is a compatible stand-in** (from another QCN6122 device) re-keyed for our board, not the AX3000T's own 2.7 board data (which doesn't exist upstream). 5 GHz works; antenna/TX-power tuning may be imperfect. If you can produce a proper 2.7 QCN6122 BDF for this board, please contribute it.
-- Front LEDs (PWM) aren't wired up yet.
+- **Front LED is driven as plain GPIO**, not PWM (blue on GPIO12, amber on GPIO13). Stock firmware fades it via the IPQ5018 PWM block (`pwm2`/`pwm3`), but kernel 6.12's `pinctrl-ipq5018` can't yet mux those functions onto GPIO 12/13 — so the LED works (status/failsafe/upgrade triggers) but is on/off only, no hardware fade. A pinctrl patch adding the `pwm` groups would restore PWM.
 - This is a snapshot build; treat as beta.
 
 ## Contributing / upstreaming

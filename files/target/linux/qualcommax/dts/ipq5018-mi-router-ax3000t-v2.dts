@@ -16,9 +16,9 @@
 		label-mac-device = &dp1;
 
 		led-boot = &led_status_blue;
-		led-failsafe = &led_status_yellow;
+		led-failsafe = &led_status_amber;
 		led-running = &led_status_blue;
-		led-upgrade = &led_status_yellow;
+		led-upgrade = &led_status_amber;
 
 		serial0 = &blsp1_uart1;
 	};
@@ -49,24 +49,30 @@
 		};
 	};
 
+	/*
+	 * The stock firmware drives the dual-colour front LED via the
+	 * IPQ5018 PWM block (blue = channel 2 on GPIO12/"pwm2", amber =
+	 * channel 3 on GPIO13/"pwm3"). Kernel 6.12 pinctrl-ipq5018 cannot
+	 * mux pwm2/pwm3 onto GPIO 12/13 yet, so drive them as plain GPIOs.
+	 * GPIO46 carries the hardware-driven GE PHY link LED ("led0"
+	 * function) which only reflects the internal MAC0<->AN8855 link.
+	 */
 	leds {
-		compatible = "pwm-leds";
+		compatible = "gpio-leds";
 
-		// pinctrl-0 = <&pwm_pins>;
-		// pinctrl-names = "default";
+		pinctrl-0 = <&leds_pins>;
+		pinctrl-names = "default";
 
 		led_status_blue: led-0 {
 			color = <LED_COLOR_ID_BLUE>;
 			function = LED_FUNCTION_STATUS;
-			pwms = <&pwm 2 50000>;
-			max-brightness = <255>;
+			gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
 		};
 
-		led_status_yellow: led-1 {
-			color = <LED_COLOR_ID_YELLOW>;
+		led_status_amber: led-1 {
+			color = <LED_COLOR_ID_AMBER>;
 			function = LED_FUNCTION_STATUS;
-			pwms = <&pwm 3 50000>;
-			max-brightness = <255>;
+			gpios = <&tlmm 13 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
@@ -104,14 +110,6 @@
 
 &prng {
 	status = "okay";
-};
-
-&pwm {
-	status = "okay";
-
-	#pwm-cells = <2>;
-	pinctrl-0 = <&pwm_pins>;
-	pinctrl-names = "default";
 };
 
 &qfprom {
@@ -618,6 +616,13 @@
 		bias-pull-up;
 	};
 
+	leds_pins: leds-state {
+		pins = "gpio12", "gpio13";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-down;
+	};
+
 	mdio1_pins: mdio-state {
 		mdc-pins {
 			pins = "gpio36";
@@ -631,15 +636,6 @@
 			function = "mdio";
 			drive-strength = <8>;
 			bias-pull-up;
-		};
-	};
-
-	pwm_pins: pwm-state {
-		mux-0 {
-			pins = "gpio46";
-			function = "pwm0";
-			drive-strength = <8>;
-			// bias-pull-down;
 		};
 	};
 
