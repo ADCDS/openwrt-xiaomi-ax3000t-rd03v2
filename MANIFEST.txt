@@ -100,14 +100,27 @@ NSS hardware-offload overlay (nss/) — applied only with `NSS=1 ./build.sh`
 Experimental; see docs/nss-offload.md. Layered on top of files/:
 
         nss/feeds.conf.append   Extra feeds: qosmio nss-packages + sqm-scripts-nss.
-        nss/config.append       NSS kernel symbols (skb_recycler, conntrack DSCP-remark).
+        nss/config.append       NSS kernel symbols (skb_recycler, conntrack DSCP-remark,
+                                and NET_DSA_TAG_VSC73XX_8021Q for the offload DSA tagger).
         nss/feed-patches/qca-nss-drv/0029-ipq50xx-nss-core-boot-reset-pulse.patch
                                 The IPQ5018 NSS core-boot fix (reset-pulse), applied to
                                 the qca-nss-drv feed package after `feeds update`.
+        nss/feed-patches/qca-nss-ecm/0026-frontends-nss-dsa-conduit-awareness.patch
+                                ECM DSA front-end: maps a DSA user port (or a bridge
+                                master over one) to its CPU conduit so the fast path
+                                resolves an accelerable NSS interface.
         nss/overlay/            Path-preserving overlay (same layout as files/):
           patches-6.12/06xx,0819,0981  ECM/clients/skb_recycler + NSS reserved-memory.
           files/.../ipq5018-nss.dtsi   NSS core node (CSM regs, 8 IRQs, 8 MB DDR @0x40000000).
           files/net,include/           skb_recycler + conntrack DSCP-remark sources.
-          etc/modules.d/33-qca-nss-ecm ECM autoload at boot.
+          files/.../drivers/net/dsa/an8855.c  tag_8021q build of the AN8855 driver (overrides
+                                       the files/ MTK-tag build so the NSS parser sees the
+                                       EtherType, not the special tag).
+          ipq50xx/.../board.d/02_network  Gateway topology: moves the WAN onto the eth0 CPU
+                                       port (offload needs WAN and LAN on different CPU ports).
+          ipq50xx/.../etc/rc.local     Enables NSS redirect + ipv{4,6}_accel_mode at boot.
+          ipq50xx/.../etc/uci-defaults/00-nss-manual  Disables the qca-nss init scripts so
+                                       they don't double-load the autoloaded modules.
+          etc/modules.d/33-qca-nss-ecm ECM autoload at boot (pulls in qca-nss-drv, boots core).
         build.sh also appends the NSS packages to the AX3000T DEVICE_PACKAGES
         and #includes ipq5018-nss.dtsi into the device DTS.

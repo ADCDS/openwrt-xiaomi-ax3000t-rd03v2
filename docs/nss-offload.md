@@ -3,7 +3,9 @@
 Mainline OpenWrt on the IPQ5018 has **no hardware NAT offload**, so routing is
 CPU-bound at roughly **~380 Mbps** (with software flow-offload). The IPQ5018 has
 a dedicated network processor — the **NSS** (Network Sub System, a UBI32 core) —
-that can offload the routing/NAT fast path and reach **line rate (~900 Mbps)**.
+that offloads the routing/NAT fast path and reaches **line rate**. Measured on
+this port across a routed + NAT gigabit path: **862 Mbps at ~99 % router-CPU
+idle** with the offload engaged, versus ~275 Mbps CPU-bound on the software path.
 
 This is an **opt-in, experimental** build. The default `./build.sh` stays pure
 mainline. To build with NSS:
@@ -21,7 +23,9 @@ NSS=1 ./build.sh
 - **`ipq5018-nss.dtsi`**: the `nss@40000000` node (core CSM regs, 8 IRQs, 8 MB reserved DDR at `0x40000000`), `#include`d into the device DTS.
 - **`kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-bridge-mgr nss-firmware-ipq50xx`** added to the device's `DEVICE_PACKAGES`.
 - **The core-boot fix** (`nss/feed-patches/qca-nss-drv/0029-…`) — see below.
-- **`/etc/modules.d/33-qca-nss-ecm`** so ECM autoloads at boot.
+- **The tag_8021q + ecm-frontend fix**: `nss/overlay/.../an8855.c` switches the AN8855 DSA tagger, `nss/feed-patches/qca-nss-ecm/0026-…` teaches ECM about DSA conduits, and `CONFIG_NET_DSA_TAG_VSC73XX_8021Q` selects the tagger — see below.
+- **Gateway wiring**: `nss/overlay/.../board.d/02_network` moves the WAN onto the `eth0` CPU port (offload needs WAN and LAN on *different* CPU ports); `.../etc/rc.local` enables `redirect` + `ipv{4,6}_accel_mode` after the modules load.
+- **`/etc/modules.d/33-qca-nss-ecm`** so ECM autoloads at boot (loading `ecm` pulls in `qca-nss-drv`, which boots the core); `uci-defaults/00-nss-manual` disables the package init scripts so they don't *also* load the modules.
 
 ## The core-boot fix (why this works at all)
 
@@ -48,6 +52,42 @@ qca-nss 7a00000.nss: NSS core 0 booted successfully
 > wired ethernet**, not just offload. With the fix, the core boots, the conduit
 > attaches, and wired + offload both work.
 
+## The tag_8021q + ecm DSA-conduit fix (why the fast path accelerates)
+
+Booting the core is necessary but not sufficient. The NSS data plane is
+**inline**: at core boot the driver hands the GMAC DMA rings to the NSS firmware,
+which parses every frame itself. Two things then block acceleration on a DSA
+switch like the AN8855:
+
+1. **The DSA tag.** The stock AN8855 driver uses the 4-byte **Mediatek special
+   tag** (`DSA_TAG_PROTO_MTK`), which lands exactly where the NSS parser expects
+   the EtherType, so every WAN↔LAN frame is exceptioned to the host at L2 before
+   the IPv4 fast path (`ipv4_rx_pkts` stays 0). The overlay `an8855.c` switches
+   the tagger to the hardware-agnostic **`tag_8021q`** scheme
+   (`DSA_TAG_PROTO_VSC73XX_8021Q`) — a plain 802.1Q VID per port that the parser
+   passes through. This needs the CPU-port egress tag set to *follow the VLAN
+   table* (`PVC_EG_TAG = EG_DISABLED`, not `CONSISTENT`), or the switch can't
+   decode the source port. tag_8021q ports must be **bridged** (a single-port
+   bridge is fine); a standalone port egresses untagged on the conduit and fails.
+
+2. **ECM doesn't know DSA.** ECM resolves a flow's ingress/egress netdev to an
+   NSS interface number, but a DSA user port (`lan3`, `wan`) is not itself an NSS
+   interface — its **CPU conduit** (`eth0`/`eth1`) is. Patch `0026` adds a
+   front-end helper (`ecm_nss_common_dsa_conduit_get`) that, for a DSA user port
+   *or a bridge master over one*, returns the conduit netdev so ECM can build an
+   accelerable rule.
+
+With both in place, plus a **dual-CPU-port** topology — LAN on `eth1` (2.5 G),
+WAN moved to `eth0` (1 G, via the board.d `conduit` assignment) so the two
+directions ride different CPU ports — the WAN↔LAN NAT flow accelerates end to
+end (`tcp_accelerated_count` and `ipv4_create_requests` climb, router CPU stays
+~99 % idle at line rate).
+
+> **Recovery.** The LAN/management path never depends on the offload, so a
+> misbehaving fast path can't lock you out. To back it out entirely:
+> `rm /etc/modules.d/33-qca-nss-ecm && reboot` — the box returns to software
+> routing.
+
 ## Verifying on the device
 
 After first boot (unattended, from NAND):
@@ -59,7 +99,14 @@ cat /sys/kernel/debug/qca-nss-drv/stats/n2h | grep rx_pkts   # climbing
 lsmod | grep -E "qca_nss_drv|qca_nss_dp|^ecm"       # drv + dp + ecm loaded
 ls /sys/kernel/debug/ecm/ecm_nss_ipv4               # NSS (hardware) front-end active
 cat /sys/kernel/debug/ecm/ecm_nss_ipv4/accelerated_count   # >0 under real routed traffic
+cat /sys/kernel/debug/ecm/ecm_nss_ipv4/tcp_accelerated_count # climbs as TCP flows offload
+grep ipv4_create_req /sys/kernel/debug/qca-nss-drv/stats/ipv4  # rules pushed to the NSS
 ```
+
+Under a parallel routed download the aggregate should approach line rate while
+the **router** CPU stays near-idle (`grep '^cpu ' /proc/stat` on the router — the
+idle field keeps climbing under load). If throughput is capped but CPU is idle
+and links are 1 G, the bottleneck is upstream/at the client, not the offload.
 
 ## Caveats
 

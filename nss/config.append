@@ -3,3 +3,8 @@ CONFIG_SKB_RECYCLER_MULTI_CPU=y
 # CONFIG_SKB_RECYCLER_PREALLOC is not set
 CONFIG_SKB_RECYCLE_SIZE=2304
 CONFIG_NF_CONNTRACK_DSCPREMARK_EXT=y
+
+# tag_8021q DSA tagger: the MTK special-tag hides the EtherType from the NSS
+# parser so the WAN<->LAN fast path is exceptioned; the hardware-agnostic
+# 802.1Q tagger keeps offload working across both CPU ports. See docs/nss-offload.md.
+CONFIG_NET_DSA_TAG_VSC73XX_8021Q=y

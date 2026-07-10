@@ -1,0 +1,10 @@
+# NSS hardware offload runtime knobs. rc.local runs late in boot, after the
+# qca-nss modules are autoloaded, so the /proc/sys/dev/nss tree exists here.
+#  - general/redirect: hand exception/accelerated traffic to the NSS data plane
+#  - ipv{4,6}cfg/*_accel_mode: enable the connection-manager fast path
+# See docs/nss-offload.md.
+echo 1 > /proc/sys/dev/nss/general/redirect 2>/dev/null
+echo 1 > /proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode 2>/dev/null
+echo 1 > /proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode 2>/dev/null
+
+exit 0

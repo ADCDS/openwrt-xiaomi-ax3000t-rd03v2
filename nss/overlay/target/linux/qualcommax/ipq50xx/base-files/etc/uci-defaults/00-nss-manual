@@ -1,0 +1,14 @@
+#!/bin/sh
+# NSS hardware offload engages at boot via the kmodloader autoload
+# (/etc/modules.d/33-qca-nss-ecm loads ecm, which pulls in qca-nss-drv and boots
+# the NSS core via the reset-pulse patch); redirect/accel are set from
+# /etc/rc.local. Disable the package init scripts so they don't ALSO load the
+# modules (double-load / wrong ordering).
+#
+# The LAN (management/SSH) never depends on the offload, so a misbehaving fast
+# path can't lock you out. To back the offload out entirely:
+#   rm /etc/modules.d/33-qca-nss-ecm && reboot   (software routing always works)
+# See docs/nss-offload.md.
+/etc/init.d/qca-nss-ecm disable 2>/dev/null
+/etc/init.d/qca-nss-drv disable 2>/dev/null
+exit 0

@@ -34,7 +34,8 @@ if [ "$WITH_NSS" = "1" ]; then
 	# extra feeds: qosmio nss-packages (qca-nss-drv/ecm/...) + sqm-scripts-nss
 	cat ../nss/feeds.conf.append >> feeds.conf.default
 	# overlay NSS files: kernel patches, reserved-mem + NSS-node dtsi,
-	# skb_recycler, conntrack DSCP-remark, and the ecm autoload
+	# skb_recycler, conntrack DSCP-remark, the tag_8021q an8855 driver, the
+	# gateway board.d (WAN->eth0 conduit) + rc.local redirect, and ecm autoload
 	cp -a ../nss/overlay/. .
 	# pull the NSS dtsi into the device DTS
 	sed -i '/#include "ipq5018-qcn6122.dtsi"/a #include "ipq5018-nss.dtsi"' \
@@ -55,6 +56,12 @@ fi
 if [ "$WITH_NSS" = "1" ]; then
 	mkdir -p feeds/nss_packages/qca-nss-drv/patches
 	cp ../nss/feed-patches/qca-nss-drv/*.patch feeds/nss_packages/qca-nss-drv/patches/
+	# ecm DSA-conduit awareness: map a DSA user port (or a bridge master over one)
+	# to its CPU conduit netdev so the fast path resolves an accelerable
+	# interface. Without it the tag_8021q-tagged WAN<->LAN frames are exceptioned
+	# at L2 and the flow never offloads. See docs/nss-offload.md.
+	mkdir -p feeds/nss_packages/qca-nss-ecm/patches
+	cp ../nss/feed-patches/qca-nss-ecm/*.patch feeds/nss_packages/qca-nss-ecm/patches/
 fi
 
 # Seed config: qualcommax/ipq50xx, AX3000T v2 profile, plus initramfs

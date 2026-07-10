@@ -1,0 +1,115 @@
+--- a/frontends/nss/ecm_nss_common.h
++++ b/frontends/nss/ecm_nss_common.h
+@@ -34,6 +34,86 @@
+ 
+ #include <net/xfrm.h>
+ 
++#if IS_ENABLED(CONFIG_NET_DSA)
++#include <net/dsa.h>
++
++/*
++ * ecm_nss_common_dsa_lower_walk()
++ *	netdev_walk_all_lower_dev_rcu() callback: record the CPU conduit of the
++ *	first DSA user port found below a bridge, and stop the walk.
++ */
++static int __maybe_unused ecm_nss_common_dsa_lower_walk(struct net_device *lower_dev,
++							struct netdev_nested_priv *priv)
++{
++	struct net_device **conduit = (struct net_device **)priv->data;
++
++	if (dsa_user_dev_check(lower_dev)) {
++		struct dsa_port *dp = dsa_port_from_netdev(lower_dev);
++
++		if (!IS_ERR_OR_NULL(dp)) {
++			struct net_device *c = dsa_port_to_conduit(dp);
++
++			if (c) {
++				*conduit = c;
++				return 1;	/* found - stop walking */
++			}
++		}
++	}
++	return 0;
++}
++#endif
++
++/*
++ * ecm_nss_common_dsa_conduit_get()
++ *	Map a netdev that the NSS does not know to the NSS-registered GMAC
++ *	conduit that carries it, so ECM's interface-number lookup succeeds:
++ *
++ *	  - a DSA user port (lan3/lan4 on the AN8855) -> its CPU conduit
++ *	    (eth0/eth1), because the NSS only knows the conduit netdevs; and
++ *	  - a Linux bridge whose member is a DSA user port (br-lan over lan3,
++ *	    br-wan over lan4) -> the conduit of that DSA member, so a routed
++ *	    flow whose L3 device is the bridge still resolves to eth0/eth1
++ *	    instead of returning -1 at the top of the ECM hierarchy.
++ *
++ *	Returns dev unchanged when it is neither (or DSA is disabled).
++ */
++static inline struct net_device *ecm_nss_common_dsa_conduit_get(struct net_device *dev)
++{
++#if IS_ENABLED(CONFIG_NET_DSA)
++	if (dsa_user_dev_check(dev)) {
++		struct dsa_port *dp = dsa_port_from_netdev(dev);
++
++		if (!IS_ERR_OR_NULL(dp)) {
++			struct net_device *conduit = dsa_port_to_conduit(dp);
++
++			if (conduit) {
++				return conduit;
++			}
++		}
++		return dev;
++	}
++
++	/*
++	 * Bridge over a DSA user port. ECM's hierarchy walk runs in
++	 * softirq/process context without RTNL, so iterate the bridge's lower
++	 * devices under RCU.
++	 */
++	if (netif_is_bridge_master(dev)) {
++		struct net_device *conduit = NULL;
++		struct netdev_nested_priv priv = { .data = (void *)&conduit };
++
++		rcu_read_lock();
++		netdev_walk_all_lower_dev_rcu(dev, ecm_nss_common_dsa_lower_walk, &priv);
++		rcu_read_unlock();
++
++		if (conduit) {
++			return conduit;
++		}
++	}
++#endif
++	return dev;
++}
++
+ /*
+  * This macro converts ECM ip_addr_t to NSS IPv6 address
+  */
+@@ -67,6 +147,12 @@
+ static inline int32_t ecm_nss_common_get_interface_number_by_dev(struct net_device *dev)
+ {
+ 	/*
++	 * ECM DSA bridge: a DSA user port (or a bridge over one) is unknown to
++	 * the NSS; use its CPU conduit (the NSS GMAC) for the lookup instead.
++	 */
++	dev = ecm_nss_common_dsa_conduit_get(dev);
++
++	/*
+ 	 * nss_interface_num for all IPsec tunnels will always be the one specific to acceleration engine.
+ 	 */
+ 	if (dev->type == ECM_ARPHRD_IPSEC_TUNNEL_TYPE) {
+@@ -89,6 +175,12 @@
+ static inline int32_t ecm_nss_common_get_interface_number_by_dev_type(struct net_device *dev, uint32_t type)
+ {
+ 	/*
++	 * ECM DSA bridge: a DSA user port (or a bridge over one) is unknown to
++	 * the NSS; use its CPU conduit (the NSS GMAC) for the lookup instead.
++	 */
++	dev = ecm_nss_common_dsa_conduit_get(dev);
++
++	/*
+ 	 * nss_interface_num for all IPsec tunnels will always be the one specific to acceleration engine.
+ 	 */
+ 	if ((dev->type == ECM_ARPHRD_IPSEC_TUNNEL_TYPE) && !type) {
