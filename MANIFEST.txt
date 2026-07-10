@@ -93,3 +93,21 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
   44675  target/linux/qualcommax/patches-6.12/999-2757-net-dsa-add-an8855-v2p0p1-and-netlink-support.patch
          AN8855 driver update to v2.0.1 + netlink support (openwrt PR
          #2757 series); pairs with the sources under files/drivers/.
+
+=====================================================================
+NSS hardware-offload overlay (nss/) — applied only with `NSS=1 ./build.sh`
+=====================================================================
+Experimental; see docs/nss-offload.md. Layered on top of files/:
+
+        nss/feeds.conf.append   Extra feeds: qosmio nss-packages + sqm-scripts-nss.
+        nss/config.append       NSS kernel symbols (skb_recycler, conntrack DSCP-remark).
+        nss/feed-patches/qca-nss-drv/0029-ipq50xx-nss-core-boot-reset-pulse.patch
+                                The IPQ5018 NSS core-boot fix (reset-pulse), applied to
+                                the qca-nss-drv feed package after `feeds update`.
+        nss/overlay/            Path-preserving overlay (same layout as files/):
+          patches-6.12/06xx,0819,0981  ECM/clients/skb_recycler + NSS reserved-memory.
+          files/.../ipq5018-nss.dtsi   NSS core node (CSM regs, 8 IRQs, 8 MB DDR @0x40000000).
+          files/net,include/           skb_recycler + conntrack DSCP-remark sources.
+          etc/modules.d/33-qca-nss-ecm ECM autoload at boot.
+        build.sh also appends the NSS packages to the AX3000T DEVICE_PACKAGES
+        and #includes ipq5018-nss.dtsi into the device DTS.

@@ -139,8 +139,14 @@ Repeat the **TFTP recovery** (step 2) with the stock `recovery.bin` — it refla
 ```bash
 git clone <this repo> && cd openwrt-xiaomi-ax3000t-rd03v2
 ./build.sh          # clones OpenWrt @ 25ee126, applies files/, builds
+NSS=1 ./build.sh    # ...plus experimental QCA NSS hardware offload (~900 Mbps)
 ```
 Or manually: check out OpenWrt at `25ee126`, copy `files/*` over it, `./scripts/feeds update -a && ./scripts/feeds install -a`, seed `.config` with the device + `CONFIG_TARGET_ROOTFS_INITRAMFS=y`, then `make defconfig && make -j$(nproc)`. Images land in `bin/targets/qualcommax/ipq50xx/`.
+
+**NSS hardware offload** (`NSS=1`, opt-in) boots the IPQ5018's NSS network
+processor to offload NAT routing at line rate, instead of the CPU-bound
+~380 Mbps of software offload. It's experimental and layers heavy QCA feeds/
+patches on top of mainline — see [`docs/nss-offload.md`](docs/nss-offload.md).
 
 See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 

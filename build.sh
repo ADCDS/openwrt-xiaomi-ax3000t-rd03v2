@@ -4,9 +4,16 @@
 #
 # Reproduces the port by overlaying ./files/ onto a pristine
 # openwrt/openwrt checkout at commit 25ee126.
+#
+# Optional QCA NSS hardware offload (experimental, ~900 Mbps NAT routing):
+#   NSS=1 ./build.sh
+# layers ./nss/ on top — see docs/nss-offload.md. The default build is
+# pure mainline and does NOT pull the QCA NSS feeds/patches.
 set -e
 
 cd "$(dirname "$0")"
+
+WITH_NSS="${NSS:-0}"
 
 if [ -e openwrt ]; then
 	echo "ERROR: ./openwrt already exists — remove it first." >&2
@@ -21,8 +28,34 @@ git checkout 25ee12629edcc38feffbd06255dd47840cd7af7e
 # Overlay the device-support files (path-preserving)
 cp -a ../files/. .
 
+# ---- optional: QCA NSS hardware offload (NSS=1) ----
+if [ "$WITH_NSS" = "1" ]; then
+	echo ">>> NSS=1: layering QCA NSS hardware offload (experimental)"
+	# extra feeds: qosmio nss-packages (qca-nss-drv/ecm/...) + sqm-scripts-nss
+	cat ../nss/feeds.conf.append >> feeds.conf.default
+	# overlay NSS files: kernel patches, reserved-mem + NSS-node dtsi,
+	# skb_recycler, conntrack DSCP-remark, and the ecm autoload
+	cp -a ../nss/overlay/. .
+	# pull the NSS dtsi into the device DTS
+	sed -i '/#include "ipq5018-qcn6122.dtsi"/a #include "ipq5018-nss.dtsi"' \
+		target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
+	# add the NSS packages to the AX3000T device (before smallbuffers, same line)
+	sed -i 's#DEVICE_PACKAGES := kmod-ath11k-smallbuffers #DEVICE_PACKAGES := kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-bridge-mgr nss-firmware-ipq50xx kmod-ath11k-smallbuffers #' \
+		target/linux/qualcommax/image/ipq50xx.mk
+	# NSS kernel config symbols (skb_recycler, conntrack DSCP-remark ext)
+	cat ../nss/config.append >> target/linux/qualcommax/config-6.12
+fi
+
 ./scripts/feeds update -a
 ./scripts/feeds install -a
+
+# The IPQ5018 NSS core-boot fix: mainline 6.12 leaves the UBI32 core's GCC
+# resets de-asserted, so the stock driver's core_reset is a no-op and the core
+# never boots. This patch pulses the reset and re-orders the boot-config write.
+if [ "$WITH_NSS" = "1" ]; then
+	mkdir -p feeds/nss_packages/qca-nss-drv/patches
+	cp ../nss/feed-patches/qca-nss-drv/*.patch feeds/nss_packages/qca-nss-drv/patches/
+fi
 
 # Seed config: qualcommax/ipq50xx, AX3000T v2 profile, plus initramfs
 # (the initramfs uImage.itb is what you TFTP/serial-boot first).
@@ -44,3 +77,8 @@ echo "  $(pwd)/bin/targets/qualcommax/ipq50xx/"
 echo "  - *-initramfs-uImage.itb      (RAM-boot image, flash-safe first test)"
 echo "  - *-squashfs-factory.ubi      (initial NAND install)"
 echo "  - *-squashfs-sysupgrade.bin   (upgrades from OpenWrt)"
+if [ "$WITH_NSS" = "1" ]; then
+	echo
+	echo "NSS hardware offload build. After first boot the NSS core boots and"
+	echo "qca-nss-drv/dp + ecm autoload; see docs/nss-offload.md."
+fi

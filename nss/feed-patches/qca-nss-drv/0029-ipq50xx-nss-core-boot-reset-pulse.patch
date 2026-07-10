@@ -1,0 +1,61 @@
+--- a/nss_hal/ipq50xx/nss_hal_pvt.c
++++ b/nss_hal/ipq50xx/nss_hal_pvt.c
+@@ -29,6 +29,7 @@
+ #include <linux/of_address.h>
+ #include <linux/regulator/consumer.h>
+ #include <linux/reset.h>
++#include <linux/delay.h>
+ #include "nss_hal.h"
+ #include "nss_core.h"
+ 
+@@ -62,7 +63,10 @@
+ /*
+  * Core GCC reset
+  */
+-#define NSS_CORE_GCC_RESET 0x00000007
++/* bits: 0 AXI,1 AHB,2 NC_AXI,3 DBG,6 UTCM,7 CORE. Mainline 6.12 leaves these
++ * de-asserted at probe, so we PULSE all six (assert then de-assert, see
++ * __nss_hal_core_reset) to give the UBI32 core a real reset edge. */
++#define NSS_CORE_GCC_RESET 0x000000cf
+ 
+ /*
+  * GCC reset
+@@ -270,14 +274,26 @@
+ 	/*
+ 	 * Apply ubi32 core reset
+ 	 */
+-	nss_write_32(map, NSS_REGS_RESET_CTRL_OFFSET, 0x1);
+-
+ 	/*
+-	 * De-assert reset
++	 * Mainline 6.12 leaves the GCC UBI0 resets DE-asserted at probe (measured
++	 * 0x0), so the core free-runs from a garbage PC and never boots. Give the
++	 * whole UBI0 block a clean reset PULSE first (assert -> deassert). The boot
++	 * config MUST be written AFTER the GCC reset is deasserted -- asserting it
++	 * clears the CSM config regs (observed AMC/IFETCH reading back 0).
+ 	 */
+ 	value = nss_read_32(nss_misc_reset, 0x0);
++	value |= NSS_CORE_GCC_RESET;
++	nss_write_32(nss_misc_reset, 0x0, value);
++	udelay(100);
++	value = nss_read_32(nss_misc_reset, 0x0);
+ 	value &= ~NSS_CORE_GCC_RESET;
+ 	nss_write_32(nss_misc_reset, 0x0, value);
++	udelay(10);
++
++	/*
++	 * Hold the ubi32 core via the CSM reset while we program the boot config.
++	 */
++	nss_write_32(map, NSS_REGS_RESET_CTRL_OFFSET, 0x1);
+ 
+ 	/*
+ 	 * Program address configuration
+@@ -298,7 +314,7 @@
+ 	nss_write_32(map, NSS_REGS_CORE_IFETCH_RANGE_OFFSET, 0xBF004001);
+ 
+ 	/*
+-	 * De-assert ubi32 core reset
++	 * De-assert ubi32 core (CSM) reset -> core fetches from boot addr
+ 	 */
+ 	nss_write_32(map, NSS_REGS_RESET_CTRL_OFFSET, 0x0);
+ 
