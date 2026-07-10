@@ -7,4 +7,15 @@ echo 1 > /proc/sys/dev/nss/general/redirect 2>/dev/null
 echo 1 > /proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode 2>/dev/null
 echo 1 > /proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode 2>/dev/null
 
+# Confirm boot success to U-Boot's dual-boot failsafe so it never switches away
+# from this rootfs. The stock miwifi bootloader tracks per-system boot failures;
+# with no reset the counter eventually trips "boot failure on both systems".
+# uboot-envtools now generates fw_env.config for this board, so fw_setenv works.
+if [ -e /etc/fw_env.config ]; then
+	fw_setenv flag_boot_success 1 2>/dev/null
+	fw_setenv flag_last_success 1 2>/dev/null
+	fw_setenv flag_try_sys1_failed 8 2>/dev/null
+	fw_setenv flag_try_sys2_failed 8 2>/dev/null
+fi
+
 exit 0

@@ -28,6 +28,12 @@ package/
          nss-dp: don't fail probe when fixed-link registration fails
          (swphy can't emulate >1G speeds; needed for the 2.5G-capable
          fixed-link uplink to the AN8855 switch).
+    960  package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx
+         Adds xiaomi,mi-router-ax3000t-v2 to the uboot-envtools device list
+         (env in 0:APPSBLENV @ 0x0, size 0x10000, sector 0x20000). Without it
+         /etc/fw_env.config is never generated, fw_setenv fails, and sysupgrade
+         cannot set U-Boot's dual-boot flags -- the NAND boot then loops
+         ("Boot failure on both systems"). See docs/nss-offload.md.
 
 WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
 ----------------------------------------------------------------------
@@ -118,7 +124,9 @@ Experimental; see docs/nss-offload.md. Layered on top of files/:
                                        EtherType, not the special tag).
           ipq50xx/.../board.d/02_network  Gateway topology: moves the WAN onto the eth0 CPU
                                        port (offload needs WAN and LAN on different CPU ports).
-          ipq50xx/.../etc/rc.local     Enables NSS redirect + ipv{4,6}_accel_mode at boot.
+          ipq50xx/.../etc/rc.local     Enables NSS redirect + ipv{4,6}_accel_mode at boot, and
+                                       re-arms U-Boot's dual-boot flags (flag_boot_success +
+                                       flag_try_sys*_failed) so the boot failsafe never trips.
           ipq50xx/.../etc/uci-defaults/00-nss-manual  Disables the qca-nss init scripts so
                                        they don't double-load the autoloaded modules.
           etc/modules.d/33-qca-nss-ecm ECM autoload at boot (pulls in qca-nss-drv, boots core).

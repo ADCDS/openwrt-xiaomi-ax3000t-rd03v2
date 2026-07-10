@@ -108,6 +108,30 @@ the **router** CPU stays near-idle (`grep '^cpu ' /proc/stat` on the router — 
 idle field keeps climbing under load). If throughput is capped but CPU is idle
 and links are 1 G, the bottleneck is upstream/at the client, not the offload.
 
+## Persistent boot on NAND (the uboot-envtools fix)
+
+Booting the offload image *once* is not the same as booting it *unattended
+forever*. The stock miwifi bootloader has a dual-boot failsafe: it tracks a
+per-system boot-failure counter (`flag_try_sys*_failed`) and relies on
+`flag_boot_success=1` to keep booting the same rootfs. The OS is meant to
+re-assert those flags via `fw_setenv` — but this device was **missing from the
+uboot-envtools device list**, so `/etc/fw_env.config` was never generated,
+`fw_setenv` silently failed, and a sysupgrade could not set the flags. Symptom:
+a freshly-sysupgraded image loops in U-Boot (*"Boot failure detected on both
+systems"*) even though the identical image RAM-boots fine.
+
+Two fixes (both apply to the base port too, not just NSS):
+
+- **`files/…/uboot-envtools/files/qualcommax_ipq50xx`** adds
+  `xiaomi,mi-router-ax3000t-v2` with its env geometry
+  (`0:APPSBLENV 0x0 0x10000 0x20000`), so `fw_env.config` is generated and
+  `fw_setenv`/`fw_printenv` work.
+- **`rc.local`** re-asserts `flag_boot_success=1` and resets the counters on
+  every boot, so the failsafe can never trip over time.
+
+Verified across repeated unattended reboots: `/` stays on the NAND `overlay`,
+the flags come back armed, and the offload re-engages each boot.
+
 ## Caveats
 
 - **Experimental.** This pulls heavy downstream QCA patches onto a mainline
