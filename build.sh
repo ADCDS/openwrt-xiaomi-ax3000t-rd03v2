@@ -61,6 +61,14 @@ if [ -n "$PROFILE" ]; then
 	echo ">>> PROFILE=$PROFILE: baking private profile config into the image"
 	mkdir -p files
 	cp -a "$PROFILE"/files/. files/
+	# Normalize modes: git does not record directory modes (nor anything
+	# beyond the exec bit), so a fresh clone inherits the cloner's umask. A
+	# group-writable /etc/dropbear makes dropbear reject the whole dir
+	# ("must be owned by user or root, and not writable by group or others")
+	# and locks SSH out of a fresh flash. The image preserves these modes.
+	find files -type d -exec chmod 755 {} +
+	find files -type f -exec chmod 644 {} +
+	[ -f files/etc/dropbear/authorized_keys ] && chmod 600 files/etc/dropbear/authorized_keys
 fi
 
 ./scripts/feeds update -a
