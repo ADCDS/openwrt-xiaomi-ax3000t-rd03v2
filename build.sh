@@ -47,6 +47,22 @@ if [ "$WITH_NSS" = "1" ]; then
 	cat ../nss/config.append >> target/linux/qualcommax/config-6.12
 fi
 
+# ---- optional: private profile overlay (PROFILE=/path/to/profile) ----
+# Bakes a private, secret-bearing profile into the image as custom rootfs files
+# (OpenWrt copies ./files/ into the rootfs). Intended for a personal, pre-
+# configured build: the profile's files/etc/config/{network,wireless,firewall,
+# dhcp} hold the gateway topology, WiFi PSK and PPPoE creds, so a *clean* flash
+# boots fully configured (SSH at 192.168.1.1, WAN + WiFi up) with no serial
+# needed. The profile lives OUTSIDE this repo (e.g. a private git repo) and is
+# never committed here — only its path is passed in:
+#   PROFILE=~/ax3000t-profile NSS=1 ./build.sh
+if [ -n "$PROFILE" ]; then
+	[ -d "$PROFILE/files" ] || { echo "ERROR: PROFILE=$PROFILE has no files/ dir." >&2; exit 1; }
+	echo ">>> PROFILE=$PROFILE: baking private profile config into the image"
+	mkdir -p files
+	cp -a "$PROFILE"/files/. files/
+fi
+
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 

@@ -237,7 +237,8 @@ define Device/xiaomi_mi-router-ax3000t-v2
 	KERNEL_IN_UBI := 1
 	DEVICE_PACKAGES := kmod-ath11k-smallbuffers \
 		ath11k-firmware-ipq5018-qcn6122 \
-		ipq-wifi-xiaomi_mi-router-ax3000t-v2
+		ipq-wifi-xiaomi_mi-router-ax3000t-v2 \
+		ppp ppp-mod-pppoe
 endef
 TARGET_DEVICES += xiaomi_mi-router-ax3000t-v2
 
