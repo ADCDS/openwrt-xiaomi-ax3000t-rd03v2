@@ -23,7 +23,9 @@ package/
  131240  package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.ipq5018  [bin]
          2.4 GHz ath11k board data (board-2.bin) for the IPQ5018 radio.
  131240  package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.qcn6122  [bin]
-         5 GHz ath11k board data for the QCN6122 radio (2.7-compatible).
+         5 GHz ath11k board data for the QCN6122 radio — the 2.7-compatible
+         (version-matched) BDF that brings the 5 GHz radio up. An earlier
+         revision of this repo shipped a stale variant of this file.
    1788  package/kernel/qca-nss-dp/patches/0001-nss_dp_main-tolerate-fixed-link-registration-failure.patch
          nss-dp: don't fail probe when fixed-link registration fails
          (swphy can't emulate >1G speeds; needed for the 2.5G-capable
@@ -51,9 +53,13 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
 
 target/linux/qualcommax/
 ------------------------
-  12867  target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
+  13504  target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
          Device tree: SoC, NAND partitions, AN8855 switch, QCN6122,
-         LEDs, buttons, MACs/caldata wiring.
+         LEDs, buttons, MACs/caldata wiring. Both CPU ports are wired:
+         port@5 -> dp2/eth1 (2.5G, the default user-port conduit) and
+         port@4 -> dp1/eth0 (1G via AN8855 PHY5 <-> IPQ5018 GE PHY, real
+         link state) — the dual-conduit topology the NSS offload steers
+         WAN traffic onto (see docs/nss-offload.md).
    7887  target/linux/qualcommax/image/ipq50xx.mk
          Image recipe Device/xiaomi_mi-router-ax3000t-v2
          (DTS config@mp03.3, KERNEL_IN_UBI, wifi fw + board-data pkgs).

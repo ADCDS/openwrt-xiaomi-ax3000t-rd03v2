@@ -513,14 +513,21 @@
 				phy-handle = <&internal_phy4>;
 			};
 
-			// CPU wan in stock fw
+			/*
+			 * Second CPU port ("CPU wan" in stock fw): AN8855
+			 * MAC4 -> internal PHY5 -> MDI pair -> IPQ5018 GE PHY
+			 * -> MAC0 (dp1/eth0). Both link partners are real
+			 * copper PHYs, so use the internal PHY instead of a
+			 * fixed-link to get true link state on the conduit.
+			 * User ports still default to port@5 (eth1, 2.5G) via
+			 * .preferred_default_local_cpu_port; move the WAN with
+			 *   ip link set wan type dsa conduit eth0
+			 */
 			port@4 {
 				reg = <4>;
-				// label = "cpu";
-				// ethernet = <&dp1>;
+				ethernet = <&dp1>;
 				phy-mode = "internal";
 				phy-handle = <&internal_phy5>;
-				status = "disabled";
 			};
 
 			// CPU lan in stock fw
