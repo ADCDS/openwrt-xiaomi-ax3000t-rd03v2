@@ -379,9 +379,13 @@
 		compatible = "airoha,an8855-mfd";
 		reg = <1>;
 
-		reset-gpios = <&tlmm 39 GPIO_ACTIVE_HIGH>;
-		reset-assert-us = <10000>;
-		reset-deassert-us = <50000>;
+		/*
+		 * NOTE: the AN8855 reset-gpios deliberately lives in the
+		 * ethernet-switch child node below, NOT here. The MDIO core
+		 * only honours reset-gpios for PHY devices (not plain mdio
+		 * devices like this MFD), and the an8855 MFD driver doesn't
+		 * parse it either - only an8855_switch_probe() does.
+		 */
 	};
 };
 
@@ -480,6 +484,28 @@
 	ethernet-switch {
 		compatible = "airoha,an8855-switch";
 		airoha,ext-surge;
+
+		/*
+		 * AN8855 hardware reset line, TLMM GPIO 39 (stock DTB:
+		 * mdio@90000 "phy-reset-gpio = <&tlmm 39 0>").
+		 *
+		 * It must be in THIS node: an8855_switch_probe() is the only
+		 * consumer of "reset-gpios" and it looks it up on the switch
+		 * child device. Previously it sat on the mfd@1 node where
+		 * nothing ever claimed it, so the AN8855 was never hardware
+		 * reset - after a soft reboot the driver re-initialized the
+		 * chip on top of stale state (MCU already running, GPHY AFE
+		 * live, forced-PMCR leftovers) and the WAN port link became
+		 * nondeterministic until a power-cycle.
+		 *
+		 * Polarity must stay GPIO_ACTIVE_HIGH: probe requests the
+		 * line with GPIOD_OUT_LOW (physically low = RESET_N asserted,
+		 * matching the stock driver's low pulse), holds it ~200 ms,
+		 * then sets logical 1 (physically high = released) and polls
+		 * HWTRAP until the chip has re-initialized. GPIO_ACTIVE_LOW
+		 * would leave the switch permanently in reset.
+		 */
+		reset-gpios = <&tlmm 39 GPIO_ACTIVE_HIGH>;
 
 		ports {
 			#address-cells = <1>;

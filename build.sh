@@ -40,8 +40,13 @@ if [ "$WITH_NSS" = "1" ]; then
 	# pull the NSS dtsi into the device DTS
 	sed -i '/#include "ipq5018-qcn6122.dtsi"/a #include "ipq5018-nss.dtsi"' \
 		target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
-	# add the NSS packages to the AX3000T device (before smallbuffers, same line)
-	sed -i 's#DEVICE_PACKAGES := kmod-ath11k-smallbuffers #DEVICE_PACKAGES := kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-bridge-mgr nss-firmware-ipq50xx kmod-ath11k-smallbuffers #' \
+	# add the NSS packages to the AX3000T device (before smallbuffers, same line).
+	# kmod-qca-nss-drv-pppoe is REQUIRED for PPPoE WAN offload: it registers the
+	# PPPoE session with the NSS core; without it ecm never accelerates any flow
+	# over a pppoe wan (ipv4_create_requests stays 0). Do NOT add
+	# kmod-qca-nss-drv-bridge-mgr: it is @ipq807x/60xx-only (never builds here)
+	# yet kconfig still force-selects its +kmod-bonding dep, which breaks ecm.
+	sed -i 's#DEVICE_PACKAGES := kmod-ath11k-smallbuffers #DEVICE_PACKAGES := kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-pppoe nss-firmware-ipq50xx kmod-ath11k-smallbuffers #' \
 		target/linux/qualcommax/image/ipq50xx.mk
 	# NSS kernel config symbols (skb_recycler, conntrack DSCP-remark ext)
 	cat ../nss/config.append >> target/linux/qualcommax/config-6.12
@@ -68,6 +73,8 @@ if [ -n "$PROFILE" ]; then
 	# and locks SSH out of a fresh flash. The image preserves these modes.
 	find files -type d -exec chmod 755 {} +
 	find files -type f -exec chmod 644 {} +
+	# scripts (shebang) — init.d services, /usr/bin helpers — must stay executable
+	grep -rlIZ '^#!' files 2>/dev/null | xargs -0 -r chmod 755
 	[ -f files/etc/dropbear/authorized_keys ] && chmod 600 files/etc/dropbear/authorized_keys
 fi
 
@@ -78,6 +85,12 @@ fi
 # resets de-asserted, so the stock driver's core_reset is a no-op and the core
 # never boots. This patch pulses the reset and re-orders the boot-config write.
 if [ "$WITH_NSS" = "1" ]; then
+	# qca-nss-drv-pppoe declares +kmod-bonding (QSDK boilerplate for LAG over
+	# PPPoE). Selecting kmod-bonding flips ECM_INTERFACE_BOND_ENABLE=y and the
+	# ecm bond notifier does not compile against mainline (struct bond_cb is a
+	# QSDK-patched-bonding API). We don't use bonding - strip the dep.
+	sed -i '/^define KernelPackage\/qca-nss-drv-pppoe$/,/^endef/{/+kmod-bonding/d}' \
+		feeds/nss_packages/qca-nss-clients/Makefile
 	mkdir -p feeds/nss_packages/qca-nss-drv/patches
 	cp ../nss/feed-patches/qca-nss-drv/*.patch feeds/nss_packages/qca-nss-drv/patches/
 	# ecm DSA-conduit awareness: map a DSA user port (or a bridge master over one)

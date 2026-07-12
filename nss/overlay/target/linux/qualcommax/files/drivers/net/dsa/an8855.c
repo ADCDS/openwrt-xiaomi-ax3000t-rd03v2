@@ -2524,9 +2524,15 @@ static int an8855_switch_probe(struct platform_device *pdev)
 
 		/* Poll HWTRAP reg to wait for Switch to fully Init */
 		ret = regmap_read_poll_timeout(priv->regmap, AN8855_HWTRAP, val,
-					       val, 20, 200000);
+					       val && val != 0xffffffff, 1000, 1000000);
 		if (ret)
 			return ret;
+
+		/* Log the reset pulse: a soft reboot must show this line so
+		 * we know the switch started from power-on state instead of
+		 * re-initializing on top of the previous boot's state.
+		 */
+		dev_info(priv->dev, "hardware reset done, HWTRAP %08x\n", val);
 	}
 
 	ret = an8855_read_switch_id(priv);
