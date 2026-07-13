@@ -1332,7 +1332,7 @@ static int an8855_tag_8021q_vlan_add(struct dsa_switch *ds, int port, u16 vid,
 		if (ret)
 			return ret;
 
-		ret = an8855_port_set_pvid(priv, port, vid);
+		ret = an8855_port_set_pid(priv, port, vid);
 		if (ret)
 			return ret;
 	}
