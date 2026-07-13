@@ -327,6 +327,9 @@ static int an8855_set_ageing_time(struct dsa_switch *ds, unsigned int msecs)
 				  FIELD_PREP(AN8855_AGE_UNIT, age_unit));
 }
 
+/* Defined with the tag_8021q debug helpers below. */
+static void an8855_tag_8021q_dump_vid(struct an8855_priv *priv, u16 vid);
+
 static int an8855_port_bridge_join(struct dsa_switch *ds, int port,
 				   struct dsa_bridge bridge,
 				   bool *tx_fwd_offload,
@@ -338,6 +341,28 @@ static int an8855_port_bridge_join(struct dsa_switch *ds, int port,
 	ret = an8855_update_port_member(ds, port, bridge.dev, true);
 	if (ret)
 		return ret;
+
+	/* tag_8021q: the port matrix alone cannot bridge user ports. Under
+	 * tag_8021q the VLAN table governs egress, and each port's standalone
+	 * VID only reaches the CPU, while the vsc73xx-8021q RX tagger marks
+	 * bridged-port frames offload_fwd_mark=1 so the software bridge never
+	 * forwards them to sibling ports either - LAN-to-LAN traffic is
+	 * black-holed. Swap the standalone VID for the shared bridge VID
+	 * (cross-adding all bridged ports as members) so the hardware
+	 * genuinely forwards between them, and let *tx_fwd_offload=true make
+	 * the RX mark truthful. Same model as sja1105/vsc73xx.
+	 */
+	ret = dsa_tag_8021q_bridge_join(ds, port, bridge, tx_fwd_offload,
+					extack);
+	if (ret) {
+		an8855_update_port_member(ds, port, bridge.dev, false);
+		return ret;
+	}
+
+	/* DEBUG: show the accumulated bridge-VID membership on the console */
+	mutex_lock(&priv->reg_mutex);
+	an8855_tag_8021q_dump_vid(priv, dsa_tag_8021q_bridge_vid(bridge.num));
+	mutex_unlock(&priv->reg_mutex);
 
 	/* Set to fallback mode for independent VLAN learning if in a bridge */
 	return regmap_update_bits(priv->regmap, AN8855_PCR_P(port),
@@ -351,16 +376,22 @@ static void an8855_port_bridge_leave(struct dsa_switch *ds, int port,
 {
 	struct an8855_priv *priv = ds->priv;
 
+	/* Drop the bridge VID and restore the standalone VID. Via the PVID
+	 * branch of .tag_8021q_vlan_add this also reprograms SECURITY mode +
+	 * standalone PVID - the same isolated tag_8021q state the port had at
+	 * boot. Do NOT force MATRIX (VLAN-unaware) mode afterwards like the
+	 * pre-tag_8021q code did: a standalone port must keep classifying
+	 * untagged ingress into its standalone VID so frames egress the CPU
+	 * port tagged (the conduit tagger needs that VID to demux the port).
+	 */
+	dsa_tag_8021q_bridge_leave(ds, port, bridge);
+
 	an8855_update_port_member(ds, port, bridge.dev, false);
 
-	/* When a port is removed from the bridge, the port would be set up
-	 * back to the default as is at initial boot which is a VLAN-unaware
-	 * port.
-	 */
-	regmap_update_bits(priv->regmap, AN8855_PCR_P(port),
-			   AN8855_PORT_VLAN,
-			   FIELD_PREP(AN8855_PORT_VLAN,
-				      AN8855_PORT_MATRIX_MODE));
+	/* DEBUG: show the shrunk bridge-VID membership on the console */
+	mutex_lock(&priv->reg_mutex);
+	an8855_tag_8021q_dump_vid(priv, dsa_tag_8021q_bridge_vid(bridge.num));
+	mutex_unlock(&priv->reg_mutex);
 }
 
 static int an8855_port_fdb_add(struct dsa_switch *ds, int port,
@@ -1475,10 +1506,29 @@ an8855_setup_pvid_vlan(struct an8855_priv *priv)
  * standalone VID range (0xC00 + port) the VLAN-table validity, VTAG_EN, member
  * mask and per-port egress-tag field. Remove once tag_8021q is confirmed.
  */
+static void an8855_tag_8021q_dump_vid(struct an8855_priv *priv, u16 vid)
+	__must_hold(&priv->reg_mutex)
+{
+	u32 vard;
+
+	if (an8855_vlan_cmd(priv, AN8855_VTCR_RD_VID, vid))
+		return;
+	if (regmap_read(priv->regmap, AN8855_VARD0, &vard))
+		return;
+
+	dev_info(priv->dev,
+		 "tag8021q VID%u: VARD0=%08x valid=%lu vtag_en=%lu members=%02lx etag=%03lx\n",
+		 vid, vard,
+		 (unsigned long)!!(vard & AN8855_VA0_VLAN_VALID),
+		 (unsigned long)!!(vard & AN8855_VA0_VTAG_EN),
+		 FIELD_GET(AN8855_VA0_PORT, vard),
+		 FIELD_GET(AN8855_VA0_ETAG, vard));
+}
+
 static void an8855_tag_8021q_debug_dump(struct an8855_priv *priv)
 {
 	struct dsa_switch *ds = priv->ds;
-	u32 pcr, pvc, pvid, mtx, vard;
+	u32 pcr, pvc, pvid, mtx;
 	int port;
 	u16 vid;
 
@@ -1503,20 +1553,8 @@ static void an8855_tag_8021q_debug_dump(struct an8855_priv *priv)
 	}
 
 	mutex_lock(&priv->reg_mutex);
-	for (vid = 3072; vid < 3072 + AN8855_NUM_PORTS; vid++) {
-		if (an8855_vlan_cmd(priv, AN8855_VTCR_RD_VID, vid))
-			continue;
-		if (regmap_read(priv->regmap, AN8855_VARD0, &vard))
-			continue;
-
-		dev_info(priv->dev,
-			 "tag8021q VID%u: VARD0=%08x valid=%lu vtag_en=%lu members=%02lx etag=%03lx\n",
-			 vid, vard,
-			 (unsigned long)!!(vard & AN8855_VA0_VLAN_VALID),
-			 (unsigned long)!!(vard & AN8855_VA0_VTAG_EN),
-			 FIELD_GET(AN8855_VA0_PORT, vard),
-			 FIELD_GET(AN8855_VA0_ETAG, vard));
-	}
+	for (vid = 3072; vid < 3072 + AN8855_NUM_PORTS; vid++)
+		an8855_tag_8021q_dump_vid(priv, vid);
 	mutex_unlock(&priv->reg_mutex);
 }
 
@@ -1692,6 +1730,15 @@ static int an8855_setup(struct dsa_switch *ds)
 
 	/* Enable assisted learning for fdb isolation */
 	ds->assisted_learning_on_cpu_port = true;
+
+	/* tag_8021q bridging: bridges must get unique nonzero numbers so
+	 * dsa_tag_8021q_bridge_join() derives a distinct bridge VID. DSA only
+	 * hands those out when max_num_bridges is set; otherwise bridge.num
+	 * stays 0 and the "bridge VID" aliases port 0's standalone VID (both
+	 * 3072), which misattributes bridged RX to port 0 and kicks port 0
+	 * out of the bridge VLAN the moment it joins.
+	 */
+	ds->max_num_bridges = DSA_TAG_8021Q_MAX_NUM_BRIDGES;
 
 	/*
 	 * tag_8021q CPU-port egress fix.
