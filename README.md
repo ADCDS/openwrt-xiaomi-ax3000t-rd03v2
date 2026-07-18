@@ -13,7 +13,7 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 | WiFi **2.4 GHz** (IPQ5018) | ✅ |
 | WiFi **5 GHz** (QCN6122) | ✅ |
 | Front status LED (blue/amber) | ✅ |
-| In-place updates via `sysupgrade` | ✅ |
+| Updates via `sysupgrade` (from the RAM-booted initramfs — see below) | ✅ |
 
 > Built against **OpenWrt `25ee126`** (Jul 2026 snapshot, kernel 6.12.94).
 
@@ -52,9 +52,9 @@ Prebuilt images are on the [Releases](../../releases) page:
 
 | File | Purpose |
 |---|---|
-| `…-initramfs-uImage.itb` | Boots OpenWrt entirely in RAM (used during install; never touches flash) |
-| `…-squashfs-sysupgrade.bin` | The permanent image, written to NAND by `sysupgrade` |
-| `…-squashfs-factory.ubi` | Alternative factory image (whole-UBI) |
+| `…-initramfs-uImage.itb` | Boots OpenWrt entirely in RAM. **Required for every flash** — you run `sysupgrade` from this RAM system; it never touches flash by itself |
+| `…-squashfs-sysupgrade.bin` | The permanent image, written to NAND by `sysupgrade` **run from the RAM initramfs above** (not in place — see the warning in step 4) |
+| `…-squashfs-factory.ubi` | Whole-UBI image. **Not used by this guide** — the stock bootloader is locked (no OEM web-flash / no unlocked U-Boot write), so there is no supported way to write it directly. Install via the initramfs + `sysupgrade` path instead |
 
 The install is a **UART + TFTP** procedure because the stock bootloader is locked. Full walkthrough below.
 
@@ -119,11 +119,20 @@ bootm 0x44000000
 OpenWrt boots from RAM. Nothing has been written to flash yet — if anything looks wrong, just power-cycle back to stock.
 
 ### 4. Flash to NAND
+
+> **This RAM-initramfs step is mandatory for every flash — the first install *and* every later update.** It is the only path that yields a bootable image: running `sysupgrade` from the RAM system triggers `xiaomi_initramfs_prepare`, which `ubiformat`s **both** UBI partitions and writes a kernel UBI the locked stock bootloader can actually attach. A plain **in-place** `sysupgrade` from the *installed* NAND system skips that wipe and leaves a UBI that Linux can read but the stock bootloader **cannot** attach (`UBI init error 22`) — an unbootable loop. (`platform.sh` now refuses an in-place `sysupgrade` on this board and points you here.)
+
 On the RAM OpenWrt (root shell on serial, or SSH to `192.168.1.1` once you bring up the LAN), copy the `…squashfs-sysupgrade.bin` onto the device (scp/wget over the LAN), then:
 ```sh
 sysupgrade -n /tmp/openwrt-…-squashfs-sysupgrade.bin
 ```
-Our `platform.sh` case wipes the UBI, writes kernel+rootfs, **and sets the U-Boot boot-flags** (`flag_try_sys{1,2}_failed=8`, etc.) so the stock bootloader boots our slot. It reboots into OpenWrt **from NAND**. Done — the serial cable is no longer required.
+Our `platform.sh` case wipes the UBI, writes kernel+rootfs, **and sets the U-Boot boot-flags** (`flag_try_sys{1,2}_failed=8`, etc.) so the stock bootloader boots our slot. It reboots into OpenWrt **from NAND**. Done — the serial cable is no longer required for normal use.
+
+> ⚠️ **Run `sysupgrade` where it cannot be interrupted** — from the serial console, or a persistent SSH session on the RAM system. **Never wrap it in `timeout`** (or any droppable/killable wrapper): a NAND write torn mid-flight corrupts the kernel UBI and bricks the device the same way (`UBI init error 22`).
+
+**To update later:** repeat steps 3–4 — TFTP-boot the new `…-initramfs-uImage.itb` into RAM, then `sysupgrade` from it. Do **not** `sysupgrade` in place from the running system.
+
+**If you hit a `UBI init error 22` boot loop** (in-place/interrupted flash): it is recoverable, not a hard brick. Repeat steps 3–4 (RAM-boot the initramfs via TFTP, then `sysupgrade -n`); the initramfs path `ubiformat`s and self-heals the corrupt UBI. Worst case, redo the stock TFTP recovery (step 2) and start over.
 
 ### 5. First boot
 - LAN is `192.168.1.1`. Ports `lan2/lan3/lan4` bridge into `br-lan`; the `wan` port is the AN8855's WAN.
