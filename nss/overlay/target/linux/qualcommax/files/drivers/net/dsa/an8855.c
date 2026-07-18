@@ -376,22 +376,16 @@ static void an8855_port_bridge_leave(struct dsa_switch *ds, int port,
 {
 	struct an8855_priv *priv = ds->priv;
 
-	/* Drop the bridge VID and restore the standalone VID. Via the PVID
-	 * branch of .tag_8021q_vlan_add this also reprograms SECURITY mode +
-	 * standalone PVID - the same isolated tag_8021q state the port had at
-	 * boot. Do NOT force MATRIX (VLAN-unaware) mode afterwards like the
-	 * pre-tag_8021q code did: a standalone port must keep classifying
-	 * untagged ingress into its standalone VID so frames egress the CPU
-	 * port tagged (the conduit tagger needs that VID to demux the port).
-	 */
-	dsa_tag_8021q_bridge_leave(ds, port, bridge);
-
 	an8855_update_port_member(ds, port, bridge.dev, false);
 
-	/* DEBUG: show the shrunk bridge-VID membership on the console */
-	mutex_lock(&priv->reg_mutex);
-	an8855_tag_8021q_dump_vid(priv, dsa_tag_8021q_bridge_vid(bridge.num));
-	mutex_unlock(&priv->reg_mutex);
+	/* When a port is removed from the bridge, the port would be set up
+	 * back to the default as is at initial boot which is a VLAN-unaware
+	 * port.
+	 */
+	regmap_update_bits(priv->regmap, AN8855_PCR_P(port),
+			   AN8855_PORT_VLAN,
+			   FIELD_PREP(AN8855_PORT_VLAN,
+				      AN8855_PORT_MATRIX_MODE));
 }
 
 static int an8855_port_fdb_add(struct dsa_switch *ds, int port,
@@ -1363,7 +1357,7 @@ static int an8855_tag_8021q_vlan_add(struct dsa_switch *ds, int port, u16 vid,
 		if (ret)
 			return ret;
 
-		ret = an8855_port_set_pid(priv, port, vid);
+		ret = an8855_port_set_pvid(priv, port, vid);
 		if (ret)
 			return ret;
 	}
