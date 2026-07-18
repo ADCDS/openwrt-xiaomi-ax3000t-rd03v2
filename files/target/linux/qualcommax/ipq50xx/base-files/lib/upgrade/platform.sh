@@ -166,6 +166,27 @@ linksys_mx_pre_upgrade() {
 }
 
 platform_check_image() {
+	case "$(board_name)" in
+	xiaomi,mi-router-ax3000t-v2)
+		# This board stores the kernel in a UBI volume (KERNEL_IN_UBI) and
+		# boots via the locked stock Xiaomi U-Boot. A bootable kernel UBI is
+		# only produced when platform_pre_upgrade -> xiaomi_initramfs_prepare
+		# runs, and that only ubiformats the UBI partitions when the running
+		# rootfs is tmpfs, i.e. when sysupgrade is started from the RAM-booted
+		# initramfs image. An in-place sysupgrade from the installed NAND
+		# system skips that wipe and leaves a UBI that Linux can read but the
+		# stock bootloader cannot attach ("UBI init error 22") -> unbootable.
+		# Refuse it with guidance instead of silently bricking the device.
+		if [ "$(rootfs_type)" != "tmpfs" ]; then
+			v "AX3000T RD03v2: flash to NAND only from a RAM-booted initramfs."
+			v "TFTP-boot the ...-initramfs-uImage.itb (see README), then run"
+			v "sysupgrade from that RAM system. Do NOT sysupgrade in place from"
+			v "the installed system, and never wrap sysupgrade in 'timeout' or a"
+			v "droppable ssh session (a torn NAND write bricks the same way)."
+			return 1
+		fi
+		;;
+	esac
 	return 0;
 }
 
