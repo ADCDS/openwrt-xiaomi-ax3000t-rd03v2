@@ -105,6 +105,13 @@ The stock U-Boot ignores keypresses (`boot_wait=off`). A stock **TFTP recovery**
 2. Hold the **reset** button and, while holding, plug power in. Keep holding ~8–10 s until the LED **blinks**, then release.
 3. It DHCPs, pulls `recovery.bin`, verifies + reflashes stock (~2–3 min on the console), and halts. This sets `boot_wait=on`.
 
+> ⚠️ **Do the `saveenv` of step 3 on the very next boot — before stock ever
+> boots to userspace.** The recovery's `boot_wait=on` is not persistent: the
+> stock firmware's first full boot silently turns `boot_wait` **off** again,
+> the countdown drops to zero, and no amount of keypressing will reach the
+> prompt — you'd have to redo this recovery. (The recovery halts after
+> flashing precisely so you get that first boot; use it.)
+
 ### 3. Boot OpenWrt in RAM
 Power-cycle (no reset). Now the bootloader pauses. **Interrupt it** (spam Enter as it boots) to reach the `IPQ5018#` prompt, then:
 ```
@@ -116,6 +123,11 @@ setenv serverip 192.168.31.100
 tftpboot 0x44000000 owrt.itb
 bootm 0x44000000
 ```
+The `tftpboot` is **slow — expect ~100 KB/s, so ~2–3 minutes for the ~14 MB
+image**. U-Boot's TFTP is 512-byte stop-and-wait blocks through a polling
+ethernet driver; the crawling `#` marks are progress, not a stall (a gigabit
+link doesn't help). Give it time before assuming failure.
+
 OpenWrt boots from RAM. Nothing has been written to flash yet — if anything looks wrong, just power-cycle back to stock.
 
 ### 4. Flash to NAND
@@ -132,7 +144,13 @@ Our `platform.sh` case wipes the UBI, writes kernel+rootfs, **and sets the U-Boo
 
 **To update later:** repeat steps 3–4 — TFTP-boot the new `…-initramfs-uImage.itb` into RAM, then `sysupgrade` from it. Do **not** `sysupgrade` in place from the running system.
 
-**If you hit a `UBI init error 22` boot loop** (in-place/interrupted flash): it is recoverable, not a hard brick. Repeat steps 3–4 (RAM-boot the initramfs via TFTP, then `sysupgrade -n`); the initramfs path `ubiformat`s and self-heals the corrupt UBI. Worst case, redo the stock TFTP recovery (step 2) and start over.
+**A single `UBI init error 22` on the first boot after a correct flash is
+expected and harmless.** The loader's first attach of the fresh UBI fails once,
+the A/B logic bumps `flag_try_sys1_failed` and resets, and the second attempt
+attaches cleanly — every boot after that is error-free (and `rc.local` then
+pins the boot-success flags). Don't re-flash over it.
+
+**If you hit a `UBI init error 22` boot *loop*** (the error on *every* boot — in-place/interrupted flash): it is recoverable, not a hard brick. Repeat steps 3–4 (RAM-boot the initramfs via TFTP, then `sysupgrade -n`); the initramfs path `ubiformat`s and self-heals the corrupt UBI. Worst case, redo the stock TFTP recovery (step 2) and start over.
 
 ### 5. First boot
 - LAN is `192.168.1.1`. Ports `lan2/lan3/lan4` bridge into `br-lan`; the `wan` port is the AN8855's WAN.
