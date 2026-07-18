@@ -112,6 +112,20 @@ CONFIG_TARGET_qualcommax_ipq50xx_DEVICE_xiaomi_mi-router-ax3000t-v2=y
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
 EOF
 
+# NSS firmware MUST match the driver ABI. The nss feed branch (NSS-12.5-K6.x)
+# builds qca-nss-drv against the 12.5 firmware interface, but `make defconfig`
+# resolves the nss-firmware version choice to its default, 11.4. With the 11.4
+# blob loaded the NSS core "boots successfully" yet never answers phys_if
+# messages: every DSA conduit open returns a silent EAGAIN and ALL switch
+# ports (LAN and WAN) come up dead — the LAN-killing failure looks completely
+# unrelated to a firmware-version default. Pin 12.5 explicitly.
+if [ "$WITH_NSS" = "1" ]; then
+	cat >> .config <<'EOF'
+# CONFIG_NSS_FIRMWARE_VERSION_11_4 is not set
+CONFIG_NSS_FIRMWARE_VERSION_12_5=y
+EOF
+fi
+
 make defconfig
 make -j"$(nproc)"
 
