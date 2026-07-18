@@ -5,10 +5,15 @@
 # /etc/rc.local. Disable the package init scripts so they don't ALSO load the
 # modules (double-load / wrong ordering).
 #
-# The LAN (management/SSH) never depends on the offload, so a misbehaving fast
-# path can't lock you out. To back the offload out entirely:
-#   rm /etc/modules.d/33-qca-nss-ecm && reboot   (software routing always works)
-# See docs/nss-offload.md.
+# To back the offload out entirely (slowpath software routing always works):
+#   rm /etc/modules.d/32-qca-nss-drv /etc/modules.d/33-qca-nss-ecm \
+#      /etc/modules.d/51-qca-nss-drv-pppoe        # keep 31-qca-nss-dp
+#   reboot
+# Removing only 33-qca-nss-ecm is NOT enough: qca-nss-drv alone switches
+# nss-dp onto the NSS data plane, and under a fw/driver version mismatch that
+# kills the whole LAN with no ecm involved (see docs/nss-offload.md
+# "Troubleshooting"). Never rmmod qca-nss-drv on a live system - it resets
+# the Q6 remoteproc and crashes the box; remove the autoloads and reboot.
 /etc/init.d/qca-nss-ecm disable 2>/dev/null
 /etc/init.d/qca-nss-drv disable 2>/dev/null
 exit 0
