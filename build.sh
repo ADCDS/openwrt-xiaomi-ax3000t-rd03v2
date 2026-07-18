@@ -118,9 +118,9 @@ make -j"$(nproc)"
 echo
 echo "Build complete. Images are in:"
 echo "  $(pwd)/bin/targets/qualcommax/ipq50xx/"
-echo "  - *-initramfs-uImage.itb      (RAM-boot image, flash-safe first test)"
-echo "  - *-squashfs-factory.ubi      (initial NAND install)"
-echo "  - *-squashfs-sysupgrade.bin   (upgrades from OpenWrt)"
+echo "  - *-initramfs-uImage.itb      (RAM-boot image; REQUIRED for every flash — you run sysupgrade from it)"
+echo "  - *-squashfs-sysupgrade.bin   (the NAND image; flash with sysupgrade RUN FROM the initramfs, not in place — see README step 4)"
+echo "  - *-squashfs-factory.ubi      (whole-UBI image; not used on this locked device — install via the initramfs path)"
 if [ "$WITH_NSS" = "1" ]; then
 	echo
 	echo "NSS hardware offload build. After first boot the NSS core boots and"
