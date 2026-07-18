@@ -1,0 +1,411 @@
+From: openwrt-xiaomi-ax3000t-rd03v2 port
+Subject: [PATCH] wifi: ath11k: fix rx signal / noise-floor reporting on IPQ5018+QCN6122
+
+The WLAN.HK.2.7.0.1 firmware used with the multi-PD IPQ5018+QCN6122
+combination reports rx signal (rssi_comb, mgmt snr, ack rssi) on an
+uncalibrated dB scale and reports a raw, uncalibrated runtime noise
+floor (-110/-113 "dBm"). Adding the generic ATH11K_DEFAULT_NOISE_FLOOR
+of -95 therefore yields station/scan/ack RSSI ~31 dB (2.4 GHz) / ~24 dB
+(5 GHz) below the true dBm level, and a physically impossible survey
+noise floor. Measured against external references on the Xiaomi Mi
+Router AX3000T v2 bench: an in-room client truly received at ~-22 dBm
+was reported at -55; the same beacons read -35 by an independent
+receiver were reported at -66. The stock QSDK 2.5-era firmware reports
+correctly on identical hardware, and swapping any available 2.7-era
+board file does not change the offset, so the error is inherent to this
+firmware generation and is compensated host-side:
+
+- add per-hw_rev signal offsets (+31 dB IPQ5018, +24 dB QCN6122)
+  applied wherever ATH11K_DEFAULT_NOISE_FLOOR converts a firmware dB
+  value to dBm (station signal/signal_avg, mgmt-rx/scan signal, ack
+  signal, monitor radiotap);
+- implement the WMI_PDEV_GET_NFCAL_POWER_CMDID exchange (command and
+  NFCAL_POWER_ALL_CHANNELS event were already enumerated but unused;
+  the firmware answers with per-frequency calibrated nfdBr/nfdBm
+  pairs), and report the calibrated per-channel NF dBm (-99 on 2.4,
+  ~-90 on 5 GHz on this board) as the survey noise floor instead of
+  the firmware's raw runtime value. The query is refreshed
+  opportunistically (rate-limited) from get_survey/sta_statistics.
+
+Validated on-air against an independent receiver: station RSSI now
+matches the stock firmware reading (-22/-23 dBm) and scan results track
+the reference receiver within a couple of dB on both bands.
+
+--- a/drivers/net/wireless/ath/ath11k/core.h
++++ b/drivers/net/wireless/ath/ath11k/core.h
+@@ -744,6 +744,16 @@
+ 	u32 survey_last_rx_clear_count;
+ 	u32 survey_last_cycle_count;
+ 
++	/* rate-limit for WMI_PDEV_GET_NFCAL_POWER_CMDID probing */
++	unsigned long nfcal_time;
++
++	/* calibrated per-freq noise floor (chain 0, dBm) from the
++	 * NFCAL_POWER_ALL_CHANNELS event; used to report a sane survey noise
++	 */
++	u32 nfcal_freq[8];
++	s32 nfcal_dbm[8];
++	u8 nfcal_cnt;
++
+ 	/* Channel info events are expected to come in pairs without and with
+ 	 * COMPLETE flag set respectively for each channel visit during scan.
+ 	 *
+@@ -1358,6 +1368,23 @@
+ 	return "unknown";
+ }
+ 
++/* WLAN.HK.2.7.0.1 on IPQ5018/QCN6122 reports rx signal on an uncalibrated
++ * dB scale well below true dBm (measured ~31 dB low on 2.4 GHz, ~24 dB low
++ * on 5 GHz against external references; the stock 2.5-era firmware reports
++ * correctly on the same hardware). Compensate at the reporting sites.
++ */
++static inline s8 ath11k_hw_rssi_offset(struct ath11k_base *ab)
++{
++	switch (ab->hw_rev) {
++	case ATH11K_HW_IPQ5018_HW10:
++		return 31;
++	case ATH11K_HW_QCN6122_HW10:
++		return 24;
++	default:
++		return 0;
++	}
++}
++
+ void ath11k_core_pm_notifier_unregister(struct ath11k_base *ab);
+ 
+ #endif /* _CORE_H_ */
+--- a/drivers/net/wireless/ath/ath11k/wmi.h
++++ b/drivers/net/wireless/ath/ath11k/wmi.h
+@@ -3580,6 +3580,11 @@
+ 	u32 pdev_id;
+ } __packed;
+ 
++struct wmi_pdev_get_nfcal_power_cmd {
++	u32 tlv_header;
++	u32 pdev_id;
++} __packed;
++
+ struct wmi_ftm_seg_hdr {
+ 	u32 len;
+ 	u32 msgref;
+@@ -4868,6 +4873,17 @@
+ 	u32 pdev_id;
+ } __packed;
+ 
++/* WMI_PDEV_NFCAL_POWER_ALL_CHANNELS_EVENTID fixed_param; followed by three
++ * WMI_TAG_ARRAY_STRUCT TLVs whose elements are self-tagged {tlv_header, u32}
++ * pairs: NFDBR, NFDBM (s32 noise floor in dBr/dBm) and FREQNUM.
++ */
++struct wmi_pdev_nfcal_power_all_channels_event {
++	u32 pdev_id;
++	u32 nfdbr_len;
++	u32 nfdbm_len;
++	u32 freqnum_len;
++} __packed;
++
+ #define WMI_RX_STATUS_OK			0x00
+ #define WMI_RX_STATUS_ERR_CRC			0x01
+ #define WMI_RX_STATUS_ERR_DECRYPT		0x08
+@@ -6425,6 +6441,7 @@
+ int ath11k_wmi_send_stats_request_cmd(struct ath11k *ar,
+ 				      struct stats_request_params *param);
+ int ath11k_wmi_send_pdev_temperature_cmd(struct ath11k *ar);
++int ath11k_wmi_pdev_get_nfcal_power(struct ath11k *ar);
+ int ath11k_wmi_send_peer_flush_tids_cmd(struct ath11k *ar,
+ 					u8 peer_addr[ETH_ALEN],
+ 					struct peer_flush_params *param);
+--- a/drivers/net/wireless/ath/ath11k/wmi.c
++++ b/drivers/net/wireless/ath/ath11k/wmi.c
+@@ -1675,6 +1675,36 @@
+ 	return ret;
+ }
+ 
++int ath11k_wmi_pdev_get_nfcal_power(struct ath11k *ar)
++{
++	struct ath11k_pdev_wmi *wmi = ar->wmi;
++	struct wmi_pdev_get_nfcal_power_cmd *cmd;
++	struct sk_buff *skb;
++	int ret;
++
++	skb = ath11k_wmi_alloc_skb(wmi->wmi_ab, sizeof(*cmd));
++	if (!skb)
++		return -ENOMEM;
++
++	cmd = (struct wmi_pdev_get_nfcal_power_cmd *)skb->data;
++	cmd->tlv_header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_PDEV_GET_NFCAL_POWER) |
++			  FIELD_PREP(WMI_TLV_LEN, sizeof(*cmd) - TLV_HDR_SIZE);
++	cmd->pdev_id = ar->pdev->pdev_id;
++
++	ret = ath11k_wmi_cmd_send(wmi, skb, WMI_PDEV_GET_NFCAL_POWER_CMDID);
++	if (ret) {
++		ath11k_warn(ar->ab,
++			    "failed to send WMI_PDEV_GET_NFCAL_POWER cmd: %d\n",
++			    ret);
++		dev_kfree_skb(skb);
++	}
++
++	ath11k_dbg(ar->ab, ATH11K_DBG_WMI,
++		   "cmd pdev get nfcal power pdev_id %d\n", ar->pdev->pdev_id);
++
++	return ret;
++}
++
+ int ath11k_wmi_send_bcn_offload_control_cmd(struct ath11k *ar,
+ 					    u32 vdev_id, u32 bcn_ctrl_op)
+ {
+@@ -7617,7 +7647,8 @@
+ 		status->freq = ieee80211_channel_to_frequency(rx_ev.channel,
+ 							      status->band);
+ 
+-	status->signal = rx_ev.snr + ATH11K_DEFAULT_NOISE_FLOOR;
++	status->signal = rx_ev.snr + ATH11K_DEFAULT_NOISE_FLOOR +
++			 ath11k_hw_rssi_offset(ab);
+ 	status->rate_idx = ath11k_mac_bitrate_to_idx(sband, rx_ev.rate / 100);
+ 
+ 	hdr = (struct ieee80211_hdr *)skb->data;
+@@ -8455,6 +8486,127 @@
+ 	kfree(tb);
+ }
+ 
++#define ATH11K_NFCAL_MAX_ENTRIES	96
++
++struct wmi_tlv_nfcal_parse {
++	const struct wmi_pdev_nfcal_power_all_channels_event *ev;
++	s32 nfdbr[ATH11K_NFCAL_MAX_ENTRIES];
++	s32 nfdbm[ATH11K_NFCAL_MAX_ENTRIES];
++	u32 freq[ATH11K_NFCAL_MAX_ENTRIES];
++	u16 nfdbr_n;
++	u16 nfdbm_n;
++	u16 freq_n;
++};
++
++static int ath11k_wmi_tlv_nfcal_parse(struct ath11k_base *ab, u16 tag, u16 len,
++				      const void *ptr, void *data)
++{
++	struct wmi_tlv_nfcal_parse *p = data;
++	const u8 *pos;
++	u16 rem;
++
++	switch (tag) {
++	case WMI_TAG_PDEV_NFCAL_POWER_ALL_CHANNELS_EVENT:
++		if (len < sizeof(*p->ev))
++			return -EPROTO;
++		p->ev = ptr;
++		break;
++	case WMI_TAG_ARRAY_STRUCT:
++		/* elements are self-tagged {tlv_header, u32} pairs */
++		pos = ptr;
++		rem = len;
++		while (rem >= 2 * sizeof(u32)) {
++			u32 hdr = le32_to_cpu(*(const __le32 *)pos);
++			u32 val = le32_to_cpu(*(const __le32 *)(pos + sizeof(u32)));
++
++			switch (FIELD_GET(WMI_TLV_TAG, hdr)) {
++			case WMI_TAG_PDEV_NFCAL_POWER_ALL_CHANNELS_NFDBR:
++				if (p->nfdbr_n < ATH11K_NFCAL_MAX_ENTRIES)
++					p->nfdbr[p->nfdbr_n++] = (s32)val;
++				break;
++			case WMI_TAG_PDEV_NFCAL_POWER_ALL_CHANNELS_NFDBM:
++				if (p->nfdbm_n < ATH11K_NFCAL_MAX_ENTRIES)
++					p->nfdbm[p->nfdbm_n++] = (s32)val;
++				break;
++			case WMI_TAG_PDEV_NFCAL_POWER_ALL_CHANNELS_FREQNUM:
++				if (p->freq_n < ATH11K_NFCAL_MAX_ENTRIES)
++					p->freq[p->freq_n++] = val;
++				break;
++			}
++			pos += 2 * sizeof(u32);
++			rem -= 2 * sizeof(u32);
++		}
++		break;
++	}
++
++	return 0;
++}
++
++static void ath11k_wmi_pdev_nfcal_power_event(struct ath11k_base *ab,
++					      struct sk_buff *skb)
++{
++	struct wmi_tlv_nfcal_parse *p;
++	int i, ret;
++
++	p = kzalloc(sizeof(*p), GFP_ATOMIC);
++	if (!p)
++		return;
++
++	ret = ath11k_wmi_tlv_iter(ab, skb->data, skb->len,
++				  ath11k_wmi_tlv_nfcal_parse, p);
++	if (ret) {
++		ath11k_warn(ab, "failed to parse nfcal power event: %d\n", ret);
++		goto out;
++	}
++
++	if (!p->ev) {
++		ath11k_warn(ab, "nfcal power event without fixed param\n");
++		goto out;
++	}
++
++	ath11k_dbg(ab, ATH11K_DBG_WMI,
++		   "event nfcal power pdev %u lens dbr %u dbm %u freq %u\n",
++		   p->ev->pdev_id, p->ev->nfdbr_len, p->ev->nfdbm_len,
++		   p->ev->freqnum_len);
++
++	for (i = 0; i < p->nfdbr_n; i++)
++		ath11k_dbg(ab, ATH11K_DBG_WMI, "nfcal [%d] dbr %d dbm %d\n", i,
++			   p->nfdbr[i], i < p->nfdbm_n ? p->nfdbm[i] : 0);
++
++	/* store calibrated chain-0 NF per freq; dbr/dbm arrays are
++	 * interleaved per freq: [f0c0, f0c1, f1c0, f1c1, ...]
++	 */
++	rcu_read_lock();
++	{
++		struct ath11k *ar;
++		u8 cnt = 0;
++
++		ar = ath11k_mac_get_ar_by_pdev_id(ab, p->ev->pdev_id);
++		if (ar) {
++			for (i = 0; i < p->freq_n && cnt < 8; i++) {
++				if (!p->freq[i] || 2 * i >= p->nfdbm_n)
++					continue;
++				if (!p->nfdbm[2 * i])
++					continue;
++				ar->nfcal_freq[cnt] = p->freq[i];
++				ar->nfcal_dbm[cnt] = p->nfdbm[2 * i];
++				cnt++;
++			}
++			if (cnt && !ar->nfcal_cnt)
++				ath11k_info(ab,
++					    "calibrated noise floor %d dBm @ %u MHz (%u freqs)\n",
++					    ar->nfcal_dbm[0], ar->nfcal_freq[0],
++					    cnt);
++			if (cnt)
++				ar->nfcal_cnt = cnt;
++		}
++	}
++	rcu_read_unlock();
++
++out:
++	kfree(p);
++}
++
+ static void ath11k_fils_discovery_event(struct ath11k_base *ab,
+ 					struct sk_buff *skb)
+ {
+@@ -8843,6 +8995,9 @@
+ 	case WMI_PDEV_TEMPERATURE_EVENTID:
+ 		ath11k_wmi_pdev_temperature_event(ab, skb);
+ 		break;
++	case WMI_PDEV_NFCAL_POWER_ALL_CHANNELS_EVENTID:
++		ath11k_wmi_pdev_nfcal_power_event(ab, skb);
++		break;
+ 	case WMI_PDEV_DMA_RING_BUF_RELEASE_EVENTID:
+ 		ath11k_wmi_pdev_dma_ring_buf_release_event(ab, skb);
+ 		break;
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -9031,6 +9031,12 @@
+ 
+ 	mutex_lock(&ar->conf_mutex);
+ 
++	if (ar->state == ATH11K_STATE_ON &&
++	    time_after(jiffies, ar->nfcal_time + 10 * HZ)) {
++		ar->nfcal_time = jiffies;
++		ath11k_wmi_pdev_get_nfcal_power(ar);
++	}
++
+ 	sband = hw->wiphy->bands[NL80211_BAND_2GHZ];
+ 	if (sband && idx >= sband->n_channels) {
+ 		idx -= sband->n_channels;
+@@ -9059,6 +9065,26 @@
+ 
+ 	survey->channel = &sband->channels[idx];
+ 
++	/* the fw's runtime noise floor is on the same uncalibrated scale as
++	 * its rssi; prefer the calibrated per-channel NF (dBm) fetched via
++	 * GET_NFCAL_POWER when available
++	 */
++	if (ar->nfcal_cnt) {
++		u32 d, bestd = ~0U;
++		int i, best = 0;
++
++		for (i = 0; i < ar->nfcal_cnt; i++) {
++			d = abs((int)ar->nfcal_freq[i] -
++				(int)survey->channel->center_freq);
++			if (d < bestd) {
++				bestd = d;
++				best = i;
++			}
++		}
++		survey->noise = ar->nfcal_dbm[best];
++		survey->filled |= SURVEY_INFO_NOISE_DBM;
++	}
++
+ 	if (ar->rx_channel == survey->channel)
+ 		survey->filled |= SURVEY_INFO_IN_USE;
+ 
+@@ -9182,6 +9208,12 @@
+ 	bool db2dbm = test_bit(WMI_TLV_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT,
+ 			       ar->ab->wmi_ab.svc_map);
+ 
++	if (ar->state == ATH11K_STATE_ON &&
++	    time_after(jiffies, ar->nfcal_time + 10 * HZ)) {
++		ar->nfcal_time = jiffies;
++		ath11k_wmi_pdev_get_nfcal_power(ar);
++	}
++
+ 	sinfo->rx_duration = arsta->rx_duration;
+ 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_DURATION);
+ 
+@@ -9228,14 +9260,16 @@
+ 		   db2dbm, arsta->rssi_comb, arsta->rssi_beacon);
+ 
+ 	if (signal) {
+-		sinfo->signal = db2dbm ? signal : signal + ATH11K_DEFAULT_NOISE_FLOOR;
++		sinfo->signal = db2dbm ? signal : signal + ATH11K_DEFAULT_NOISE_FLOOR +
++					ath11k_hw_rssi_offset(ar->ab);
+ 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
+ 	}
+ 
+ 	sinfo->signal_avg = ewma_avg_rssi_read(&arsta->avg_rssi);
+ 
+ 	if (!db2dbm)
+-		sinfo->signal_avg += ATH11K_DEFAULT_NOISE_FLOOR;
++		sinfo->signal_avg += ATH11K_DEFAULT_NOISE_FLOOR +
++				     ath11k_hw_rssi_offset(ar->ab);
+ 
+ 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL_AVG);
+ }
+--- a/drivers/net/wireless/ath/ath11k/dp_tx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_tx.c
+@@ -358,7 +358,8 @@
+ 
+ 			if (!test_bit(WMI_TLV_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT,
+ 				      ab->wmi_ab.svc_map))
+-				info->status.ack_signal += ATH11K_DEFAULT_NOISE_FLOOR;
++				info->status.ack_signal += ATH11K_DEFAULT_NOISE_FLOOR +
++						   ath11k_hw_rssi_offset(ab);
+ 
+ 			info->status.flags |=
+ 				IEEE80211_TX_STATUS_ACK_SIGNAL_VALID;
+@@ -593,7 +594,8 @@
+ 
+ 		if (!test_bit(WMI_TLV_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT,
+ 			      ab->wmi_ab.svc_map))
+-			info->status.ack_signal += ATH11K_DEFAULT_NOISE_FLOOR;
++			info->status.ack_signal += ATH11K_DEFAULT_NOISE_FLOOR +
++						   ath11k_hw_rssi_offset(ab);
+ 
+ 		info->status.flags |= IEEE80211_TX_STATUS_ACK_SIGNAL_VALID;
+ 	}
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c
+@@ -5042,7 +5042,8 @@
+ 	u8 *ptr = NULL;
+ 
+ 	rxs->flag |= RX_FLAG_MACTIME_START;
+-	rxs->signal = ppduinfo->rssi_comb + ATH11K_DEFAULT_NOISE_FLOOR;
++	rxs->signal = ppduinfo->rssi_comb + ATH11K_DEFAULT_NOISE_FLOOR +
++		      ath11k_hw_rssi_offset(ar->ab);
+ 
+ 	if (ppduinfo->nss)
+ 		rxs->nss = ppduinfo->nss;
