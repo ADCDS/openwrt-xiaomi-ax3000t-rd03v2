@@ -140,6 +140,59 @@ the flags come back armed, and the offload re-engages each boot.
   (`config defaults` → `flow_offloading`) both hook conntrack and can pre-empt
   each other. If NSS isn't accelerating flows under load, try disabling software
   flow-offload so ECM/NSS owns the fast path.
+
+## Troubleshooting
+
+**The entire LAN (and WAN) is dead — every port logs `failed to open conduit
+eth1`/`eth0`, and `ip link set ethX up` returns `Resource temporarily
+unavailable` (EAGAIN), while dmesg still says `NSS core 0 booted
+successfully`.** That is the signature of a **firmware/driver version
+mismatch**, not a switch or DSA problem. `CONFIG_NSS_FIRMWARE_VERSION`
+selects *both* the `qca-nss-drv` source tree *and* the firmware blob; the
+nss feed branch (`NSS-12.5-K6.x`) targets the 12.5 ABI, but a bare
+`make defconfig` resolves the choice to 11.4 (`build.sh` pins it since
+36a41ce). With mismatched versions the core boots but never answers phys_if
+messages, so every conduit open EAGAINs — silently, with zero drop counters.
+Check both sides:
+
+```
+dmesg | grep "NSS FW Version"          # what the core is running
+grep qca-nss-drv /etc/*_manifest* 2>/dev/null   # or the image .manifest:
+#   kmod-qca-nss-drv - <kernel>.12.5.2024...  = 12.5 driver source (good)
+#   kmod-qca-nss-drv - <kernel>.11.4.0.5.2021... = 11.4 (mismatched)
+```
+
+**Never mix the blob and the driver** (e.g. dropping a 12.5
+`qca-nss0-retail.bin` onto an 11.4-driver image): the mismatch *half*-works —
+conduits open and LAN-to-LAN hardware forwarding runs — but the firmware
+silently eats every CPU-bound TX frame, so the router itself becomes
+unreachable over ethernet while everything else looks healthy. It is a
+vicious red herring; match the pair.
+
+**Backing the offload out** (always-working slowpath fallback):
+
+```
+rm /etc/modules.d/32-qca-nss-drv /etc/modules.d/33-qca-nss-ecm \
+   /etc/modules.d/51-qca-nss-drv-pppoe   # keep 31-qca-nss-dp
+reboot
+```
+
+Removing only `33-qca-nss-ecm` is *not* enough: `qca-nss-drv` alone flips
+`nss-dp` onto the NSS data plane, and under a version mismatch that kills the
+LAN with no ecm involved. And **never `rmmod qca-nss-drv` on a live system** —
+it resets the Q6 remoteproc and crashes the box; remove the autoload files and
+reboot instead.
+
+**The initramfs image runs the full NSS stack too.** If the RAM-booted
+initramfs has no LAN, suspect the version mismatch above first — it is not an
+initramfs quirk.
+
+**Standalone wan port dead after a clean boot** (no CPU traffic in or out of
+the `wan` interface, LAN fine, slowpath and NSS alike): known driver-ordering
+bug — DSA programs the tag_8021q VLANs against the default conduit before
+netifd moves `wan` to `eth0`. The overlay ships a hotplug workaround that
+cycles the port through a bridge join/leave once per boot; see the tracking
+issue for the proper `port_change_conduit` fix.
 - **Recovery.** Nothing here changes the flash-recovery story — the stock TFTP
   recovery (see the main README) always brings the box back.
 

@@ -152,6 +152,18 @@ pins the boot-success flags). Don't re-flash over it.
 
 **If you hit a `UBI init error 22` boot *loop*** (the error on *every* boot — in-place/interrupted flash): it is recoverable, not a hard brick. Repeat steps 3–4 (RAM-boot the initramfs via TFTP, then `sysupgrade -n`); the initramfs path `ubiformat`s and self-heals the corrupt UBI. Worst case, redo the stock TFTP recovery (step 2) and start over.
 
+### Quick troubleshooting
+
+| Symptom | Cause → fix |
+|---|---|
+| Countdown never pauses, no `IPQ5018#` no matter what you press | `boot_wait=off` (stock booted to userspace since the last recovery) → redo the TFTP recovery (step 2), then `saveenv` on the *very next* boot (step 3) |
+| `tftpboot` crawls, endless `#` marks | Normal: U-Boot TFTP is ~100 KB/s → the ~14 MB initramfs takes 2–3 min |
+| **One** `UBI init error 22` on the first boot after flashing | Benign: A/B loader retries and attaches → let it boot |
+| `UBI init error 22` on **every** boot | In-place/torn flash → RAM-boot initramfs + `sysupgrade -n` (steps 3–4) |
+| NSS build: every port `failed to open conduit`, LAN+WAN dead | NSS fw/driver version mismatch → see [`docs/nss-offload.md`](docs/nss-offload.md) Troubleshooting |
+
+For repeated flashing, [`tools/uboot-catch.sh`](tools/uboot-catch.sh) does step 3's catch + TFTP + boot hands-free — a serial-triggered `reboot` is enough; no reset button, no typing into the 5-second window.
+
 ### 5. First boot
 - LAN is `192.168.1.1`. Ports `lan2/lan3/lan4` bridge into `br-lan`; the `wan` port is the AN8855's WAN.
 - **Set a root password** (`passwd`) and configure WiFi (LuCI or `uci`). By default the WiFi vifs are created **disabled** — enable them with `uci set wireless.default_radio{0,1}.disabled=0; uci commit wireless; wifi`.
@@ -166,14 +178,25 @@ Repeat the **TFTP recovery** (step 2) with the stock `recovery.bin` — it refla
 ```bash
 git clone <this repo> && cd openwrt-xiaomi-ax3000t-rd03v2
 ./build.sh          # clones OpenWrt @ 25ee126, applies files/, builds
-NSS=1 ./build.sh    # ...plus experimental QCA NSS hardware offload (~900 Mbps)
+NSS=1 ./build.sh    # ...plus experimental QCA NSS hardware offload (measured: 895 Mbit/s NAT at ~0% CPU)
 ```
 Or manually: check out OpenWrt at `25ee126`, copy `files/*` over it, `./scripts/feeds update -a && ./scripts/feeds install -a`, seed `.config` with the device + `CONFIG_TARGET_ROOTFS_INITRAMFS=y`, then `make defconfig && make -j$(nproc)`. Images land in `bin/targets/qualcommax/ipq50xx/`.
 
 **NSS hardware offload** (`NSS=1`, opt-in) boots the IPQ5018's NSS network
-processor to offload NAT routing at line rate, instead of the CPU-bound
-~380 Mbps of software offload. It's experimental and layers heavy QCA feeds/
-patches on top of mainline — see [`docs/nss-offload.md`](docs/nss-offload.md).
+processor to offload NAT routing at line rate. Measured on this build
+(LAN→WAN NAT, single TCP flow, gigabit wire):
+
+| Path | NAT throughput | Router CPU under load |
+|---|---|---|
+| CPU slowpath | 619 Mbit/s | 95% sirq (saturated) |
+| **NSS offload** | **895 Mbit/s** | **0% sirq, ~95% idle** |
+
+(LAN⇄LAN traffic between switch ports is forwarded by the AN8855 fabric at
+line rate — ~890 Mbit/s measured — with or without NSS; the offload matters
+for *routed* traffic. Verify offload is engaged by watching `top` during
+load: near-idle sirq = NSS carrying the flow.) It's experimental and layers
+heavy QCA feeds/patches on top of mainline — see
+[`docs/nss-offload.md`](docs/nss-offload.md).
 
 See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 
