@@ -1,3 +1,4 @@
 images/*.bin
 images/*.itb
 images/*.ubi
+/openwrt/
