@@ -1,0 +1,103 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] nss: an8855: make user ports flood targets by default (layered after 999-2757)
+
+Fixes the dead standalone port of issue #5 at its real root.
+
+an8855_setup() cleared every user port out of the BCF/UNUF/UNMF/UNIPMF
+flood masks; only a bridge join (BR_FLOOD & co via .port_bridge_flags)
+ever set them. A standalone port therefore was never a flood target -
+and since standalone ports run with hardware learning disabled (SA_DIS)
+and assisted learning only produces CPU-side entries, every
+CPU-to-port frame on the tag_8021q build is flood-class: ARP requests
+(broadcast, BCF) and replies to unlearned peers (unknown unicast,
+UNUF). Result: the egress direction of a standalone port is completely
+dead from a clean boot - "ARP from the wire is received and replied to
+but the replies never reach the wire" - while ingress toward the CPU
+keeps working (the CPU bits are set). The MTK-tag build never noticed:
+its CPU TX uses the special tag's forced-port path, which bypasses the
+flood/FDB lookup entirely.
+
+This is why the issue #5 heal (bridge join/leave cycle) "worked": the
+join applied BR_FLOOD and set the port's flood bits, and nothing on
+leave cleared them again. The tag_8021q VLAN reprogramming that the
+heal also performed was coincidental - register dumps show the VLAN
+table, port matrix, PVID/PVC and host FDB are all correct before the
+heal. The conduit move was a red herring for the same reason: any
+standalone user port fails identically on either CPU port. (A second,
+lesser artifact discovered on the way: dsa_port_change_conduit() makes
+the port inherit the new conduit's MAC, so peers with the old MAC
+cached black-hole their replies until they re-ARP - an upstream DSA
+behavior, not a driver bug.)
+
+Default the user-port flood bits ON instead. This matches the DSA core
+contract - dsa_port_clear_brport_flags() restores flood ON when a port
+leaves a bridge, and on join the BR_* flags are applied right after, so
+admin-controlled flood on bridge ports keeps working. The later UNMF
+write for the CPU ports becomes set-bits so it no longer clobbers the
+user-port bits.
+
+Empirical proof (clean boot, standalone lan4 on conduit eth0, peer
+behind the port): before - port dead, UNUF/BCF/UNMF/UNIPMF all show the
+port's bit clear, switch MIB shows no egress; after a bridge join/leave
+- the same registers show the bit set and traffic flows with zero other
+register changes. With this patch the flood bits are correct from
+setup and the port works from the first boot, no heal needed. The
+99-heal-wan-conduit hotplug workaround is removed with this fix.
+
+Link: https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/5
+--- a/drivers/net/dsa/an8855.c
++++ b/drivers/net/dsa/an8855.c
+@@ -2086,22 +2086,33 @@
+ 		if (ret)
+ 			return ret;
+ 
+-		/* Disable Broadcast Forward on user ports */
+-		ret = regmap_clear_bits(priv->regmap, AN8855_BCF, BIT(dp->index));
++		/* tag_8021q: user ports must be flood TARGETS by default. A
++		 * standalone port has hardware learning disabled (SA_DIS) and
++		 * assisted learning only covers CPU-side entries, so every
++		 * CPU-to-port frame - ARP requests and replies to unlearned
++		 * peers first of all - is flood-class; with the port excluded
++		 * from BCF/UNUF/UNMF the egress direction is completely dead
++		 * (issue #5). This also matches the DSA core contract: on
++		 * bridge leave dsa_port_clear_brport_flags() restores flood
++		 * ON, and on bridge join the BR_* flags are applied right
++		 * after, so an admin-disabled flood on a bridge port still
++		 * takes effect via .port_bridge_flags. The MTK-tag build
++		 * never noticed because its CPU TX uses the special tag's
++		 * forced-port path, which bypasses the flood/FDB lookup.
++		 */
++		ret = regmap_set_bits(priv->regmap, AN8855_BCF, BIT(dp->index));
+ 		if (ret)
+ 			return ret;
+ 
+-		/* Disable Unknown Unicast Forward on user ports */
+-		ret = regmap_clear_bits(priv->regmap, AN8855_UNUF, BIT(dp->index));
++		ret = regmap_set_bits(priv->regmap, AN8855_UNUF, BIT(dp->index));
+ 		if (ret)
+ 			return ret;
+ 
+-		/* Disable Unknown Multicast Forward on user ports */
+-		ret = regmap_clear_bits(priv->regmap, AN8855_UNMF, BIT(dp->index));
++		ret = regmap_set_bits(priv->regmap, AN8855_UNMF, BIT(dp->index));
+ 		if (ret)
+ 			return ret;
+ 
+-		ret = regmap_clear_bits(priv->regmap, AN8855_UNIPMF, BIT(dp->index));
++		ret = regmap_set_bits(priv->regmap, AN8855_UNIPMF, BIT(dp->index));
+ 		if (ret)
+ 			return ret;
+ 
+@@ -2125,8 +2136,10 @@
+ 	if (ret)
+ 		return ret;
+ 
+-	/* Unknown multicast frame forwarding to the cpu port(s) */
+-	ret = regmap_write(priv->regmap, AN8855_UNMF, dsa_cpu_ports(ds));
++	/* Unknown multicast frame forwarding to the cpu port(s). Set-bits,
++	 * not a full write: the user-port flood bits set above must survive.
++	 */
++	ret = regmap_set_bits(priv->regmap, AN8855_UNMF, dsa_cpu_ports(ds));
+ 	if (ret)
+ 		return ret;
+ 
