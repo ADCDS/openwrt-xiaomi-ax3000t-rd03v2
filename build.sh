@@ -110,6 +110,12 @@ CONFIG_TARGET_qualcommax=y
 CONFIG_TARGET_qualcommax_ipq50xx=y
 CONFIG_TARGET_qualcommax_ipq50xx_DEVICE_xiaomi_mi-router-ax3000t-v2=y
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
+# Full hostapd, not wpad-basic: multi-AP households run 802.11k/v
+# (rrm_*/bss_transition) in the wireless config, and wpad-basic rejects
+# those options - hostapd then refuses the whole BSS and the radios
+# silently never come up.
+CONFIG_PACKAGE_wpad-mbedtls=y
+# CONFIG_PACKAGE_wpad-basic-mbedtls is not set
 EOF
 
 # NSS firmware MUST match the driver ABI. The nss feed branch (NSS-12.5-K6.x)
