@@ -12,7 +12,7 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 | Wired LAN data path | ✅ |
 | WiFi **2.4 GHz** (IPQ5018) | ✅ |
 | WiFi **5 GHz** (QCN6122) | ✅ |
-| Front status LED (blue/amber) | ✅ |
+| Front status LED (blue/amber, 0–255 soft-PWM fade + patterns) | ✅ |
 | Updates via `sysupgrade` (from the RAM-booted initramfs — see below) | ✅ |
 
 > Built against **OpenWrt `25ee126`** (Jul 2026 snapshot, kernel 6.12.94).
@@ -218,7 +218,7 @@ See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 
 ## Known limitations
 
-- **Front LED is driven as plain GPIO**, not PWM (blue on GPIO12, amber on GPIO13). Stock firmware fades it via the IPQ5018 PWM block (`pwm2`/`pwm3`), but kernel 6.12's `pinctrl-ipq5018` can't yet mux those functions onto GPIO 12/13 — so the LED works (status/failsafe/upgrade triggers) but is on/off only, no hardware fade. A pinctrl patch adding the `pwm` groups would restore PWM.
+- **Front LED fade is software-timed** (`pwm-gpio` hrtimer soft-PWM at 200 Hz feeding `pwm-leds` — full 0–255 brightness and `pattern`/breathing triggers, zero cost in steady on/off states). True hardware PWM on these pins is impossible: the IPQ5018 TLMM has no PWM function on GPIO 12/13 (mainline and downstream QSDK pinctrl agree — `pwm2`/`pwm3` only reach GPIO 44/45), so stock's fade was software too.
 - This is a snapshot build; treat as beta.
 
 ## Contributing / upstreaming

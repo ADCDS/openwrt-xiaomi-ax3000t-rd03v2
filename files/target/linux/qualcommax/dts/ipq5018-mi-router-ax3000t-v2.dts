@@ -50,15 +50,32 @@
 	};
 
 	/*
-	 * The stock firmware drives the dual-colour front LED via the
-	 * IPQ5018 PWM block (blue = channel 2 on GPIO12/"pwm2", amber =
-	 * channel 3 on GPIO13/"pwm3"). Kernel 6.12 pinctrl-ipq5018 cannot
-	 * mux pwm2/pwm3 onto GPIO 12/13 yet, so drive them as plain GPIOs.
+	 * Dual-colour front LED on GPIO 12 (blue) / GPIO 13 (amber). The
+	 * IPQ5018 TLMM has no PWM function on these pins - the hardware
+	 * pwm2/pwm3 channels only reach GPIO 44/45 (mainline and downstream
+	 * QSDK pinctrl agree) - so stock's fade effect is software-timed.
+	 * Model each colour as a pwm-gpio (hrtimer soft-PWM, 200 Hz) feeding
+	 * pwm-leds: same LED class devices and led-* aliases as gpio-leds,
+	 * plus real 0-255 brightness and pattern/breathing triggers. Constant
+	 * on/off states program the pin statically, so steady-state cost is
+	 * zero; timers only run while a fade is in progress.
 	 * GPIO46 carries the hardware-driven GE PHY link LED ("led0"
 	 * function) which only reflects the internal MAC0<->AN8855 link.
 	 */
+	pwm_led_blue: pwm-led-blue {
+		compatible = "pwm-gpio";
+		#pwm-cells = <3>;
+		gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
+	};
+
+	pwm_led_amber: pwm-led-amber {
+		compatible = "pwm-gpio";
+		#pwm-cells = <3>;
+		gpios = <&tlmm 13 GPIO_ACTIVE_HIGH>;
+	};
+
 	leds {
-		compatible = "gpio-leds";
+		compatible = "pwm-leds";
 
 		pinctrl-0 = <&leds_pins>;
 		pinctrl-names = "default";
@@ -66,13 +83,15 @@
 		led_status_blue: led-0 {
 			color = <LED_COLOR_ID_BLUE>;
 			function = LED_FUNCTION_STATUS;
-			gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
+			pwms = <&pwm_led_blue 0 5000000 0>;
+			max-brightness = <255>;
 		};
 
 		led_status_amber: led-1 {
 			color = <LED_COLOR_ID_AMBER>;
 			function = LED_FUNCTION_STATUS;
-			gpios = <&tlmm 13 GPIO_ACTIVE_HIGH>;
+			pwms = <&pwm_led_amber 0 5000000 0>;
+			max-brightness = <255>;
 		};
 	};
 
