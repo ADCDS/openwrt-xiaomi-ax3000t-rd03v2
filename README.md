@@ -168,6 +168,42 @@ For repeated flashing, [`tools/uboot-catch.sh`](tools/uboot-catch.sh) does step 
 - LAN is `192.168.1.1`. Ports `lan2/lan3/lan4` bridge into `br-lan`; the `wan` port is the AN8855's WAN.
 - **Set a root password** (`passwd`) and configure WiFi (LuCI or `uci`). By default the WiFi vifs are created **disabled** — enable them with `uci set wireless.default_radio{0,1}.disabled=0; uci commit wireless; wifi`.
 
+### Controlling the LEDs
+
+The front LED (blue + amber) has full **0–255 brightness and fade/breathing
+patterns**, via software PWM (`pwm-gpio` at 200 Hz — the IPQ5018 cannot
+hardware-PWM these pins, see Known limitations; steady on/off states cost
+nothing). Both colours are standard LED class devices:
+
+```sh
+# solid / off / dim
+echo none > /sys/class/leds/blue:status/trigger
+echo 255  > /sys/class/leds/blue:status/brightness   # full
+echo 40   > /sys/class/leds/blue:status/brightness   # dim
+# breathing: fade 0 -> 255 -> 0 every 3 s
+echo pattern > /sys/class/leds/blue:status/trigger
+echo "0 1500 255 1500" > /sys/class/leds/blue:status/pattern
+# blink amber on LAN activity
+echo netdev  > /sys/class/leds/amber:status/trigger
+echo br-lan  > /sys/class/leds/amber:status/device_name
+echo "tx rx" > /sys/class/leds/amber:status/mode
+```
+
+For a persistent policy use `uci` (`/etc/config/system`):
+
+```
+config led
+	option name 'lan-activity'
+	option sysfs 'amber:status'
+	option trigger 'netdev'
+	option dev 'br-lan'
+	list mode 'tx'
+	list mode 'rx'
+```
+
+Boot/failsafe/upgrade indications keep working as before (blue =
+boot/running, amber = failsafe/upgrade, via the `led-*` DTS aliases).
+
 ### Recovering / going back to stock
 Repeat the **TFTP recovery** (step 2) with the stock `recovery.bin` — it reflashes stock over everything.
 
