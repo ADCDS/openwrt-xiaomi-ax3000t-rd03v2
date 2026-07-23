@@ -142,7 +142,7 @@ Our `platform.sh` case wipes the UBI, writes kernel+rootfs, **and sets the U-Boo
 
 > ⚠️ **Run `sysupgrade` where it cannot be interrupted** — from the serial console, or a persistent SSH session on the RAM system. **Never wrap it in `timeout`** (or any droppable/killable wrapper): a NAND write torn mid-flight corrupts the kernel UBI and bricks the device the same way (`UBI init error 22`).
 
-**To update later:** repeat steps 3–4 — TFTP-boot the new `…-initramfs-uImage.itb` into RAM, then `sysupgrade` from it. Do **not** `sysupgrade` in place from the running system.
+**To update later:** repeat steps 3–4 — TFTP-boot the new `…-initramfs-uImage.itb` into RAM, then `sysupgrade` from it. Do **not** `sysupgrade` in place from the running system. No serial access at hand? The RAM-initramfs pivot can also be done **entirely over SSH** by writing the `…-initramfs-factory.ubi` into the (runtime-unattached) `ubi_kernel` partition and rebooting into it — see [`docs/no-uart-reflash.md`](docs/no-uart-reflash.md).
 
 **A single `UBI init error 22` on the first boot after a correct flash is
 expected and harmless.** The loader's first attach of the fresh UBI fails once,
@@ -208,7 +208,7 @@ See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 
 **Making the locked bootloader boot OpenWrt.** Xiaomi's U-Boot boots by an A/B "try/fail" flag scheme and loads the kernel from a specific UBI volume. A naive `sysupgrade` fails (`Can't open device for writing`) and even a successful write wouldn't boot (the bootloader keeps loading the stock kernel). The fix is the `platform.sh` case for our board: it sets `CI_KERN_UBIPART`/`CI_ROOT_UBIPART`, and writes `fw_setenv` boot-flags (`flag_try_sys{1,2}_failed=8`, `flag_boot_rootfs=0`, `uart_en=1`, `boot_wait=on`) that force the bootloader onto our slot — mirroring the proven `xiaomi_ax6000`/`redmi-ax5400` path.
 
-**The WiFi crash.** With correct board data the Q6 firmware still crashed: `phyrf_bdf.c … ANTENNACHAIN_AXIS_Z … zero`. The board data wasn't wrong — it was a **version mismatch**: OpenWrt ships ath11k firmware `WLAN.HK.2.7.0.1`, but the stock board-data (`bdwlan`) is built for `2.5.r4`. Downgrading the firmware to 2.5 fails too (too old for the 6.12 driver → `err_smem_ver`). The fix keeps the 2.7 firmware and uses **2.7-compatible board data**: for 2.4 GHz, the `board-id 255` entry from ath11k-firmware's own `IPQ5018/hw1.0/board-2.bin` (which is byte-identical to its `board-id 0x24` entry — i.e. the AX3000T's own board data, just in 2.7 format); for 5 GHz, a working QCN6122 device's 2.7 board data. Per-unit calibration still comes from the board's own `0:ART` partition at runtime.
+**The WiFi crash.** With correct board data the Q6 firmware still crashed: `phyrf_bdf.c … ANTENNACHAIN_AXIS_Z … zero`. The board data wasn't wrong — it was a **version mismatch**: OpenWrt ships ath11k firmware `WLAN.HK.2.7.0.1`, but the stock board-data (`bdwlan`) is built for `2.5.r4`. Downgrading the firmware to 2.5 fails too (too old for the 6.12 driver → `err_smem_ver`). The fix keeps the 2.7 firmware and uses **2.7-compatible board data**: for 2.4 GHz, the `board-id 255` entry from ath11k-firmware's own `IPQ5018/hw1.0/board-2.bin` (which is byte-identical to its `board-id 0x24` entry — i.e. the AX3000T's own board data, just in 2.7 format); for 5 GHz, a **native 2.7 QCN6122 board file built from this unit's own stock 2.5 `bdwlan`** lifted into the 2.7 layout (contributed in #6 — earlier releases shipped a re-keyed stand-in from another QCN6122 device). Per-unit calibration still comes from the board's own `0:ART` partition at runtime.
 
 **The "deaf receiver" that wasn't (issue #3, RSSI reporting).** Both radios appeared to *hear* clients ~30 dB too weakly (an in-room client showed −55/−61 dBm where stock read −23), which long looked like a receive-path calibration failure. On-air measurement against an independent receiver proved otherwise: demodulation is perfect (max MCS, zero retries, decodes beacons "below" its own claimed noise floor) — the `WLAN.HK.2.7.0.1` firmware simply **reports** rx signal on an uncalibrated dB scale (~31 dB low on 2.4 GHz, ~24 dB on 5 GHz) and an impossible noise floor (−110/−113 dBm). Stock's 2.5-era firmware reports correctly on the same silicon; no available 2.7-era board file changes it, and the stock board file can't be loaded by 2.7. The fix is host-side, carried as ath11k patch `952`: per-chip signal offsets at every dB→dBm reporting site, plus an implementation of the firmware's dormant `GET_NFCAL_POWER` WMI exchange, whose calibrated per-channel noise floor (−99 dBm on 2.4 GHz, ~−90 on 5 GHz here) replaces the raw survey noise value. After the patch, reported RSSI matches an independent receiver within a couple of dB on both bands, and matches what stock reports for the same client. Cold-boot calibration is unrelated: stock disables it on this board too (three separate gates in the stock scripts), so OpenWrt's `907` patch disabling it costs nothing.
 
@@ -218,13 +218,12 @@ See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 
 ## Known limitations
 
-- **5 GHz board data is a compatible stand-in** (from another QCN6122 device) re-keyed for our board, not the AX3000T's own 2.7 board data (which doesn't exist upstream). 5 GHz works; antenna/TX-power tuning may be imperfect. If you can produce a proper 2.7 QCN6122 BDF for this board, please contribute it.
 - **Front LED is driven as plain GPIO**, not PWM (blue on GPIO12, amber on GPIO13). Stock firmware fades it via the IPQ5018 PWM block (`pwm2`/`pwm3`), but kernel 6.12's `pinctrl-ipq5018` can't yet mux those functions onto GPIO 12/13 — so the LED works (status/failsafe/upgrade triggers) but is on/off only, no hardware fade. A pinctrl patch adding the `pwm` groups would restore PWM.
 - This is a snapshot build; treat as beta.
 
 ## Contributing / upstreaming
 
-PRs welcome — especially help getting this **upstream into OpenWrt** and improving the 5 GHz board data. The AN8855 driver is separately on its way to mainline via csharper2005 and the Airoha/MediaTek DSA work.
+PRs welcome — especially help getting this **upstream into OpenWrt**. The AN8855 driver is separately on its way to mainline via csharper2005 and the Airoha/MediaTek DSA work.
 
 ## License
 
