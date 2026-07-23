@@ -188,12 +188,16 @@ reboot instead.
 initramfs has no LAN, suspect the version mismatch above first — it is not an
 initramfs quirk.
 
-**Standalone wan port dead after a clean boot** (no CPU traffic in or out of
-the `wan` interface, LAN fine, slowpath and NSS alike): known driver-ordering
-bug — DSA programs the tag_8021q VLANs against the default conduit before
-netifd moves `wan` to `eth0`. The overlay ships a hotplug workaround that
-cycles the port through a bridge join/leave once per boot; see the tracking
-issue for the proper `port_change_conduit` fix.
+**Standalone wan port dead after a clean boot** — fixed (`999-2760`, issue #5).
+The real root cause was never the conduit or the tag_8021q VLANs: setup
+excluded user ports from the BCF/UNUF/UNMF flood masks, and only a bridge
+join ever set them — so a standalone port (learning disabled, everything
+CPU-bound flood-class under tag_8021q) had a completely dead egress
+direction. The old bridge join/leave "heal" worked by accidentally applying
+BR_FLOOD; the hotplug workaround has been removed. One residual upstream
+behavior to know about: a conduit change makes the port inherit the new
+conduit's MAC, so peers with the old MAC cached black-hole replies until
+their ARP entry refreshes.
 - **Recovery.** Nothing here changes the flash-recovery story — the stock TFTP
   recovery (see the main README) always brings the box back.
 
