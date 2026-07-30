@@ -60,3 +60,35 @@ named `kernel`, same layout the working system boots from.
   `ubi_kernel`, or power loss during step 4 after the prepare wipes both
   UBIs). Both leave the box UART-recoverable per `docs/`/README — same worst
   case as any flash, so run the writes detached and leave the power alone.
+
+## Dead switch after the pivot? Cold power-cycle before assuming a bad flash
+
+This whole procedure is a chain of **warm** reboots, and the AN8855 switch and
+the UBI32 NSS core do not always come out of one cleanly. The symptom is
+alarming and looks exactly like a bricked flash:
+
+- the box **boots fine** — it mounts the real NAND rootfs and comes up with its
+  installed config,
+- **WiFi works** and beacons at full signal (so you can see it is alive),
+- but **every switch port is dead**: no ping over any LAN port, ARP stays
+  `INCOMPLETE`, and the upstream router's bridge FDB shows **no** entry for the
+  box at all — it is silent at L2. PHY carrier may still read `1`, which makes
+  it look like a link-layer problem that it is not.
+
+That is the same failure mode `build.sh` warns about for a mismatched NSS
+firmware ("the NSS core boots successfully yet never answers phys_if messages …
+ALL switch ports (LAN and WAN) come up dead"), and it is reachable purely from
+the warm-reboot chain — no firmware mismatch required. Pivoting
+NSS kernel → non-NSS RAM initramfs → back to the NSS kernel is enough to
+trigger it, because the non-NSS kernel leaves those cores in a state the next
+kernel's soft reset does not recover.
+
+**Unplug the box for ~10 s and plug it back in.** A cold boot re-runs the
+hardware reset and everything comes back. Confirm with
+`dmesg | grep -o 'HWTRAP [0-9a-f]*'` — a real value (e.g. `00101070`) means the
+switch reset cleanly; `ffffffff` means it did not.
+
+Do **not** reach for UART on this symptom until you have power-cycled: the flash
+is fine, the rootfs is fine, and a reflash would fix nothing. If you have just
+restored a kernel volume and verified its md5 read-back, a dead switch is far
+more likely to be this than a bad write.

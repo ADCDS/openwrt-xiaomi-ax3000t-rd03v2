@@ -1,0 +1,19 @@
+# Confirm boot success to U-Boot's dual-boot failsafe so it never switches away
+# from this rootfs. The stock miwifi bootloader tracks per-system boot failures;
+# with no reset the counter eventually trips "boot failure on both systems" and
+# the box stops booting the image you installed. sysupgrade arms these flags once
+# at flash time (lib/upgrade/platform.sh), but nothing re-arms them afterwards —
+# so they have to be re-asserted on every boot, not just after an upgrade.
+# uboot-envtools generates fw_env.config for this board, so fw_setenv works.
+#
+# The NSS build ships its own rc.local (nss/overlay/...) which overwrites this
+# file and repeats the same block alongside the NSS runtime knobs — keep the two
+# in sync when changing either.
+if [ -e /etc/fw_env.config ]; then
+	fw_setenv flag_boot_success 1 2>/dev/null
+	fw_setenv flag_last_success 1 2>/dev/null
+	fw_setenv flag_try_sys1_failed 8 2>/dev/null
+	fw_setenv flag_try_sys2_failed 8 2>/dev/null
+fi
+
+exit 0
