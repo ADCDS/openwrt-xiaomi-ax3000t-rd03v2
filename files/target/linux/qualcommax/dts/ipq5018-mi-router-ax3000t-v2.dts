@@ -567,6 +567,14 @@
 			 * User ports still default to port@5 (eth1, 2.5G) via
 			 * .preferred_default_local_cpu_port; move the WAN with
 			 *   ip link set wan type dsa conduit eth0
+			 *
+			 * That move only works on the NSS build. The default
+			 * driver implements neither .port_change_conduit (so
+			 * DSA answers -EOPNOTSUPP) nor the per-CPU-port setup
+			 * the NSS driver does via dsa_switch_for_each_cpu_port
+			 * — it programs the special tag, flood bits and port
+			 * matrix for port@5 only, so port@4 is not a usable
+			 * conduit there even if DSA allowed the switch.
 			 */
 			port@4 {
 				reg = <4>;
