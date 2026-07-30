@@ -1209,6 +1209,21 @@ static u32 en8855_get_phy_flags(struct dsa_switch *ds, int port)
 	return AN8855_PHY_FLAGS_EN_CALIBRATION;
 }
 
+static struct dsa_port *
+an8855_preferred_default_local_cpu_port(struct dsa_switch *ds)
+{
+	/* Default all user ports to the SerDes CPU port 5. On boards with a
+	 * second CPU port on port 4 (e.g. AX3000T v2: port 5 -> 2.5G uplink,
+	 * port 4 -> 1G uplink), port 4 is only used by user ports explicitly
+	 * moved to the other conduit via
+	 * 'ip link set <port> type dsa conduit <ethN>'.
+	 */
+	if (dsa_is_cpu_port(ds, AN8855_CPU_PORT))
+		return dsa_to_port(ds, AN8855_CPU_PORT);
+
+	return NULL;
+}
+
 static enum dsa_tag_protocol
 an8855_get_tag_protocol(struct dsa_switch *ds, int port,
 			enum dsa_tag_protocol mp)
@@ -2184,6 +2199,7 @@ static const struct dsa_switch_ops an8855_switch_ops = {
 	.port_bridge_leave = an8855_port_bridge_leave,
 	.port_fast_age = an8855_port_fast_age,
 	.port_stp_state_set = an8855_port_stp_state_set,
+	.preferred_default_local_cpu_port = an8855_preferred_default_local_cpu_port,
 	.port_pre_bridge_flags = an8855_port_pre_bridge_flags,
 	.port_bridge_flags = an8855_port_bridge_flags,
 	.port_vlan_filtering = an8855_port_vlan_filtering,
