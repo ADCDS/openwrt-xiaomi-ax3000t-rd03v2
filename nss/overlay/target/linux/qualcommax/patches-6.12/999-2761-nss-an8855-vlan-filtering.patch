@@ -1,0 +1,487 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] nss: an8855: support bridge VLAN filtering under tag_8021q (layered after 999-2757)
+
+Enabling vlan_filtering on the NSS build silently killed the DSA host
+path and kept it dead until reboot. an8855_port_vlan_filtering() is the
+stock mt7530-derived implementation with no tag_8021q awareness, and on
+enable it reprograms the *upstream* port:
+
+	an8855_port_set_vlan_mode(priv, dsa_upstream_port(ds, port),
+				  AN8855_PORT_FALLBACK_MODE,
+				  AN8855_VLAN_EG_CONSISTENT, ...)
+
+EG_CONSISTENT means "untagged in, untagged out", which overrides the
+per-VID egress-tag field an8855_vlan_add() sets for CPU ports and is the
+exact opposite of what an8855_setup() installs (EG_DISABLED, so the VLAN
+table decides). The conduit then receives frames carrying no VLAN header,
+the vsc73xx-8021q tagger has no VID to decode, and RX dies for every user
+port sharing that CPU port - bridged or not. TX survives, so the box
+keeps being learned upstream while being unreachable. The disable path
+wrote EG_CONSISTENT too and never restored the tag_8021q programming,
+which is why `uci revert` did not recover the box, only a reboot did.
+
+Measured on an RD03v2 AP (tagger vsc73xx-8021q, conduit port 5) via the
+an8855_dsa netlink interface, enabling vlan_filtering on br-lan changed
+exactly one field on the whole switch:
+
+	PVC_P(5) 0x91000000 -> 0x91000100   (PVC_EG_TAG 0 -> 1)
+	ping 192.168.1.1: 2/2 -> 0/2
+
+and writing PVC_P(5) back to 0x91000000 restored the host path live,
+with no reboot: 2/2, br-lan.1 up with its address, NSS still loaded.
+
+So follow the mainline model for a driver that commits the tag_8021q
+VLAN as a PVID (net/dsa/tag_8021q.c):
+
+ - Never touch CPU-port PVC_EG_TAG outside an8855_setup(). The CPU port
+   stays a tagged member of every bridge VLAN, which an8855_vlan_add()
+   already arranges, and the VLAN table keeps deciding egress tagging.
+
+ - Add per-port shadow PVIDs (pvid_tag_8021q, pvid_bridge) and an
+   an8855_port_commit_vlan() that programs whichever the port's current
+   VLAN-awareness selects, like sja1105_commit_pvid() and
+   vsc73xx_vlan_commit_pvid(). .tag_8021q_vlan_add/_del and
+   .port_vlan_add/_del now only update their own shadow and commit, so
+   the two writers stop clobbering the single PVID register pair and
+   leaving a VLAN-aware bridge restores the tag_8021q PVID without a
+   reboot. .port_vlan_filtering becomes just that commit.
+
+   vlan_filtering is passed to the commit explicitly rather than read
+   back: DSA assigns dp->vlan_filtering only after .port_vlan_filtering
+   returns (dsa_port_vlan_filtering(), net/dsa/port.c), so the port still
+   reports the old state during the callback.
+
+ - Reject bridge VLANs in 3072-4095 from .port_vlan_add, as
+   sja1105_vlan_add() and vsc73xx_port_vlan_add() do; otherwise a user
+   VLAN can rewrite the entries tag_8021q identifies source ports with.
+
+ - Fix the inverted accept-frame test carried over from the mt7530
+   original: it read "PVID set -> accept tagged only", the opposite of
+   its own comment and of mt7530.c, so a trunk-only port with no PVID
+   got ACC_ALL and classified untagged ingress into VID 0.
+
+Source-port precision is conceded under a VLAN-aware bridge - frames
+arrive with the bridge VID and dsa_find_designated_bridge_port_by_vid()
+resolves them - which is what net/dsa/tag_8021q.c documents for this
+class of driver and what the vsc73xx-8021q tagger already expects
+(vsc73xx_xmit() returns the skb untouched when br_vlan_enabled()).
+
+Layered after 999-2757 (add an8855 v2p0p1 + netlink) for the same reason
+as 999-2758 and 999-2759: that patch rewrites hunks inside
+an8855_port_vlan_filtering() and an8855_port_vlan_add() on top of the
+files overlay, so editing the overlay's copy makes it fail to apply.
+NSS-only; the base MTK-tag build is unaffected, since its special tag
+carries the source port independently of the VLAN table.
+
+The reserved-range rejection logs as well as filling in the extack. The
+extack only reaches whoever issued the netlink request, so with such a VID
+in /etc/config/network the only visible symptom is netifd retrying the
+bridge join and eventually leaving every user port out of the bridge, with
+nothing in dmesg explaining why.
+
+Link: https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/11
+
+--- a/drivers/net/dsa/an8855.c
++++ b/drivers/net/dsa/an8855.c
+@@ -13,6 +13,7 @@
+ #include <linux/if_bridge.h>
+ #include <linux/iopoll.h>
+ #include <linux/netdevice.h>
++#include <linux/netlink.h>
+ #include <linux/of_net.h>
+ #include <linux/of_platform.h>
+ #include <linux/phylink.h>
+@@ -833,104 +834,103 @@
+ 				  FIELD_PREP(AN8855_G0_PORT_VID, pvid));
+ }
+ 
+-static int an8855_port_vlan_filtering(struct dsa_switch *ds, int port,
+-				      bool vlan_filtering,
+-				      struct netlink_ext_ack *extack)
++/*
++ * Commit a user port's VLAN classification from the software shadow state.
++ *
++ * AN8855_PPBV1_P/AN8855_PVID_P hold one PVID per port, but two subsystems
++ * want to own it. tag_8021q needs its standalone (or bridge) VID there, so
++ * that untagged ingress is classified into the VID that identifies the source
++ * port to the conduit tagger; a VLAN-aware bridge needs the user's own PVID.
++ * They cannot coexist, so - like sja1105_commit_pvid() and
++ * vsc73xx_vlan_commit_pvid() - keep both in software and let the port's
++ * VLAN-awareness arbitrate. Every writer updates its shadow and commits here;
++ * nothing pokes the PVID registers directly.
++ *
++ * vlan_filtering is passed in rather than read back from
++ * dsa_port_is_vlan_filtering(), because DSA only assigns dp->vlan_filtering
++ * *after* .port_vlan_filtering returns (dsa_port_vlan_filtering(),
++ * net/dsa/port.c) - during that callback the port still reports the old state.
++ *
++ * Under a VLAN-aware bridge source-port precision is conceded, exactly as
++ * net/dsa/tag_8021q.c describes for drivers that commit the tag_8021q VLAN as
++ * a PVID: frames reach software carrying the bridge VID rather than a
++ * tag_8021q VID, and dsa_find_designated_bridge_port_by_vid() resolves them
++ * imprecisely. That is the documented tradeoff, not a regression.
++ */
++static int an8855_port_commit_vlan(struct dsa_switch *ds, int port,
++				   bool vlan_filtering)
+ {
++	struct dsa_port *dp = dsa_to_port(ds, port);
+ 	struct an8855_priv *priv = ds->priv;
+-	u32 val;
++	enum an8855_port_mode port_mode;
++	u16 pvid;
+ 	int ret;
+ 
+-	/* The port is being kept as VLAN-unaware port when bridge is
+-	 * set up with vlan_filtering not being set, Otherwise, the
+-	 * port and the corresponding CPU port is required the setup
+-	 * for becoming a VLAN-aware port.
++	/* CPU ports are owned by an8855_setup() alone - see the comment in
++	 * an8855_port_vlan_filtering().
+ 	 */
+-	if (vlan_filtering) {
+-		u32 acc_frm;
+-		/* CPU port is set to fallback mode to let untagged
+-		 * frames pass through.
+-		 */
+-		ret = an8855_port_set_vlan_mode(priv, dsa_upstream_port(ds, port),
+-						AN8855_PORT_FALLBACK_MODE,
+-						AN8855_VLAN_EG_CONSISTENT,
+-						AN8855_VLAN_USER,
+-						AN8855_VLAN_ACC_ALL);
+-		if (ret)
+-			return ret;
+-
+-		ret = regmap_read(priv->regmap, AN8855_PVID_P(port), &val);
+-		if (ret)
+-			return ret;
+-
+-		/* Only accept tagged frames if PVID is not set */
+-		if (FIELD_GET(AN8855_G0_PORT_VID, val) != AN8855_PORT_VID_DEFAULT)
+-			acc_frm = AN8855_VLAN_ACC_TAGGED;
+-		else
+-			acc_frm = AN8855_VLAN_ACC_ALL;
++	if (!dsa_is_user_port(ds, port))
++		return 0;
+ 
+-		/* Trapped into security mode allows packet forwarding through VLAN
+-		 * table lookup.
+-		 * Set the port as a user port which is to be able to recognize VID
+-		 * from incoming packets before fetching entry within the VLAN table.
++	if (vlan_filtering) {
++		/* Security mode: the VLAN table decides forwarding, and
++		 * ingress membership violations are dropped.
+ 		 */
+-		ret = an8855_port_set_vlan_mode(priv, port,
+-						AN8855_PORT_SECURITY_MODE,
+-						AN8855_VLAN_EG_DISABLED,
+-						AN8855_VLAN_USER,
+-						acc_frm);
+-		if (ret)
+-			return ret;
++		pvid = priv->pvid_bridge[port];
++		port_mode = AN8855_PORT_SECURITY_MODE;
+ 	} else {
+-		bool disable_cpu_vlan = true;
+-		struct dsa_port *dp;
+-		u32 port_mode;
+-
+-		/* This is called after .port_bridge_leave when leaving a VLAN-aware
+-		 * bridge. Don't set standalone ports to fallback mode.
++		/* tag_8021q layout. A bridged port needs fallback mode so
++		 * frames whose VID is not in the VLAN table still forward by
++		 * the port matrix; a standalone port only ever sees its own
++		 * VID, so it can stay in security mode.
+ 		 */
+-		if (dsa_port_bridge_dev_get(dsa_to_port(ds, port)))
+-			port_mode = AN8855_PORT_FALLBACK_MODE;
+-		else
+-			port_mode = AN8855_PORT_MATRIX_MODE;
+-
+-		/* When a port is removed from the bridge, the port would be set up
+-		 * back to the default as is at initial boot which is a VLAN-unaware
+-		 * port.
+-		 */
+-		ret = an8855_port_set_vlan_mode(priv, port, port_mode,
+-						AN8855_VLAN_EG_CONSISTENT,
+-						AN8855_VLAN_TRANSPARENT,
+-						AN8855_VLAN_ACC_ALL);
+-		if (ret)
+-			return ret;
+-
+-		/* Restore default PVID */
+-	ret = an8855_port_set_pvid(priv, port, AN8855_PORT_VID_DEFAULT);
+-		if (ret)
+-			return ret;
++		pvid = priv->pvid_tag_8021q[port];
++		port_mode = dsa_port_bridge_dev_get(dp) ?
++			    AN8855_PORT_FALLBACK_MODE :
++			    AN8855_PORT_SECURITY_MODE;
++	}
+ 
+-		dsa_switch_for_each_user_port(dp, ds) {
+-			if (dsa_port_is_vlan_filtering(dp)) {
+-				disable_cpu_vlan = false;
+-				break;
+-			}
+-		}
++	/* Only accept tagged frames when the port has no PVID: an untagged
++	 * frame arriving on a trunk-only port has nothing to classify it into.
++	 * The mt7530-derived original had this test inverted against both its
++	 * own comment and mt7530.c, so it dropped untagged ingress on exactly
++	 * the ports that do have a PVID.
++	 */
++	ret = an8855_port_set_vlan_mode(priv, port, port_mode,
++					AN8855_VLAN_EG_DISABLED,
++					AN8855_VLAN_USER,
++					pvid ? AN8855_VLAN_ACC_ALL :
++					       AN8855_VLAN_ACC_TAGGED);
++	if (ret)
++		return ret;
+ 
+-		if (disable_cpu_vlan) {
+-			dsa_switch_for_each_cpu_port(dp, ds) {
+-				ret = an8855_port_set_vlan_mode(priv, dp->index,
+-								AN8855_PORT_MATRIX_MODE,
+-								AN8855_VLAN_EG_CONSISTENT,
+-								AN8855_VLAN_USER,
+-								AN8855_VLAN_ACC_ALL);
+-				if (ret)
+-					return ret;
+-			}
+-		}
+-	}
++	return an8855_port_set_pvid(priv, port, pvid);
++}
+ 
+-	return 0;
++static int an8855_port_vlan_filtering(struct dsa_switch *ds, int port,
++				      bool vlan_filtering,
++				      struct netlink_ext_ack *extack)
++{
++	/*
++	 * Never reprogram the CPU port here. an8855_setup() leaves every CPU
++	 * port at PVC_EG_TAG = EG_DISABLED so that the VLAN table's per-VID
++	 * egress-tag field decides, and an8855_vlan_add() makes CPU ports
++	 * tagged members of every VID.
++	 *
++	 * The mt7530-derived original instead forced EG_CONSISTENT on the
++	 * upstream port when enabling - "untagged in, untagged out". The
++	 * conduit then receives frames with no VLAN header at all, the
++	 * vsc73xx-8021q tagger has no VID to decode, and the host RX path dies
++	 * for every user port sharing that CPU port, bridged or not. It is
++	 * silent: the frame is dropped before the tagger's "Couldn't decode
++	 * source port" warning can fire. Recovery needed a reboot because the
++	 * disable path wrote EG_CONSISTENT as well and never restored the
++	 * tag_8021q programming.
++	 *
++	 * What remains is a re-commit of shadow state, the same shape as
++	 * vsc73xx_port_vlan_filtering().
++	 */
++	return an8855_port_commit_vlan(ds, port, vlan_filtering);
+ }
+ 
+ static int an8855_port_vlan_add(struct dsa_switch *ds, int port,
+@@ -939,58 +939,51 @@
+ {
+ 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
+ 	bool pvid = vlan->flags & BRIDGE_VLAN_INFO_PVID;
++	struct dsa_port *dp = dsa_to_port(ds, port);
+ 	struct an8855_priv *priv = ds->priv;
+-	u32 val;
+ 	int ret;
+ 
++	/* Deny alterations to the VLAN-table entries tag_8021q owns, the same
++	 * guard sja1105 and vsc73xx carry. Without it a bridge VLAN in this
++	 * range silently rewrites the membership tag_8021q relies on to
++	 * identify source ports.
++	 *
++	 * Log as well as filling in the extack: the extack only travels back to
++	 * whoever issued the netlink request, so with a VID from this range in
++	 * /etc/config/network the sole visible symptom is netifd retrying the
++	 * bridge join and eventually leaving every user port out of the bridge -
++	 * with nothing in dmesg to explain why.
++	 */
++	if (vid_is_dsa_8021q(vlan->vid)) {
++		NL_SET_ERR_MSG_MOD(extack,
++				   "Range 3072-4095 reserved for dsa_8021q operation");
++		dev_err(priv->dev,
++			"port %d: refusing bridge VLAN %u: range 3072-4095 is reserved for dsa_8021q\n",
++			port, vlan->vid);
++		return -EBUSY;
++	}
++
+ 	mutex_lock(&priv->reg_mutex);
+ 	ret = an8855_vlan_add(priv, port, vlan->vid, untagged);
+ 	mutex_unlock(&priv->reg_mutex);
+ 	if (ret)
+ 		return ret;
+ 
+-	if (pvid) {
+-		/* Accept all frames if PVID is set */
+-		regmap_update_bits(priv->regmap, AN8855_PVC_P(port), AN8855_ACC_FRM,
+-				   FIELD_PREP(AN8855_ACC_FRM, AN8855_VLAN_ACC_ALL));
+-
+-		/* Only configure PVID if VLAN filtering is enabled */
+-		if (dsa_port_is_vlan_filtering(dsa_to_port(ds, port))) {
+-			ret = an8855_port_set_pvid(priv, port, vlan->vid);
+-			if (ret)
+-				return ret;
+-		}
+-	} else if (vlan->vid) {
+-		ret = regmap_read(priv->regmap, AN8855_PVID_P(port), &val);
+-		if (ret)
+-			return ret;
++	if (pvid)
++		priv->pvid_bridge[port] = vlan->vid;
++	else if (priv->pvid_bridge[port] == vlan->vid)
++		/* Re-added without the PVID flag: the port gives the PVID up. */
++		priv->pvid_bridge[port] = AN8855_PORT_VID_DEFAULT;
+ 
+-		if (FIELD_GET(AN8855_G0_PORT_VID, val) != vlan->vid)
+-			return 0;
+-
+-		/* This VLAN is overwritten without PVID, so unset it */
+-		if (dsa_port_is_vlan_filtering(dsa_to_port(ds, port))) {
+-			ret = regmap_update_bits(priv->regmap, AN8855_PVC_P(port),
+-						 AN8855_ACC_FRM,
+-						 FIELD_PREP(AN8855_ACC_FRM,
+-							    AN8855_VLAN_ACC_TAGGED));
+-			if (ret)
+-				return ret;
+-		}
+-
+-		ret = an8855_port_set_pvid(priv, port, AN8855_PORT_VID_DEFAULT);
+-		if (ret)
+-			return ret;
+-	}
+-
+-	return 0;
++	return an8855_port_commit_vlan(ds, port,
++				       dsa_port_is_vlan_filtering(dp));
+ }
+ 
+ static int an8855_port_vlan_del(struct dsa_switch *ds, int port,
+ 				const struct switchdev_obj_port_vlan *vlan)
+ {
++	struct dsa_port *dp = dsa_to_port(ds, port);
+ 	struct an8855_priv *priv = ds->priv;
+-	u32 val;
+ 	int ret;
+ 
+ 	mutex_lock(&priv->reg_mutex);
+@@ -999,30 +992,14 @@
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = regmap_read(priv->regmap, AN8855_PVID_P(port), &val);
+-	if (ret)
+-		return ret;
+-
+-	/* PVID is being restored to the default whenever the PVID port
+-	 * is being removed from the VLAN.
+-	 */
+-	if (FIELD_GET(AN8855_G0_PORT_VID, val) == vlan->vid) {
+-		/* Only accept tagged frames if the port is VLAN-aware */
+-		if (dsa_port_is_vlan_filtering(dsa_to_port(ds, port))) {
+-			ret = regmap_update_bits(priv->regmap, AN8855_PVC_P(port),
+-						 AN8855_ACC_FRM,
+-						 FIELD_PREP(AN8855_ACC_FRM,
+-							    AN8855_VLAN_ACC_TAGGED));
+-			if (ret)
+-				return ret;
+-		}
++	/* The PVID goes back to "none" when the VLAN carrying it is removed. */
++	if (priv->pvid_bridge[port] != vlan->vid)
++		return 0;
+ 
+-		ret = an8855_port_set_pvid(priv, port, AN8855_PORT_VID_DEFAULT);
+-		if (ret)
+-			return ret;
+-	}
++	priv->pvid_bridge[port] = AN8855_PORT_VID_DEFAULT;
+ 
+-	return 0;
++	return an8855_port_commit_vlan(ds, port,
++				       dsa_port_is_vlan_filtering(dp));
+ }
+ 
+ static int
+@@ -1539,21 +1516,18 @@
+ 		return ret;
+ 
+ 	/*
+-	 * For the owning user port, become VLAN-aware so its PVID (the
+-	 * standalone VID) is applied to untagged ingress and carried to the
+-	 * CPU. Mirrors the vlan_filtering() user-port setup: SECURITY mode,
+-	 * egress untagged towards the client, accept all frames.
++	 * The core sets the PVID flag only for the owning user port. Record
++	 * the VID as this port's tag_8021q PVID and commit; the commit is a
++	 * no-op on the register file while the port is under a VLAN-aware
++	 * bridge, and takes effect again as soon as it is not.
+ 	 */
+ 	if (pvid) {
+-		ret = an8855_port_set_vlan_mode(priv, port,
+-						AN8855_PORT_SECURITY_MODE,
+-						AN8855_VLAN_EG_DISABLED,
+-						AN8855_VLAN_USER,
+-						AN8855_VLAN_ACC_ALL);
+-		if (ret)
+-			return ret;
++		struct dsa_port *dp = dsa_to_port(ds, port);
++
++		priv->pvid_tag_8021q[port] = vid;
+ 
+-		ret = an8855_port_set_pvid(priv, port, vid);
++		ret = an8855_port_commit_vlan(ds, port,
++					      dsa_port_is_vlan_filtering(dp));
+ 		if (ret)
+ 			return ret;
+ 	}
+@@ -1563,14 +1537,27 @@
+ 
+ static int an8855_tag_8021q_vlan_del(struct dsa_switch *ds, int port, u16 vid)
+ {
++	struct dsa_port *dp = dsa_to_port(ds, port);
+ 	struct an8855_priv *priv = ds->priv;
+ 	int ret;
+ 
+ 	mutex_lock(&priv->reg_mutex);
+ 	ret = an8855_vlan_del(priv, port, vid);
+ 	mutex_unlock(&priv->reg_mutex);
++	if (ret)
++		return ret;
+ 
+-	return ret;
++	/* Guarded by the VID so the order does not matter:
++	 * dsa_tag_8021q_bridge_join() adds the bridge VID before deleting the
++	 * standalone one, and this must not undo the add.
++	 */
++	if (priv->pvid_tag_8021q[port] != vid)
++		return 0;
++
++	priv->pvid_tag_8021q[port] = AN8855_PORT_VID_DEFAULT;
++
++	return an8855_port_commit_vlan(ds, port,
++				       dsa_port_is_vlan_filtering(dp));
+ }
+ 
+ static void an8855_teardown(struct dsa_switch *ds)
+--- a/drivers/net/dsa/an8855.h
++++ b/drivers/net/dsa/an8855.h
+@@ -908,6 +908,16 @@
+ 	u8 eee_enable;
+ 	u8 port_isolated_map;
+ 
++	/* Shadow PVIDs. The port PVID registers are a single resource that
++	 * two subsystems want to own - tag_8021q and a VLAN-aware bridge -
++	 * so neither writes them directly. Both record their intent here and
++	 * call an8855_port_commit_vlan(), which programs whichever one the
++	 * port's current VLAN-awareness selects. Zero means "no PVID"
++	 * (AN8855_PORT_VID_DEFAULT), which is what devm_kzalloc() leaves.
++	 */
++	u16 pvid_tag_8021q[AN8855_NUM_PORTS];
++	u16 pvid_bridge[AN8855_NUM_PORTS];
++
+ 	bool phy_require_calib;
+ 
+ 	unsigned int phy_base_new;
