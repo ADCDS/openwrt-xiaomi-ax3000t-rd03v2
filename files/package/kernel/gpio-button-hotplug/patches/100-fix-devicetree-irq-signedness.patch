@@ -1,0 +1,85 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] gpio-button-hotplug: keep the fwnode_irq_get() error signed
+
+Buttons never worked on any board whose gpio-keys child nodes have no
+"interrupts" property - the probe logged, twice per board,
+
+  gpio-keys keys: failed to request irq:0 for gpio:-2
+
+(both printed values are artifacts: bdata->irq is zeroed just before the
+dev_err, and button->gpio is the -ENOENT device-tree marker.)
+
+struct gpio_keys_button::irq is unsigned int, so
+
+	button->irq = fwnode_irq_get(pp, 0);
+	if (button->irq < 0)
+		button->irq = 0;
+
+can never clamp: the comparison of an unsigned against 0 is always false
+and the compiler drops it. That was harmless while fwnode_irq_get()
+returned 0 for "no interrupt", but it now returns -EINVAL instead - see
+"[PATCH v8 0/8] fix fwnode_irq_get[_byname()] returnvalue", which made
+these helpers always report a negative errno so callers stop mistaking 0
+for success. -EINVAL lands in the unsigned field as 4294967274, which is
+nonzero, so gpio_keys_probe() takes the "interrupt supplied by firmware"
+branch:
+
+	if (!button->irq) {
+		bdata->irq = gpiod_to_irq(bdata->gpiod);
+		irqflags |= IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
+	} else {
+		bdata->irq = button->irq;
+	}
+
+skipping gpiod_to_irq() *and* leaving irqflags without any trigger type,
+then requesting IRQ 4294967274, which fails.
+
+Confirmed on an IPQ5018 board by printing the discarded values:
+
+  DIAG: node='button-0' code=529 fwnode_irq_get=-22
+  DIAG: -> button->irq=-22   (i.e. the clamp did not run)
+
+while requesting the very same GPIO's interrupt with the flags the
+gpiod_to_irq() branch would have used succeeds:
+
+  irqtest: gpio=540 gpiod_to_irq=84
+  irqtest: mode=0 request_threaded_irq ret=0
+
+Hold the return value in a signed temporary so the error is seen.
+
+--- a/gpio-button-hotplug.c
++++ b/gpio-button-hotplug.c
+@@ -378,6 +378,7 @@
+ 
+ 	device_for_each_child_node_scoped(dev, pp) {
+ 		struct gpio_keys_button *button = &buttons[i++];
++		int irq;
+ 
+ 		if (fwnode_property_read_u32(pp, "linux,code", &button->code)) {
+ 			dev_err(dev, "Button node '%s' without keycode\n",
+@@ -397,11 +398,20 @@
+ 
+ 		button->wakeup = fwnode_property_present(pp, "gpio-key,wakeup");
+ 		button->gpio = -ENOENT; /* mark this as device-tree */
+-		button->irq = fwnode_irq_get(pp, 0);
+-		if (button->irq == -EPROBE_DEFER)
+-			return ERR_PTR(button->irq);
+-		if (button->irq < 0)
+-			button->irq = 0;
++		/*
++		 * struct gpio_keys_button::irq is unsigned, so the old
++		 * "if (button->irq < 0) button->irq = 0;" was dead code: a
++		 * negative errno was stored as a huge positive number and the
++		 * probe then treated it as a valid interrupt. Since
++		 * fwnode_irq_get() started returning -EINVAL rather than 0 when
++		 * a node has no "interrupts" property, that made every plain
++		 * gpio-keys node request a bogus IRQ and fail. Keep the error
++		 * in a signed temporary.
++		 */
++		irq = fwnode_irq_get(pp, 0);
++		if (irq == -EPROBE_DEFER)
++			return ERR_PTR(irq);
++		button->irq = irq > 0 ? irq : 0;
+ 	}
+ 
+ 	pdata = devm_kzalloc(dev, sizeof(struct gpio_keys_platform_data), GFP_KERNEL);
