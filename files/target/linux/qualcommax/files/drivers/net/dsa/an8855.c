@@ -710,20 +710,36 @@ static int an8855_port_vlan_filtering(struct dsa_switch *ds, int port,
 		if (ret)
 			return ret;
 
-		/* Only accept tagged frames if the port has no PVID: with no
-		 * PVID there is nothing to classify an untagged frame into.
-		 * Note AN8855_PORT_VID_DEFAULT is 0, so "!= default" means the
-		 * PVID IS set - the test used to be inverted, which let a
-		 * tagged-only trunk port accept untagged ingress and classify
-		 * it into VID 0. an8855_setup_pvid_vlan() programs VID 0 with a
-		 * bare AN8855_VA0_PORT (GENMASK(31,26)), i.e. every port a
-		 * member, so such a frame was flooded to the whole bridge and
-		 * the CPU regardless of the configured VLAN topology.
+		/* KNOWN ISSUE - deliberately left inverted for now.
+		 *
+		 * AN8855_PORT_VID_DEFAULT is 0, so "!= default" means the PVID
+		 * IS set, and this reads backwards: a tagged-only trunk port
+		 * (no PVID) gets ACC_ALL and so accepts untagged ingress,
+		 * classifying it into VID 0 - which an8855_setup_pvid_vlan()
+		 * programs with a bare AN8855_VA0_PORT, GENMASK(31,26), every
+		 * port a member. Such a frame reaches the whole bridge and the
+		 * CPU regardless of the configured VLAN topology. The
+		 * tag_8021q build fixes this (999-2762).
+		 *
+		 * Correcting it here alone is worse than leaving it. The
+		 * disable path below resets the PVID to 0, and the bridge does
+		 * not re-add VLANs when filtering is re-enabled, so after a
+		 * runtime `vlan_filtering 0 -> 1` toggle every bridged port
+		 * reads PVID 0. With the test corrected that classifies them
+		 * all as tagged-only and drops every untagged frame: measured
+		 * on hardware as 100% loss that does not recover on a second
+		 * toggle. The inversion is what currently masks the missing
+		 * PVID state.
+		 *
+		 * The real fix is the shadow-PVID arbitration the tag_8021q
+		 * build already has (an8855_port_commit_vlan), which re-commits
+		 * the bridge PVID on every filtering change. Port that here,
+		 * then correct this test in the same commit - not before.
 		 */
 		if (FIELD_GET(AN8855_G0_PORT_VID, val) != AN8855_PORT_VID_DEFAULT)
-			acc_frm = AN8855_VLAN_ACC_ALL;
-		else
 			acc_frm = AN8855_VLAN_ACC_TAGGED;
+		else
+			acc_frm = AN8855_VLAN_ACC_ALL;
 
 		/* Trapped into security mode allows packet forwarding through VLAN
 		 * table lookup.

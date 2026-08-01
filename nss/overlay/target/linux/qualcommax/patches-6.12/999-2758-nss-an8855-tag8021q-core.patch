@@ -203,31 +203,41 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  						AN8855_PORT_FALLBACK_MODE,
  						AN8855_VLAN_EG_CONSISTENT,
  						AN8855_VLAN_USER,
-@@ -863,20 +828,11 @@
+@@ -863,32 +828,7 @@
  		if (ret)
  			return ret;
  
--		/* Only accept tagged frames if the port has no PVID: with no
--		 * PVID there is nothing to classify an untagged frame into.
--		 * Note AN8855_PORT_VID_DEFAULT is 0, so "!= default" means the
--		 * PVID IS set - the test used to be inverted, which let a
--		 * tagged-only trunk port accept untagged ingress and classify
--		 * it into VID 0. an8855_setup_pvid_vlan() programs VID 0 with a
--		 * bare AN8855_VA0_PORT (GENMASK(31,26)), i.e. every port a
--		 * member, so such a frame was flooded to the whole bridge and
--		 * the CPU regardless of the configured VLAN topology.
+-		/* KNOWN ISSUE - deliberately left inverted for now.
+-		 *
+-		 * AN8855_PORT_VID_DEFAULT is 0, so "!= default" means the PVID
+-		 * IS set, and this reads backwards: a tagged-only trunk port
+-		 * (no PVID) gets ACC_ALL and so accepts untagged ingress,
+-		 * classifying it into VID 0 - which an8855_setup_pvid_vlan()
+-		 * programs with a bare AN8855_VA0_PORT, GENMASK(31,26), every
+-		 * port a member. Such a frame reaches the whole bridge and the
+-		 * CPU regardless of the configured VLAN topology. The
+-		 * tag_8021q build fixes this (999-2762).
+-		 *
+-		 * Correcting it here alone is worse than leaving it. The
+-		 * disable path below resets the PVID to 0, and the bridge does
+-		 * not re-add VLANs when filtering is re-enabled, so after a
+-		 * runtime `vlan_filtering 0 -> 1` toggle every bridged port
+-		 * reads PVID 0. With the test corrected that classifies them
+-		 * all as tagged-only and drops every untagged frame: measured
+-		 * on hardware as 100% loss that does not recover on a second
+-		 * toggle. The inversion is what currently masks the missing
+-		 * PVID state.
+-		 *
+-		 * The real fix is the shadow-PVID arbitration the tag_8021q
+-		 * build already has (an8855_port_commit_vlan), which re-commits
+-		 * the bridge PVID on every filtering change. Port that here,
+-		 * then correct this test in the same commit - not before.
 -		 */
 +		/* Only accept tagged frames if PVID is not set */
  		if (FIELD_GET(AN8855_G0_PORT_VID, val) != AN8855_PORT_VID_DEFAULT)
--			acc_frm = AN8855_VLAN_ACC_ALL;
--		else
  			acc_frm = AN8855_VLAN_ACC_TAGGED;
-+		else
-+			acc_frm = AN8855_VLAN_ACC_ALL;
- 
- 		/* Trapped into security mode allows packet forwarding through VLAN
- 		 * table lookup.
-@@ -927,14 +883,15 @@
+ 		else
+@@ -943,14 +883,15 @@
  		}
  
  		if (disable_cpu_vlan) {
@@ -251,7 +261,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		}
  	}
  
-@@ -1463,6 +1420,129 @@
+@@ -1479,6 +1420,129 @@
  	return NULL;
  }
  
@@ -381,7 +391,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  
  static int
  an8855_get_mac_eee(struct dsa_switch *ds, int port,
-@@ -1536,7 +1616,13 @@
+@@ -1552,7 +1616,13 @@
  an8855_get_tag_protocol(struct dsa_switch *ds, int port,
  			enum dsa_tag_protocol mp)
  {
@@ -396,7 +406,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  }
  
  /* Similar to MT7530 also trap link local frame and special frame to CPU */
-@@ -1616,6 +1702,65 @@
+@@ -1632,6 +1702,65 @@
  			       AN8855_PORT_VID_DEFAULT);
  }
  
@@ -462,7 +472,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  static int an8855_led_set_usr_def(struct dsa_switch *ds, u8 entity,
  		int polar, u16 on_evt, u16 blk_evt, u8 led_freq)
  {
-@@ -1927,10 +2072,8 @@
+@@ -1943,10 +2072,8 @@
  		if (ret)
  			return ret;
  
@@ -475,7 +485,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		 */
  		ret = regmap_write(priv->regmap, AN8855_PORTMATRIX_P(dp->index),
  				   FIELD_PREP(AN8855_PORTMATRIX,
-@@ -1965,9 +2108,9 @@
+@@ -1981,9 +2108,9 @@
  
  	/* Set CPU port number for trapped frames. With multiple CPU ports,
  	 * frames trapped with PORT_FW set to CPU_ONLY can only target ONE
@@ -488,7 +498,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	 */
  	ret = regmap_update_bits(priv->regmap, AN8855_MFC,
  				 AN8855_CPU_EN | AN8855_CPU_PORT_IDX,
-@@ -1983,14 +2126,15 @@
+@@ -1999,14 +2126,15 @@
  		return ret;
  
  	dsa_switch_for_each_cpu_port(dp, ds) {
@@ -511,7 +521,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		if (ret)
  			return ret;
  
-@@ -2019,11 +2163,13 @@
+@@ -2035,11 +2163,13 @@
  			return ret;
  
  		/* Enable Unknown Unicast Forward on CPU port */
@@ -527,7 +537,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		if (ret)
  			return ret;
  	}
-@@ -2085,6 +2231,57 @@
+@@ -2101,6 +2231,57 @@
  	 */
  	ds->assisted_learning_on_cpu_port = true;
  
@@ -585,7 +595,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	return 0;
  }
  
-@@ -2094,6 +2291,10 @@
+@@ -2110,6 +2291,10 @@
  	struct dsa_port *dp = dsa_phylink_to_port(config);
  	struct an8855_priv *priv = dp->ds->priv;
  
@@ -596,7 +606,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	switch (interface) {
  	case PHY_INTERFACE_MODE_SGMII:
  	case PHY_INTERFACE_MODE_2500BASEX:
-@@ -2832,10 +3033,13 @@
+@@ -2848,10 +3033,13 @@
  	.set_ageing_time = an8855_set_ageing_time,
  	.port_bridge_join = an8855_port_bridge_join,
  	.port_bridge_leave = an8855_port_bridge_leave,
@@ -611,7 +621,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	.port_pre_bridge_flags = an8855_port_pre_bridge_flags,
  	.port_bridge_flags = an8855_port_bridge_flags,
  	.port_vlan_filtering = an8855_port_vlan_filtering,
-@@ -2916,6 +3120,12 @@
+@@ -2932,6 +3120,12 @@
  					       val && val != 0xffffffff, 1000, 1000000);
  		if (ret)
  			return ret;
