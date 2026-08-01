@@ -22,8 +22,9 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 ## ⚠️ Read this first
 
 - **This is for the `RD03v2` hardware revision only** (IPQ5018 + AN8855 switch + QCN6122 5 GHz). Check the sticker/board. Other AX3000T revisions (e.g. the MT7981 "RD23" variant) are **completely different hardware** — this will brick them.
+- **Check your stock ROM version first, and keep the router off the internet until you have flashed.** This install needs a stock `recovery.bin` **at least as new as the version your unit last ran** — the bootloader enforces anti-rollback ([step 2](#2-re-enable-the-bootloader-console-tftp-recovery)). Only 2.0.12 is easy to find publicly, so a unit left to OTA-update past it can be shut out of this guide entirely ([#12](https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/12)). The stock web UI shows the ROM version.
 - **You need a USB↔UART (3.3 V) serial adapter** and to solder/attach to the board's UART pads for the *initial* install. After OpenWrt is on NAND, updates need no serial.
-- **There is real brick risk.** Flashing NAND on a locked-bootloader device can go wrong. Every step here is recoverable via the stock TFTP recovery (below), but **do this at your own risk.** We are not responsible for bricked routers.
+- **There is real brick risk.** Flashing NAND on a locked-bootloader device can go wrong. Every step here is recoverable — once you are past step 3 the U-Boot prompt stays available (the install persists `boot_wait=on`/`uart_en=1`), and the stock TFTP recovery is the backstop underneath it, **provided you hold a `recovery.bin` new enough to be accepted** (below). But **do this at your own risk.** We are not responsible for bricked routers.
 - The stock console is **read-only** and the bootloader ignores keypresses by default — this guide shows how to get around that.
 
 ---
@@ -84,7 +85,7 @@ The install is a **UART + TFTP** procedure because the stock bootloader is locke
 - The router, an RD03v2.
 - A **3.3 V USB-UART adapter** wired to the board UART (see the photo above): **board Rx↔adapter TX, board Tx↔adapter RX, GND↔GND** (leave VCC unconnected), **115200 8N1**.
 - A Linux PC with an Ethernet port, `dnsmasq` (or any TFTP server), and a serial terminal (`screen`, `picocom`, …).
-- The **stock `recovery.bin`** for the RD03v2 (a full stock image — used to re-enable the bootloader console). *We don't redistribute Xiaomi firmware; obtain the matching stock image for your unit.*
+- The **stock `recovery.bin`** for the RD03v2 — a full stock image, used to re-enable the bootloader console. It must be built for **RD03v2** *and* be **no older than the stock version your unit last ran** (anti-rollback — see step 2). *We don't redistribute Xiaomi firmware; obtain a matching stock image for your unit.*
 - The three OpenWrt images from Releases.
 
 ### 1. Serial + TFTP setup
@@ -103,7 +104,23 @@ Open the serial console: `screen /dev/ttyUSB0 115200`.
 The stock U-Boot ignores keypresses (`boot_wait=off`). A stock **TFTP recovery** turns it back on:
 1. Power off the router.
 2. Hold the **reset** button and, while holding, plug power in. Keep holding ~8–10 s until the LED **blinks**, then release.
-3. It DHCPs, pulls `recovery.bin`, verifies + reflashes stock (~2–3 min on the console), and halts. This sets `boot_wait=on`.
+3. It DHCPs, pulls `recovery.bin`, verifies it (**signature *and* version** — see below), reflashes stock (~2–3 min on the console), and halts. This sets `boot_wait=on`.
+
+> ⚠️ **Anti-rollback — the one hard prerequisite of this whole guide.** The
+> bootloader refuses any `recovery.bin` older than the stock version the unit
+> last ran. It compares integer version codes (`0x20000 + patch` on the 2.0.x
+> line: 2.0.12 → 131084, 2.0.28 → 131100) and rejects the image on the console:
+>
+> ```
+> [miwifi] upgrade_miwifirom = 131084
+> [miwifi] not permit upgrade!
+> ========Upgrade fail!========
+> ```
+>
+> Equal versions are accepted; only *older* is refused. The check runs **before
+> anything is written**, so a rejected image leaves the unit exactly as it was —
+> but you cannot get to step 3 without a new-enough one. Editing the version out
+> of an older image does not work either: the bootloader RSA-2048-verifies it.
 
 > ⚠️ **Do the `saveenv` of step 3 on the very next boot — before stock ever
 > boots to userspace.** The recovery's `boot_wait=on` is not persistent: the
@@ -111,6 +128,28 @@ The stock U-Boot ignores keypresses (`boot_wait=off`). A stock **TFTP recovery**
 > the countdown drops to zero, and no amount of keypressing will reach the
 > prompt — you'd have to redo this recovery. (The recovery halts after
 > flashing precisely so you get that first boot; use it.)
+
+#### If anti-rollback blocks you
+
+The recovery exists in this guide for exactly one reason: to set `boot_wait=on`
+(and `uart_en=1`) so you can reach the U-Boot prompt in step 3. Anything that
+sets those two variables replaces it. Options, best first:
+
+1. **Obtain a newer stock image.** Any version code ≥ your installed one works.
+   The router's own `check_rom_update` API returns no download URL once it is
+   already on the newest release, so in practice this means a mirror.
+2. **Root on stock**, then set `boot_wait=on` / `uart_en=1` from userspace and
+   go straight to step 3. Be warned that on **2.0.28 every published route to
+   root is closed** — the Lua API validators, xmir-patcher's exploits, native
+   `mkxqimage`, and the backup/restore path have all been re-tested and all
+   fail, and the UART is read-only in boot mode so there is no console to
+   escape into. Older stock builds may still be reachable.
+3. **External SPI-NAND programmer** on the ESMT F50D1G41LB — version- and
+   Xiaomi-independent, and the only route left on a fully-updated unit. The
+   U-Boot environment is a plain MTD partition (`0:APPSBLENV`, offset
+   `0x480000`, length `0x80000`); setting the two variables there is enough.
+   There is no secure boot on the kernel, so a modified NAND image does boot.
+   Most effort and most risk of the three.
 
 ### 3. Boot OpenWrt in RAM
 Power-cycle (no reset). Now the bootloader pauses. **Interrupt it** (spam Enter as it boots) to reach the `IPQ5018#` prompt, then:
@@ -157,6 +196,7 @@ pins the boot-success flags). Don't re-flash over it.
 | Symptom | Cause → fix |
 |---|---|
 | Countdown never pauses, no `IPQ5018#` no matter what you press | `boot_wait=off` (stock booted to userspace since the last recovery) → redo the TFTP recovery (step 2), then `saveenv` on the *very next* boot (step 3) |
+| `not permit upgrade!` / `Upgrade fail!` during the TFTP recovery | Anti-rollback: your `recovery.bin` is older than the last stock version the unit ran → get an image with a version code ≥ yours, or see [If anti-rollback blocks you](#if-anti-rollback-blocks-you) (step 2) |
 | `tftpboot` crawls, endless `#` marks | Normal: U-Boot TFTP is ~100 KB/s → the ~14 MB initramfs takes 2–3 min |
 | **One** `UBI init error 22` on the first boot after flashing | Benign: A/B loader retries and attaches → let it boot |
 | `UBI init error 22` on **every** boot | In-place/torn flash → RAM-boot initramfs + `sysupgrade -n` (steps 3–4) |
@@ -205,7 +245,7 @@ Boot/failsafe/upgrade indications keep working as before (blue =
 boot/running, amber = failsafe/upgrade, via the `led-*` DTS aliases).
 
 ### Recovering / going back to stock
-Repeat the **TFTP recovery** (step 2) with the stock `recovery.bin` — it reflashes stock over everything.
+Repeat the **TFTP recovery** (step 2) with the stock `recovery.bin` — it reflashes stock over everything. The same version rule applies here: the image must be no older than the last stock version the unit ran, so keep a suitable `recovery.bin` alongside your OpenWrt images rather than assuming you can find one later.
 
 ---
 
