@@ -47,6 +47,14 @@ gpiod_to_irq() branch would have used succeeds:
 
 Hold the return value in a signed temporary so the error is seen.
 
+This is a BACKPORT of upstream OpenWrt commit b0a03893cb52
+("gpio-button-hotplug: fix signed issue", 2026-07-10), which fixes this
+exactly the same way. This port pins OpenWrt at 25ee126 (2026-07-06),
+four days earlier, so it does not have the fix yet.
+
+DROP THIS PATCH once the OpenWrt pin advances past b0a03893 - it will
+fail to apply, which is the intended signal that it is no longer needed.
+
 --- a/gpio-button-hotplug.c
 +++ b/gpio-button-hotplug.c
 @@ -378,6 +378,7 @@
@@ -79,7 +87,7 @@ Hold the return value in a signed temporary so the error is seen.
 +		irq = fwnode_irq_get(pp, 0);
 +		if (irq == -EPROBE_DEFER)
 +			return ERR_PTR(irq);
-+		button->irq = irq > 0 ? irq : 0;
++		button->irq = max(0, irq);
  	}
  
  	pdata = devm_kzalloc(dev, sizeof(struct gpio_keys_platform_data), GFP_KERNEL);
