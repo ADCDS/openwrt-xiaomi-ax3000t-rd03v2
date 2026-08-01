@@ -5,7 +5,7 @@
 > reboot brought it back. The cause was a single register field: the
 > mt7530-derived `.port_vlan_filtering` forced the **CPU port** to egress
 > untagged, so the `tag_8021q` conduit tagger had no VID to decode. Fixed by
-> `999-2761`, which follows the mainline sja1105/vsc73xx shadow-PVID model.
+> `999-2762`, which follows the mainline sja1105/vsc73xx shadow-PVID model.
 
 ## The bug (as shipped up to v1.4)
 
@@ -49,7 +49,7 @@ On an RD03v2 AP (tagger `vsc73xx-8021q`, conduit port 5), enabling
 The last row was applied live with `an8855-diag write` — the host path came
 back with no reboot. That is the whole bug.
 
-## The fix (`999-2761-nss-an8855-vlan-filtering.patch`)
+## The fix (`999-2762-nss-an8855-vlan-filtering.patch`)
 
 Follows the mainline model for a driver that commits the `tag_8021q` VLAN as a
 PVID (see the discussion in `net/dsa/tag_8021q.c`):

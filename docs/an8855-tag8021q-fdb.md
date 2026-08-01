@@ -4,7 +4,7 @@
 > is keyed by `(MAC, VID)`. The data path never uses VID 0, so **any FDB entry
 > installed at VID 0 is invisible to forwarding**. Host entries must be
 > translated into the tag_8021q VID of the database they belong to
-> (`999-2759` patch, sja1105 model).
+> (`999-2760` patch, sja1105 model).
 
 ## The bug (as shipped before v1.2)
 
@@ -30,7 +30,7 @@ the client's retry loop usually re-arms. Flood was never broken (that is why
 the AP's own IP stayed reachable — its MAC is never learned on a user port, so
 unknown-unicast flood delivers it to the CPU).
 
-## The fix (`999-2759-nss-an8855-tag8021q-host-fdb-vid.patch`)
+## The fix (`999-2760-nss-an8855-tag8021q-host-fdb-vid.patch`)
 
 Mirrors `sja1105_fdb_add`:
 
