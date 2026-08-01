@@ -54,6 +54,7 @@ build() {  # build <outdir> <patch>...
         # An unmatched glob arrives here verbatim. Catch it: a missing patch
         # must fail the check loudly, never be skipped into a silent pass.
         [ -f "$p" ] || { echo "FAIL: patch not found: $p" >&2; exit 1; }
+        check_hunks "$p"
         slice "$p" > "$WORK/slice"
         if [ -s "$WORK/slice" ]; then
             ( cd "$out" && patch -p1 -s -F0 --no-backup-if-mismatch < "$WORK/slice" ) \
@@ -72,6 +73,45 @@ NSS_SET=(
     999-2761-nss-an8855-user-port-flood-default.patch
     999-2762-nss-an8855-vlan-filtering.patch
 )
+
+# Pinned hunk counts. Refreshing a patch regenerates it from the APPLIED
+# result, so a hunk that failed to apply silently disappears from the patch
+# instead of erroring. That actually happened: a refresh dropped 999-2757's
+# an8855_port_set_pid -> an8855_port_set_pvid rename while the matching
+# definition rename still applied, which would have shipped an undefined
+# symbol. It was caught only because the count went 54 -> 53. Pin the counts
+# so a refresh that loses work fails here instead.
+declare -A HUNKS=(
+    [999-2757-net-dsa-add-an8855-v2p0p1-and-netlink-support.patch]=54
+    [999-2758-nss-an8855-tag8021q-core.patch]=20
+    [999-2759-nss-an8855-tag8021q-bridge-leave.patch]=1
+    [999-2760-nss-an8855-tag8021q-host-fdb-vid.patch]=7
+    [999-2761-nss-an8855-user-port-flood-default.patch]=2
+    [999-2762-nss-an8855-vlan-filtering.patch]=7
+)
+check_hunks() {  # check_hunks <patchfile>
+    local f="$1" b n want
+    b=$(basename "$f"); want=${HUNKS[$b]:-}
+    [ -n "$want" ] || return 0
+    n=$(grep -c '^@@' "$f")
+    [ "$n" = "$want" ] || {
+        echo "FAIL: $b has $n hunks, expected $want." >&2
+        echo "      A refresh that drops a hunk looks exactly like this." >&2
+        echo "      If the change is intentional, update HUNKS in $0." >&2
+        exit 1
+    }
+}
+
+# The 2757 rename must be complete: a half-applied rename compiles to an
+# undefined symbol only at link time, long after this check would have run.
+check_rename() {  # check_rename <built .c>
+    local n; n=$(grep -c 'an8855_port_set_pid\b' "$1" || true)
+    [ "$n" = 0 ] || {
+        echo "FAIL: $n call(s) to an8855_port_set_pid survive 999-2757;" >&2
+        echo "      its rename to an8855_port_set_pvid is incomplete." >&2
+        exit 1
+    }
+}
 have=$(cd "$NSS_PATCHES" && ls 999-27*.patch 2>/dev/null | sort | tr '\n' ' ')
 want=$(printf '%s ' "${NSS_SET[@]}")
 [ "$have" = "$want" ] || {
@@ -85,6 +125,8 @@ want=$(printf '%s ' "${NSS_SET[@]}")
 BASE_2757="$BASE_PATCHES/999-2757-net-dsa-add-an8855-v2p0p1-and-netlink-support.patch"
 build "$WORK/default" "$BASE_2757"
 build "$WORK/nss"     "$BASE_2757" "${NSS_SET[@]/#/$NSS_PATCHES/}"
+check_rename "$WORK/default/drivers/net/dsa/an8855.c"
+check_rename "$WORK/nss/drivers/net/dsa/an8855.c"
 
 # Split a .c into per-function files, keyed by function name. A top-level
 # function starts at column 1, contains '(', does not end in ';', and its body
