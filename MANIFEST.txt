@@ -121,20 +121,42 @@ Experimental; see docs/nss-offload.md. Layered on top of files/:
                                 ECM DSA front-end: maps a DSA user port (or a bridge
                                 master over one) to its CPU conduit so the fast path
                                 resolves an accelerable NSS interface.
-        nss/overlay/            Path-preserving overlay (same layout as files/):
+        nss/overlay/            Path-preserving overlay (same layout as files/). It is
+                                PURELY ADDITIVE: no file here shadows one in files/.
+                                files/ is the single source for anything both builds
+                                share - see "The two builds" below.
           patches-6.12/06xx,0819,0981  ECM/clients/skb_recycler + NSS reserved-memory.
+          patches-6.12/999-2758  tag_8021q core: the NSS driver expressed as a delta on
+                                 999-2757 (was a full forked copy of an8855.c until v1.6).
+          patches-6.12/999-2759  tag_8021q bridge-leave (issue #1/#2).
+          patches-6.12/999-2760  tag_8021q host-FDB VID (issue #7).
+          patches-6.12/999-2761  user-port flood default (issue #5).
+          patches-6.12/999-2762  bridge VLAN filtering / shadow PVIDs (issue #11).
           files/.../ipq5018-nss.dtsi   NSS core node (CSM regs, 8 IRQs, 8 MB DDR @0x40000000).
           files/net,include/           skb_recycler + conntrack DSCP-remark sources.
-          files/.../drivers/net/dsa/an8855.c  tag_8021q build of the AN8855 driver (overrides
-                                       the files/ MTK-tag build so the NSS parser sees the
-                                       EtherType, not the special tag).
-          ipq50xx/.../board.d/02_network  Gateway topology: moves the WAN onto the eth0 CPU
-                                       port (offload needs WAN and LAN on different CPU ports).
-          ipq50xx/.../etc/rc.local     Enables NSS redirect + ipv{4,6}_accel_mode at boot, and
-                                       re-arms U-Boot's dual-boot flags (flag_boot_success +
-                                       flag_try_sys*_failed) so the boot failsafe never trips.
           ipq50xx/.../etc/uci-defaults/00-nss-manual  Disables the qca-nss init scripts so
                                        they don't double-load the autoloaded modules.
           etc/modules.d/33-qca-nss-ecm ECM autoload at boot (pulls in qca-nss-drv, boots core).
-        build.sh also appends the NSS packages to the AX3000T DEVICE_PACKAGES
-        and #includes ipq5018-nss.dtsi into the device DTS.
+        build.sh (NSS=1) additionally, as in-place edits rather than file copies:
+          - appends the NSS packages to the AX3000T DEVICE_PACKAGES
+          - #includes ipq5018-nss.dtsi into the device DTS
+          - appends nss/config.append to target/linux/qualcommax/config-6.12
+          - appends nss/feeds.conf.append to feeds.conf.default
+          - adds the WAN->eth0 conduit line to board.d/02_network
+          - prepends the /proc/sys/dev/nss knobs to etc/rc.local
+          - strips +kmod-bonding from qca-nss-clients, copies the feed patches,
+            and pins CONFIG_NSS_FIRMWARE_VERSION_12_5
+
+        The two builds
+        --------------
+        files/ is the ONLY copy of drivers/net/dsa/an8855.c. The default build is
+        that file + 999-2757; the NSS build is the same file + 999-2757 + the five
+        999-27xx patches above. A fix to the shared driver therefore reaches both
+        builds automatically, and a change that collides with the NSS delta fails
+        the build loudly instead of silently shipping a stale second copy.
+
+        Until v1.6 nss/overlay/ shipped a complete second an8855.c that replaced
+        the files/ one at build time. Fixes to either copy never reached the other:
+        that is what caused issue #9 and three further one-sided bugs. Do not
+        reintroduce a shadowing copy - tools/check-nss-divergence.sh fails if one
+        appears, and build.sh runs it on every build.

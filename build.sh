@@ -15,6 +15,18 @@ cd "$(dirname "$0")"
 
 WITH_NSS="${NSS:-0}"
 
+# Fail before doing anything if the AN8855 driver has silently diverged between
+# the two builds, or if an NSS patch stopped applying cleanly. Takes ~1s and
+# needs only patch/awk/diff. Set SKIP_DIVERGENCE_CHECK=1 to bypass.
+if [ "${SKIP_DIVERGENCE_CHECK:-0}" != "1" ] && [ -x tools/check-nss-divergence.sh ]; then
+	echo ">>> checking AN8855 driver divergence"
+	if ! ./tools/check-nss-divergence.sh; then
+		echo "ERROR: divergence check failed - refusing to build." >&2
+		echo "       See tools/check-nss-divergence.sh, or SKIP_DIVERGENCE_CHECK=1 to override." >&2
+		exit 1
+	fi
+fi
+
 if [ -e openwrt ]; then
 	echo "ERROR: ./openwrt already exists — remove it first." >&2
 	exit 1

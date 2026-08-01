@@ -24,7 +24,7 @@ NSS=1 ./build.sh
 - **`kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-bridge-mgr nss-firmware-ipq50xx`** added to the device's `DEVICE_PACKAGES`.
 - **The core-boot fix** (`nss/feed-patches/qca-nss-drv/0029-…`) — see below.
 - **The tag_8021q + ecm-frontend fix**: `nss/overlay/.../an8855.c` switches the AN8855 DSA tagger, `nss/feed-patches/qca-nss-ecm/0026-…` teaches ECM about DSA conduits, and `CONFIG_NET_DSA_TAG_VSC73XX_8021Q` selects the tagger — see below.
-- **The tag_8021q host-FDB VID fix** (`999-2759`, issue #7): host/assisted-learning FDB entries must land in the tag_8021q VID the data path uses, or downstream unicast to a roamed wifi client is same-port-filtered against its stale learned entry (DHCP-after-roam fails). See [`an8855-tag8021q-fdb.md`](an8855-tag8021q-fdb.md).
+- **The tag_8021q host-FDB VID fix** (`999-2760`, issue #7): host/assisted-learning FDB entries must land in the tag_8021q VID the data path uses, or downstream unicast to a roamed wifi client is same-port-filtered against its stale learned entry (DHCP-after-roam fails). See [`an8855-tag8021q-fdb.md`](an8855-tag8021q-fdb.md).
 - **Gateway wiring**: `nss/overlay/.../board.d/02_network` moves the WAN onto the `eth0` CPU port (offload needs WAN and LAN on *different* CPU ports); `.../etc/rc.local` enables `redirect` + `ipv{4,6}_accel_mode` after the modules load.
 - **`/etc/modules.d/33-qca-nss-ecm`** so ECM autoloads at boot (loading `ecm` pulls in `qca-nss-drv`, which boots the core); `uci-defaults/00-nss-manual` disables the package init scripts so they don't *also* load the modules.
 
@@ -188,7 +188,7 @@ reboot instead.
 initramfs has no LAN, suspect the version mismatch above first — it is not an
 initramfs quirk.
 
-**Standalone wan port dead after a clean boot** — fixed (`999-2760`, issue #5).
+**Standalone wan port dead after a clean boot** — fixed (`999-2761`, issue #5).
 The real root cause was never the conduit or the tag_8021q VLANs: setup
 excluded user ports from the BCF/UNUF/UNMF flood masks, and only a bridge
 join ever set them — so a standalone port (learning disabled, everything
