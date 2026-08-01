@@ -42,7 +42,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  obj-$(CONFIG_NET_DSA_MT7530_MDIO) += mt7530-mdio.o
 --- a/drivers/net/dsa/an8855.c
 +++ b/drivers/net/dsa/an8855.c
-@@ -16,9 +16,67 @@
+@@ -17,9 +17,67 @@
  #include <linux/phylink.h>
  #include <linux/platform_device.h>
  #include <linux/regmap.h>
@@ -110,7 +110,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  
  static const struct an8855_mib_desc an8855_mib[] = {
  	MIB_DESC(1, AN8855_PORT_MIB_TX_DROP, "TxDrop"),
-@@ -61,6 +119,7 @@ static void an8855_fdb_write(struct an88
+@@ -62,6 +120,7 @@
  {
  	u32 mac_reg[2] = { };
  	u32 reg;
@@ -118,7 +118,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  
  	mac_reg[0] |= FIELD_PREP(AN8855_ATA1_MAC0, mac[0]);
  	mac_reg[0] |= FIELD_PREP(AN8855_ATA1_MAC1, mac[1]);
-@@ -69,25 +128,40 @@ static void an8855_fdb_write(struct an88
+@@ -70,25 +129,40 @@
  	mac_reg[1] |= FIELD_PREP(AN8855_ATA2_MAC4, mac[4]);
  	mac_reg[1] |= FIELD_PREP(AN8855_ATA2_MAC5, mac[5]);
  
@@ -163,7 +163,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  
  	fdb->live = FIELD_GET(AN8855_ATRD0_LIVE, reg[0]);
  	fdb->type = FIELD_GET(AN8855_ATRD0_TYPE, reg[0]);
-@@ -128,6 +202,65 @@ static int an8855_fdb_cmd(struct an8855_
+@@ -129,6 +203,65 @@
  	return 0;
  }
  
@@ -229,7 +229,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  static void
  an8855_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
  {
-@@ -135,6 +268,7 @@ an8855_port_stp_state_set(struct dsa_swi
+@@ -136,6 +269,7 @@
  	struct an8855_priv *priv = ds->priv;
  	bool learning = false;
  	u32 stp_state;
@@ -237,7 +237,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  
  	switch (state) {
  	case BR_STATE_DISABLED:
-@@ -158,12 +292,18 @@ an8855_port_stp_state_set(struct dsa_swi
+@@ -159,12 +293,18 @@
  		break;
  	}
  
@@ -258,7 +258,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  }
  
  static void an8855_port_fast_age(struct dsa_switch *ds, int port)
-@@ -173,18 +313,24 @@ static void an8855_port_fast_age(struct
+@@ -174,18 +314,24 @@
  
  	/* Set to clean Dynamic entry */
  	ret = regmap_write(priv->regmap, AN8855_ATA2, AN8855_ATA2_TYPE);
@@ -286,7 +286,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  }
  
  static int an8855_update_port_member(struct dsa_switch *ds, int port,
-@@ -340,17 +486,24 @@ static void an8855_port_bridge_leave(str
+@@ -355,17 +501,24 @@
  				     struct dsa_bridge bridge)
  {
  	struct an8855_priv *priv = ds->priv;
@@ -312,8 +312,8 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
 +		dev_err(priv->dev, "failed to update PCR reg: %d\n", ret);
  }
  
- static int an8855_port_fdb_add(struct dsa_switch *ds, int port,
-@@ -361,7 +514,7 @@ static int an8855_port_fdb_add(struct ds
+ static int an8855_port_change_conduit(struct dsa_switch *ds, int port,
+@@ -427,7 +580,7 @@
  	u8 port_mask = BIT(port);
  	int ret;
  
@@ -322,7 +322,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	if (!vid)
  		vid = AN8855_PORT_VID_DEFAULT;
  
-@@ -381,7 +534,7 @@ static int an8855_port_fdb_del(struct ds
+@@ -447,7 +600,7 @@
  	u8 port_mask = BIT(port);
  	int ret;
  
@@ -331,7 +331,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	if (!vid)
  		vid = AN8855_PORT_VID_DEFAULT;
  
-@@ -409,7 +562,7 @@ static int an8855_port_fdb_dump(struct d
+@@ -475,7 +628,7 @@
  			   FIELD_PREP(AN8855_ATWD2_PORT, BIT(port)));
  	if (ret)
  		goto exit;
@@ -340,7 +340,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  			     AN8855_FDB_START, &rsp);
  	if (ret < 0)
  		goto exit;
-@@ -451,7 +604,7 @@ static int an8855_port_fdb_dump(struct d
+@@ -517,7 +670,7 @@
  			break;
  
  		/* Read next bank */
@@ -349,7 +349,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  				     AN8855_FDB_NEXT, &rsp);
  		if (ret < 0)
  			break;
-@@ -549,7 +702,7 @@ static int an8855_vlan_del(struct an8855
+@@ -615,7 +768,7 @@
  	port_mask = FIELD_GET(AN8855_VA0_PORT, val) & ~BIT(port);
  
  	if (!(val & AN8855_VA0_VLAN_VALID)) {
@@ -358,7 +358,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  		return -EINVAL;
  	}
  
-@@ -594,20 +747,20 @@ static int an8855_port_set_vlan_mode(str
+@@ -660,20 +813,20 @@
  				  FIELD_PREP(AN8855_ACC_FRM, acc_frm));
  }
  
@@ -383,7 +383,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  }
  
  static int an8855_port_vlan_filtering(struct dsa_switch *ds, int port,
-@@ -683,7 +836,7 @@ static int an8855_port_vlan_filtering(st
+@@ -762,7 +915,7 @@
  			return ret;
  
  		/* Restore default PVID */
@@ -392,7 +392,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  		if (ret)
  			return ret;
  
-@@ -731,7 +884,7 @@ static int an8855_port_vlan_add(struct d
+@@ -811,7 +964,7 @@
  
  		/* Only configure PVID if VLAN filtering is enabled */
  		if (dsa_port_is_vlan_filtering(dsa_to_port(ds, port))) {
@@ -401,7 +401,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  			if (ret)
  				return ret;
  		}
-@@ -753,7 +906,7 @@ static int an8855_port_vlan_add(struct d
+@@ -833,7 +986,7 @@
  				return ret;
  		}
  
@@ -410,7 +410,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  		if (ret)
  			return ret;
  	}
-@@ -792,7 +945,7 @@ static int an8855_port_vlan_del(struct d
+@@ -872,7 +1025,7 @@
  				return ret;
  		}
  
@@ -419,7 +419,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  		if (ret)
  			return ret;
  	}
-@@ -812,7 +965,7 @@ an8855_port_mdb_add(struct dsa_switch *d
+@@ -892,7 +1045,7 @@
  	u32 val;
  	int ret;
  
@@ -428,7 +428,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	if (!vid)
  		vid = AN8855_PORT_VID_DEFAULT;
  
-@@ -849,7 +1002,7 @@ an8855_port_mdb_del(struct dsa_switch *d
+@@ -929,7 +1082,7 @@
  	u32 val;
  	int ret;
  
@@ -437,7 +437,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	if (!vid)
  		vid = AN8855_PORT_VID_DEFAULT;
  
-@@ -1122,8 +1275,11 @@ static int an8855_port_mirror_add(struct
+@@ -1202,8 +1355,11 @@
  	int ret;
  
  	/* Check for existent entry */
@@ -450,7 +450,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  
  	ret = regmap_read(priv->regmap, AN8855_MIR, &val);
  	if (ret)
-@@ -1131,8 +1287,11 @@ static int an8855_port_mirror_add(struct
+@@ -1211,8 +1367,11 @@
  
  	/* AN8855 supports 4 monitor port, but only use first group */
  	monitor_port = FIELD_GET(AN8855_MIRROR_PORT, val);
@@ -463,7 +463,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  
  	val = AN8855_MIRROR_EN;
  	val |= FIELD_PREP(AN8855_MIRROR_PORT, mirror->to_local_port);
-@@ -1195,7 +1354,7 @@ static void an8855_port_disable(struct d
+@@ -1275,7 +1434,7 @@
  	an8855_port_set_status(ds->priv, port, false);
  }
  
@@ -472,8 +472,8 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  {
  	struct an8855_priv *priv = ds->priv;
  
-@@ -1209,6 +1368,75 @@ static u32 en8855_get_phy_flags(struct d
- 	return AN8855_PHY_FLAGS_EN_CALIBRATION;
+@@ -1304,6 +1463,75 @@
+ 	return NULL;
  }
  
 +
@@ -548,7 +548,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  static enum dsa_tag_protocol
  an8855_get_tag_protocol(struct dsa_switch *ds, int port,
  			enum dsa_tag_protocol mp)
-@@ -1219,77 +1447,58 @@ an8855_get_tag_protocol(struct dsa_switc
+@@ -1314,77 +1542,58 @@
  /* Similar to MT7530 also trap link local frame and special frame to CPU */
  static int an8855_trap_special_frames(struct an8855_priv *priv)
  {
@@ -649,7 +649,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  }
  
  static int
-@@ -1312,12 +1521,306 @@ an8855_setup_pvid_vlan(struct an8855_pri
+@@ -1407,12 +1616,306 @@
  			       AN8855_PORT_VID_DEFAULT);
  }
  
@@ -956,7 +956,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	/* Enable and reset MIB counters */
  	ret = an8855_mib_init(priv);
  	if (ret)
-@@ -1355,7 +1858,7 @@ static int an8855_setup(struct dsa_switc
+@@ -1455,7 +1958,7 @@
  			return ret;
  
  		/* Set default PVID to on all user ports */
@@ -965,7 +965,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  		if (ret)
  			return ret;
  	}
-@@ -1430,7 +1933,7 @@ static int an8855_setup(struct dsa_switc
+@@ -1540,7 +2043,7 @@
  		if (ret)
  			return ret;
  
@@ -974,7 +974,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  		ret = regmap_update_bits(priv->regmap, AN8855_PVC_P(dp->index),
  					 AN8855_PVC_EG_TAG,
  					 FIELD_PREP(AN8855_PVC_EG_TAG, AN8855_VLAN_EG_CONSISTENT));
-@@ -1466,7 +1969,10 @@ static int an8855_setup(struct dsa_switc
+@@ -1576,7 +2079,10 @@
  			      FIELD_MAX(AN8855_AGE_UNIT) *
  			      AN8855_L2_AGING_MS_CONSTANT;
  
@@ -986,7 +986,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	ds->assisted_learning_on_cpu_port = true;
  
  	return 0;
-@@ -1564,9 +2070,10 @@ static void an8855_phylink_mac_link_up(s
+@@ -1674,9 +2180,10 @@
  	struct dsa_port *dp = dsa_phylink_to_port(config);
  	struct an8855_priv *priv = dp->ds->priv;
  	int port = dp->index;
@@ -998,7 +998,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	if (phylink_autoneg_inband(mode)) {
  		reg &= ~AN8855_PMCR_FORCE_MODE;
  	} else {
-@@ -1656,7 +2163,7 @@ static void an8855_pcs_get_state(struct
+@@ -1766,7 +2273,7 @@
  		state->speed = SPEED_2500;
  		break;
  	case AN8855_PMSR_SPEED_5000:
@@ -1007,7 +1007,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  		fallthrough;
  	default:
  		state->speed = SPEED_UNKNOWN;
-@@ -1678,8 +2185,6 @@ static int an8855_pcs_config(struct phyl
+@@ -1788,8 +2295,6 @@
  	u32 val;
  	int ret;
  
@@ -1016,7 +1016,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	/* TX FIR - improve TX EYE */
  	ret = regmap_update_bits(priv->regmap, AN8855_INTF_CTRL_10,
  				 AN8855_RG_DA_QP_TX_FIR_C2_SEL |
-@@ -2149,7 +2654,42 @@ static int an8855_pcs_config(struct phyl
+@@ -2259,7 +2764,42 @@
  
  static void an8855_pcs_an_restart(struct phylink_pcs *pcs)
  {
@@ -1060,7 +1060,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  }
  
  static const struct phylink_pcs_ops an8855_pcs_ops = {
-@@ -2169,7 +2709,7 @@ static const struct phylink_mac_ops an88
+@@ -2279,7 +2819,7 @@
  static const struct dsa_switch_ops an8855_switch_ops = {
  	.get_tag_protocol = an8855_get_tag_protocol,
  	.setup = an8855_setup,
@@ -1069,7 +1069,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	.phylink_get_caps = an8855_phylink_get_caps,
  	.get_strings = an8855_get_strings,
  	.get_ethtool_stats = an8855_get_ethtool_stats,
-@@ -2198,6 +2738,8 @@ static const struct dsa_switch_ops an885
+@@ -2310,6 +2850,8 @@
  	.port_max_mtu = an8855_port_max_mtu,
  	.port_mirror_add = an8855_port_mirror_add,
  	.port_mirror_del = an8855_port_mirror_del,
@@ -1078,7 +1078,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  };
  
  static int an8855_read_switch_id(struct an8855_priv *priv)
-@@ -2222,6 +2764,7 @@ static int an8855_read_switch_id(struct
+@@ -2334,6 +2876,7 @@
  static int an8855_switch_probe(struct platform_device *pdev)
  {
  	struct an8855_priv *priv;
@@ -1086,7 +1086,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	u32 val;
  	int ret;
  
-@@ -2230,6 +2773,12 @@ static int an8855_switch_probe(struct pl
+@@ -2342,6 +2885,12 @@
  		return -ENOMEM;
  
  	priv->dev = &pdev->dev;
@@ -1099,7 +1099,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	priv->phy_require_calib = of_property_read_bool(priv->dev->of_node,
  							"airoha,ext-surge");
  
-@@ -2240,13 +2789,16 @@ static int an8855_switch_probe(struct pl
+@@ -2352,13 +2901,16 @@
  
  	/* Get regmap from MFD */
  	priv->regmap = dev_get_regmap(priv->dev->parent, NULL);
@@ -1117,7 +1117,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  		/* Poll HWTRAP reg to wait for Switch to fully Init */
  		ret = regmap_read_poll_timeout(priv->regmap, AN8855_HWTRAP, val,
  					       val && val != 0xffffffff, 1000, 1000000);
-@@ -2258,6 +2810,12 @@ static int an8855_switch_probe(struct pl
+@@ -2370,6 +2922,12 @@
  	if (ret)
  		return ret;
  
@@ -1130,7 +1130,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  	priv->ds = devm_kzalloc(priv->dev, sizeof(*priv->ds), GFP_KERNEL);
  	if (!priv->ds)
  		return -ENOMEM;
-@@ -2275,7 +2833,22 @@ static int an8855_switch_probe(struct pl
+@@ -2387,7 +2945,22 @@
  
  	dev_set_drvdata(priv->dev, priv);
  
@@ -1154,7 +1154,7 @@ Subject: [PATCH] net: dsa: add AN8855 driver and netlink support
  }
  
  static void an8855_switch_remove(struct platform_device *pdev)
-@@ -2284,6 +2857,8 @@ static void an8855_switch_remove(struct
+@@ -2396,6 +2969,8 @@
  
  	if (priv)
  		dsa_unregister_switch(priv->ds);

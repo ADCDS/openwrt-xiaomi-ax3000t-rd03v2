@@ -179,27 +179,60 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
 +	 * a normal VLAN tag (EGRESS_TAG), not a stacked tag appended after a
 +	 * special/DSA tag. This carries the DSA source/dest port in the VID.
  	 */
--	if (port == AN8855_CPU_PORT)
+ 	if (dsa_is_cpu_port(priv->ds, port))
 -		val = AN8855_VLAN_EGRESS_STACK;
-+	if (dsa_is_cpu_port(priv->ds, port))
 +		val = AN8855_VLAN_EGRESS_TAG;
  	/* Decide whether adding tag or not for those outgoing packets from the
  	 * port inside the VLAN.
  	 */
-@@ -847,7 +816,7 @@
- 		/* CPU port is set to fallback mode to let untagged
- 		 * frames pass through.
+@@ -844,14 +813,10 @@
+ 	 */
+ 	if (vlan_filtering) {
+ 		u32 acc_frm;
+-		/* This port's OWN CPU port is set to fallback mode to let
+-		 * untagged frames pass through. Must not be a fixed port: this
+-		 * board has two CPU ports and a user port may be homed on
+-		 * either (see .port_change_conduit), so programming a fixed one
+-		 * leaves the port's actual conduit misconfigured.
++		/* CPU port is set to fallback mode to let untagged
++		 * frames pass through.
  		 */
--		ret = an8855_port_set_vlan_mode(priv, AN8855_CPU_PORT,
+-		ret = an8855_port_set_vlan_mode(priv,
+-						dsa_upstream_port(ds, port),
 +		ret = an8855_port_set_vlan_mode(priv, dsa_upstream_port(ds, port),
  						AN8855_PORT_FALLBACK_MODE,
  						AN8855_VLAN_EG_CONSISTENT,
  						AN8855_VLAN_USER,
-@@ -914,13 +883,15 @@
+@@ -863,20 +828,11 @@
+ 		if (ret)
+ 			return ret;
+ 
+-		/* Only accept tagged frames if the port has no PVID: with no
+-		 * PVID there is nothing to classify an untagged frame into.
+-		 * Note AN8855_PORT_VID_DEFAULT is 0, so "!= default" means the
+-		 * PVID IS set - the test used to be inverted, which let a
+-		 * tagged-only trunk port accept untagged ingress and classify
+-		 * it into VID 0. an8855_setup_pvid_vlan() programs VID 0 with a
+-		 * bare AN8855_VA0_PORT (GENMASK(31,26)), i.e. every port a
+-		 * member, so such a frame was flooded to the whole bridge and
+-		 * the CPU regardless of the configured VLAN topology.
+-		 */
++		/* Only accept tagged frames if PVID is not set */
+ 		if (FIELD_GET(AN8855_G0_PORT_VID, val) != AN8855_PORT_VID_DEFAULT)
+-			acc_frm = AN8855_VLAN_ACC_ALL;
+-		else
+ 			acc_frm = AN8855_VLAN_ACC_TAGGED;
++		else
++			acc_frm = AN8855_VLAN_ACC_ALL;
+ 
+ 		/* Trapped into security mode allows packet forwarding through VLAN
+ 		 * table lookup.
+@@ -927,14 +883,15 @@
  		}
  
  		if (disable_cpu_vlan) {
--			ret = an8855_port_set_vlan_mode(priv, AN8855_CPU_PORT,
+-			ret = an8855_port_set_vlan_mode(priv,
+-							dsa_upstream_port(ds, port),
 -							AN8855_PORT_MATRIX_MODE,
 -							AN8855_VLAN_EG_CONSISTENT,
 -							AN8855_VLAN_USER,
@@ -218,7 +251,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		}
  	}
  
-@@ -1449,6 +1420,129 @@
+@@ -1463,6 +1420,129 @@
  	return NULL;
  }
  
@@ -348,7 +381,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  
  static int
  an8855_get_mac_eee(struct dsa_switch *ds, int port,
-@@ -1522,7 +1616,13 @@
+@@ -1536,7 +1616,13 @@
  an8855_get_tag_protocol(struct dsa_switch *ds, int port,
  			enum dsa_tag_protocol mp)
  {
@@ -363,7 +396,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  }
  
  /* Similar to MT7530 also trap link local frame and special frame to CPU */
-@@ -1602,6 +1702,65 @@
+@@ -1616,6 +1702,65 @@
  			       AN8855_PORT_VID_DEFAULT);
  }
  
@@ -429,7 +462,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  static int an8855_led_set_usr_def(struct dsa_switch *ds, u8 entity,
  		int polar, u16 on_evt, u16 blk_evt, u8 led_freq)
  {
-@@ -1913,10 +2072,8 @@
+@@ -1927,10 +2072,8 @@
  		if (ret)
  			return ret;
  
@@ -442,7 +475,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		 */
  		ret = regmap_write(priv->regmap, AN8855_PORTMATRIX_P(dp->index),
  				   FIELD_PREP(AN8855_PORTMATRIX,
-@@ -1951,9 +2108,9 @@
+@@ -1965,9 +2108,9 @@
  
  	/* Set CPU port number for trapped frames. With multiple CPU ports,
  	 * frames trapped with PORT_FW set to CPU_ONLY can only target ONE
@@ -455,7 +488,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	 */
  	ret = regmap_update_bits(priv->regmap, AN8855_MFC,
  				 AN8855_CPU_EN | AN8855_CPU_PORT_IDX,
-@@ -1969,14 +2126,15 @@
+@@ -1983,14 +2126,15 @@
  		return ret;
  
  	dsa_switch_for_each_cpu_port(dp, ds) {
@@ -478,7 +511,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		if (ret)
  			return ret;
  
-@@ -2005,11 +2163,13 @@
+@@ -2019,11 +2163,13 @@
  			return ret;
  
  		/* Enable Unknown Unicast Forward on CPU port */
@@ -494,7 +527,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		if (ret)
  			return ret;
  	}
-@@ -2071,6 +2231,57 @@
+@@ -2085,6 +2231,57 @@
  	 */
  	ds->assisted_learning_on_cpu_port = true;
  
@@ -552,7 +585,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	return 0;
  }
  
-@@ -2080,6 +2291,10 @@
+@@ -2094,6 +2291,10 @@
  	struct dsa_port *dp = dsa_phylink_to_port(config);
  	struct an8855_priv *priv = dp->ds->priv;
  
@@ -563,7 +596,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	switch (interface) {
  	case PHY_INTERFACE_MODE_SGMII:
  	case PHY_INTERFACE_MODE_2500BASEX:
-@@ -2818,10 +3033,13 @@
+@@ -2832,10 +3033,13 @@
  	.set_ageing_time = an8855_set_ageing_time,
  	.port_bridge_join = an8855_port_bridge_join,
  	.port_bridge_leave = an8855_port_bridge_leave,
@@ -578,7 +611,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	.port_pre_bridge_flags = an8855_port_pre_bridge_flags,
  	.port_bridge_flags = an8855_port_bridge_flags,
  	.port_vlan_filtering = an8855_port_vlan_filtering,
-@@ -2902,6 +3120,12 @@
+@@ -2916,6 +3120,12 @@
  					       val && val != 0xffffffff, 1000, 1000000);
  		if (ret)
  			return ret;
