@@ -1,0 +1,29 @@
+name: AN8855 driver divergence
+
+# files/ holds the only copy of drivers/net/dsa/an8855.c; the NSS build is that
+# file plus 999-2757 and the five 999-27xx patches. This guard fails a push or PR
+# that makes the two builds diverge in a way nobody declared, or that stops an NSS
+# patch applying. It needs no toolchain and runs in about a second.
+#
+# Until v1.6 the NSS build carried a full second copy of the driver instead, and
+# fixes to one copy never reached the other - that caused issue #9 and three more
+# one-sided bugs. This job exists so that cannot happen silently again.
+
+on:
+  push:
+    paths:
+      - 'files/target/linux/qualcommax/files/drivers/net/dsa/**'
+      - 'files/target/linux/qualcommax/patches-6.12/**'
+      - 'nss/overlay/target/linux/qualcommax/patches-6.12/**'
+      - 'tools/check-nss-divergence.sh'
+      - 'tools/nss-divergence.expected'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct both drivers and compare
+        run: ./tools/check-nss-divergence.sh
