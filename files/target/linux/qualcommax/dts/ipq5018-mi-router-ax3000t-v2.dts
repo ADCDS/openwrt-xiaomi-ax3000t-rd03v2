@@ -579,13 +579,23 @@
 			 * .preferred_default_local_cpu_port; move the WAN with
 			 *   ip link set wan type dsa conduit eth0
 			 *
-			 * That move only works on the NSS build. The default
-			 * driver implements neither .port_change_conduit (so
-			 * DSA answers -EOPNOTSUPP) nor the per-CPU-port setup
-			 * the NSS driver does via dsa_switch_for_each_cpu_port
-			 * — it programs the special tag, flood bits and port
-			 * matrix for port@5 only, so port@4 is not a usable
-			 * conduit there even if DSA allowed the switch.
+			 * Both builds implement the move: .port_change_conduit
+			 * swaps the CPU bit in the port matrix, and setup()
+			 * programs every CPU port via dsa_switch_for_each_cpu_port
+			 * (the special tag stays ENABLED here, unlike the NSS
+			 * build, which clears it for tag_8021q).
+			 *
+			 * Verified on hardware 2026-08-01, both builds: moving
+			 * the backhaul port to eth0 carried all traffic with
+			 * 0% loss, the port matrix CPU bit moved 5 -> 4, and
+			 * the MDI link came up at 1000/full within a second,
+			 * reproducibly across move/revert cycles.
+			 *
+			 * The link only trains at 100 Mbps if port@4 is left
+			 * unprogrammed — which is what the driver did before
+			 * the per-CPU-port setup below. Do not read a 100 Mbps
+			 * conduit as a hardware limit; it means setup() skipped
+			 * this port. See issue #9.
 			 */
 			port@4 {
 				reg = <4>;

@@ -11,6 +11,7 @@
 #include <linux/if_bridge.h>
 #include <linux/iopoll.h>
 #include <linux/netdevice.h>
+#include <linux/netlink.h>
 #include <linux/of_net.h>
 #include <linux/of_platform.h>
 #include <linux/phylink.h>
@@ -225,10 +226,24 @@ static int an8855_update_port_member(struct dsa_switch *ds, int port,
 			return ret;
 	}
 
-	/* Add/remove all other ports to this port's portvlan mask */
+	/* Add/remove all other ports to this port's portvlan mask, and keep
+	 * this port's own CPU port in it.
+	 *
+	 * This must use AN8855_PORTMATRIX (bits 5:0), not AN8855_USER_PORTMATRIX
+	 * (bits 4:0). The narrower mask dates from when port 5 was the only CPU
+	 * port, so the CPU bit sat safely outside it. This board declares a
+	 * second CPU port on port@4, which the narrow mask *does* cover — so
+	 * every bridge/STP update would clear the CPU bit of any port whose
+	 * conduit is eth0, silently cutting it off from the host. Include the
+	 * upstream port explicitly so it survives.
+	 */
+	port_mask |= BIT(dsa_upstream_port(ds, port));
+
 	return regmap_update_bits(priv->regmap, AN8855_PORTMATRIX_P(port),
-				  AN8855_USER_PORTMATRIX,
-				  join ? port_mask : ~port_mask);
+				  AN8855_PORTMATRIX,
+				  FIELD_PREP(AN8855_PORTMATRIX,
+					     join ? port_mask :
+						    BIT(dsa_upstream_port(ds, port))));
 }
 
 static int an8855_port_pre_bridge_flags(struct dsa_switch *ds, int port,
@@ -351,6 +366,57 @@ static void an8855_port_bridge_leave(struct dsa_switch *ds, int port,
 			   AN8855_PORT_VLAN,
 			   FIELD_PREP(AN8855_PORT_VLAN,
 				      AN8855_PORT_MATRIX_MODE));
+}
+
+static int an8855_port_change_conduit(struct dsa_switch *ds, int port,
+				      struct net_device *conduit,
+				      struct netlink_ext_ack *extack)
+{
+	struct an8855_priv *priv = ds->priv;
+	struct dsa_port *cpu_dp;
+	u32 matrix;
+	int ret;
+
+	/* No LAG offload support: a LAG of DSA conduits cannot be
+	 * represented in the port matrix.
+	 */
+	if (netif_is_lag_master(conduit)) {
+		NL_SET_ERR_MSG_MOD(extack, "LAG DSA conduit is not supported");
+		return -EOPNOTSUPP;
+	}
+
+	cpu_dp = conduit->dsa_ptr;
+	if (cpu_dp->ds != ds) {
+		NL_SET_ERR_MSG_MOD(extack, "Conduit is not a local CPU port");
+		return -EOPNOTSUPP;
+	}
+
+	/* Swap the CPU port in the port matrix: clear every CPU port bit,
+	 * keep the user (bridge peer) members and set the new CPU port.
+	 * Frames ingressing this port can then only egress the new CPU
+	 * port, while TX from either conduit is still steered to the
+	 * destination port by the DSA special tag.
+	 */
+	ret = regmap_read(priv->regmap, AN8855_PORTMATRIX_P(port), &matrix);
+	if (ret)
+		return ret;
+
+	matrix = FIELD_GET(AN8855_PORTMATRIX, matrix);
+	matrix &= ~dsa_cpu_ports(ds);
+	matrix |= BIT(cpu_dp->index);
+
+	ret = regmap_update_bits(priv->regmap, AN8855_PORTMATRIX_P(port),
+				 AN8855_PORTMATRIX,
+				 FIELD_PREP(AN8855_PORTMATRIX, matrix));
+	if (ret)
+		return ret;
+
+	/* Flush dynamic FDB entries of the port to avoid stale entries
+	 * resolved towards the old CPU port.
+	 */
+	an8855_port_fast_age(ds, port);
+
+	return 0;
 }
 
 static int an8855_port_fdb_add(struct dsa_switch *ds, int port,
@@ -1344,9 +1410,14 @@ static int an8855_setup(struct dsa_switch *ds)
 		if (ret)
 			return ret;
 
-		/* Individual user ports get connected to CPU port only */
+		/* Individual user ports get connected to their own CPU port
+		 * only. With two CPU ports declared, each user port may be
+		 * assigned a different conduit (see .port_change_conduit), so
+		 * target the port's own upstream instead of a fixed one.
+		 */
 		ret = regmap_write(priv->regmap, AN8855_PORTMATRIX_P(dp->index),
-				   FIELD_PREP(AN8855_PORTMATRIX, BIT(AN8855_CPU_PORT)));
+				   FIELD_PREP(AN8855_PORTMATRIX,
+					      BIT(dsa_upstream_port(ds, dp->index))));
 		if (ret)
 			return ret;
 
@@ -1375,60 +1446,70 @@ static int an8855_setup(struct dsa_switch *ds)
 			return ret;
 	}
 
-	/* Enable Airoha header mode on the cpu port */
-	ret = regmap_write(priv->regmap, AN8855_PVC_P(AN8855_CPU_PORT),
-			   AN8855_PORT_SPEC_REPLACE_MODE | AN8855_PORT_SPEC_TAG);
-	if (ret)
-		return ret;
-
-	/* Unknown multicast frame forwarding to the cpu port */
-	ret = regmap_write(priv->regmap, AN8855_UNMF, BIT(AN8855_CPU_PORT));
-	if (ret)
-		return ret;
-
-	/* Set CPU port number */
+	/* Set CPU port number for trapped frames. With multiple CPU ports,
+	 * frames trapped with PORT_FW set to CPU_ONLY can only target ONE
+	 * CPU port, the default one. The Airoha special tag carries the
+	 * source port, so the conduit RX demux still delivers them to the
+	 * correct user netdev even if they ingress from the other conduit.
+	 */
 	ret = regmap_update_bits(priv->regmap, AN8855_MFC,
 				 AN8855_CPU_EN | AN8855_CPU_PORT_IDX,
 				 AN8855_CPU_EN |
-				 FIELD_PREP(AN8855_CPU_PORT_IDX, AN8855_CPU_PORT));
+				 FIELD_PREP(AN8855_CPU_PORT_IDX,
+					    dsa_switch_upstream_port(ds)));
 	if (ret)
 		return ret;
 
-	/* CPU port gets connected to all user ports of
-	 * the switch.
-	 */
-	ret = regmap_write(priv->regmap, AN8855_PORTMATRIX_P(AN8855_CPU_PORT),
-			   FIELD_PREP(AN8855_PORTMATRIX, dsa_user_ports(ds)));
+	/* Unknown multicast frame forwarding to the cpu port(s) */
+	ret = regmap_write(priv->regmap, AN8855_UNMF, dsa_cpu_ports(ds));
 	if (ret)
 		return ret;
 
-	/* CPU port is set to fallback mode to let untagged
-	 * frames pass through.
-	 */
-	ret = regmap_update_bits(priv->regmap, AN8855_PCR_P(AN8855_CPU_PORT),
-				 AN8855_PORT_VLAN,
-				 FIELD_PREP(AN8855_PORT_VLAN, AN8855_PORT_FALLBACK_MODE));
-	if (ret)
-		return ret;
+	dsa_switch_for_each_cpu_port(dp, ds) {
+		/* Enable Airoha header mode on the cpu port. Note this is the
+		 * inverse of the tag_8021q build, which clears these bits: the
+		 * default tagger relies on the Airoha special tag for DSA
+		 * demux, so it must stay enabled on EVERY CPU port.
+		 */
+		ret = regmap_write(priv->regmap, AN8855_PVC_P(dp->index),
+				   AN8855_PORT_SPEC_REPLACE_MODE |
+				   AN8855_PORT_SPEC_TAG);
+		if (ret)
+			return ret;
 
-	/* Enable Broadcast Forward on CPU port */
-	ret = regmap_set_bits(priv->regmap, AN8855_BCF, BIT(AN8855_CPU_PORT));
-	if (ret)
-		return ret;
+		/* CPU port gets connected to all user ports of
+		 * the switch.
+		 */
+		ret = regmap_write(priv->regmap, AN8855_PORTMATRIX_P(dp->index),
+				   FIELD_PREP(AN8855_PORTMATRIX,
+					      dsa_user_ports(ds)));
+		if (ret)
+			return ret;
 
-	/* Enable Unknown Unicast Forward on CPU port */
-	ret = regmap_set_bits(priv->regmap, AN8855_UNUF, BIT(AN8855_CPU_PORT));
-	if (ret)
-		return ret;
+		/* CPU port is set to fallback mode to let untagged
+		 * frames pass through.
+		 */
+		ret = regmap_update_bits(priv->regmap, AN8855_PCR_P(dp->index),
+					 AN8855_PORT_VLAN,
+					 FIELD_PREP(AN8855_PORT_VLAN,
+						    AN8855_PORT_FALLBACK_MODE));
+		if (ret)
+			return ret;
 
-	/* Enable Unknown Multicast Forward on CPU port */
-	ret = regmap_set_bits(priv->regmap, AN8855_UNMF, BIT(AN8855_CPU_PORT));
-	if (ret)
-		return ret;
+		/* Enable Broadcast Forward on CPU port */
+		ret = regmap_set_bits(priv->regmap, AN8855_BCF, BIT(dp->index));
+		if (ret)
+			return ret;
 
-	ret = regmap_set_bits(priv->regmap, AN8855_UNIPMF, BIT(AN8855_CPU_PORT));
-	if (ret)
-		return ret;
+		/* Enable Unknown Unicast Forward on CPU port */
+		ret = regmap_set_bits(priv->regmap, AN8855_UNUF, BIT(dp->index));
+		if (ret)
+			return ret;
+
+		ret = regmap_set_bits(priv->regmap, AN8855_UNIPMF, BIT(dp->index));
+		if (ret)
+			return ret;
+	}
 
 	/* Setup Trap special frame to CPU rules */
 	ret = an8855_trap_special_frames(priv);
@@ -2197,6 +2278,7 @@ static const struct dsa_switch_ops an8855_switch_ops = {
 	.set_ageing_time = an8855_set_ageing_time,
 	.port_bridge_join = an8855_port_bridge_join,
 	.port_bridge_leave = an8855_port_bridge_leave,
+	.port_change_conduit = an8855_port_change_conduit,
 	.port_fast_age = an8855_port_fast_age,
 	.port_stp_state_set = an8855_port_stp_state_set,
 	.preferred_default_local_cpu_port = an8855_preferred_default_local_cpu_port,
