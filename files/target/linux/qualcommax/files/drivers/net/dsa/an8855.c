@@ -580,7 +580,7 @@ static int an8855_vlan_add(struct an8855_priv *priv, u8 port, u16 vid,
 	 * that VLAN tags would be appended after hardware special tag used as
 	 * DSA tag.
 	 */
-	if (port == AN8855_CPU_PORT)
+	if (dsa_is_cpu_port(priv->ds, port))
 		val = AN8855_VLAN_EGRESS_STACK;
 	/* Decide whether adding tag or not for those outgoing packets from the
 	 * port inside the VLAN.
@@ -691,10 +691,14 @@ static int an8855_port_vlan_filtering(struct dsa_switch *ds, int port,
 	 */
 	if (vlan_filtering) {
 		u32 acc_frm;
-		/* CPU port is set to fallback mode to let untagged
-		 * frames pass through.
+		/* This port's OWN CPU port is set to fallback mode to let
+		 * untagged frames pass through. Must not be a fixed port: this
+		 * board has two CPU ports and a user port may be homed on
+		 * either (see .port_change_conduit), so programming a fixed one
+		 * leaves the port's actual conduit misconfigured.
 		 */
-		ret = an8855_port_set_vlan_mode(priv, AN8855_CPU_PORT,
+		ret = an8855_port_set_vlan_mode(priv,
+						dsa_upstream_port(ds, port),
 						AN8855_PORT_FALLBACK_MODE,
 						AN8855_VLAN_EG_CONSISTENT,
 						AN8855_VLAN_USER,
@@ -706,11 +710,20 @@ static int an8855_port_vlan_filtering(struct dsa_switch *ds, int port,
 		if (ret)
 			return ret;
 
-		/* Only accept tagged frames if PVID is not set */
+		/* Only accept tagged frames if the port has no PVID: with no
+		 * PVID there is nothing to classify an untagged frame into.
+		 * Note AN8855_PORT_VID_DEFAULT is 0, so "!= default" means the
+		 * PVID IS set - the test used to be inverted, which let a
+		 * tagged-only trunk port accept untagged ingress and classify
+		 * it into VID 0. an8855_setup_pvid_vlan() programs VID 0 with a
+		 * bare AN8855_VA0_PORT (GENMASK(31,26)), i.e. every port a
+		 * member, so such a frame was flooded to the whole bridge and
+		 * the CPU regardless of the configured VLAN topology.
+		 */
 		if (FIELD_GET(AN8855_G0_PORT_VID, val) != AN8855_PORT_VID_DEFAULT)
-			acc_frm = AN8855_VLAN_ACC_TAGGED;
-		else
 			acc_frm = AN8855_VLAN_ACC_ALL;
+		else
+			acc_frm = AN8855_VLAN_ACC_TAGGED;
 
 		/* Trapped into security mode allows packet forwarding through VLAN
 		 * table lookup.
@@ -761,7 +774,8 @@ static int an8855_port_vlan_filtering(struct dsa_switch *ds, int port,
 		}
 
 		if (disable_cpu_vlan) {
-			ret = an8855_port_set_vlan_mode(priv, AN8855_CPU_PORT,
+			ret = an8855_port_set_vlan_mode(priv,
+							dsa_upstream_port(ds, port),
 							AN8855_PORT_MATRIX_MODE,
 							AN8855_VLAN_EG_CONSISTENT,
 							AN8855_VLAN_USER,
