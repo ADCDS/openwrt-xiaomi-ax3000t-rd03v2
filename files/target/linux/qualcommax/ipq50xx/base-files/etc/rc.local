@@ -6,9 +6,9 @@
 # so they have to be re-asserted on every boot, not just after an upgrade.
 # uboot-envtools generates fw_env.config for this board, so fw_setenv works.
 #
-# The NSS build ships its own rc.local (nss/overlay/...) which overwrites this
-# file and repeats the same block alongside the NSS runtime knobs — keep the two
-# in sync when changing either.
+# This file is the ONLY rc.local for both builds. build.sh (NSS=1) prepends the
+# NSS runtime knobs above this block at build time — do not add a second copy
+# under nss/overlay/.
 if [ -e /etc/fw_env.config ]; then
 	fw_setenv flag_boot_success 1 2>/dev/null
 	fw_setenv flag_last_success 1 2>/dev/null

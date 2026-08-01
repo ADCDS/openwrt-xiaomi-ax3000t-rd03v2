@@ -50,6 +50,37 @@ if [ "$WITH_NSS" = "1" ]; then
 		target/linux/qualcommax/image/ipq50xx.mk
 	# NSS kernel config symbols (skb_recycler, conntrack DSCP-remark ext)
 	cat ../nss/config.append >> target/linux/qualcommax/config-6.12
+
+	# board.d + rc.local NSS deltas. These files used to be shadowed by full
+	# copies under nss/overlay/ (a fix to files/ never reached the NSS build);
+	# they are now single-source in files/ and their small NSS-only deltas are
+	# applied here. anchor() fails the build loudly if an anchor is missing or
+	# ambiguous — a silently-skipped sed is how the NSS dtsi include was lost.
+	anchor() {  # anchor <count-expected> <pattern> <file>
+		local n; n=$(grep -c -- "$2" "$3")
+		[ "$n" = "$1" ] || { echo "ERROR: anchor '$2' matched $n times (want $1) in $3" >&2; exit 1; }
+	}
+	# Gateway topology: move the WAN onto the eth0 (1G) CPU port so WAN<->LAN
+	# routing crosses two CPU ports, which NSS offload requires.
+	NET=target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
+	anchor 1 'ucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"' "$NET"
+	sed -i '/ucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"/i\		# NSS offload gateway: user ports default to eth1 (2.5G CPU port); the\
+		# WAN is moved to eth0 (1G CPU port) so WAN<->LAN routing is offloaded\
+		# across the two CPU ports by the NSS firmware. See docs/nss-offload.md.' "$NET"
+	sed -i '/ucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"/a\		ucidef_set_network_device_conduit "wan" "eth0"' "$NET"
+	# NSS data-plane runtime knobs, prepended so rc.local's boot-flag block still
+	# runs after them. See docs/nss-offload.md.
+	RCL=target/linux/qualcommax/ipq50xx/base-files/etc/rc.local
+	anchor 1 "U-Boot's dual-boot failsafe" "$RCL"
+	sed -i '1i\
+# NSS hardware offload runtime knobs. rc.local runs late in boot, after the\
+# qca-nss modules are autoloaded, so the /proc/sys/dev/nss tree exists here.\
+#  - general/redirect: hand exception/accelerated traffic to the NSS data plane\
+#  - ipv{4,6}cfg/*_accel_mode: enable the connection-manager fast path\
+echo 1 > /proc/sys/dev/nss/general/redirect 2>/dev/null\
+echo 1 > /proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode 2>/dev/null\
+echo 1 > /proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode 2>/dev/null\
+' "$RCL"
 fi
 
 # ---- optional: private profile overlay (PROFILE=/path/to/profile) ----
