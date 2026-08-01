@@ -468,20 +468,29 @@ Link: https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/11
  static void an8855_teardown(struct dsa_switch *ds)
 --- a/drivers/net/dsa/an8855.h
 +++ b/drivers/net/dsa/an8855.h
-@@ -908,6 +908,16 @@
- 	u8 eee_enable;
+@@ -777,18 +777,14 @@
+ 	u8 mirror_tx;
  	u8 port_isolated_map;
  
+-	/* Shadow PVID per port, as configured by a VLAN-aware bridge.
+-	 *
+-	 * The PVID register is cleared whenever VLAN filtering is turned off,
+-	 * and the bridge does not replay its VLANs when it is turned back on -
+-	 * so the register alone cannot be trusted to say whether the port has
+-	 * a PVID. Record the intent here and let an8855_port_commit_vlan()
+-	 * program the hardware, so a runtime `vlan_filtering 0 -> 1` toggle
+-	 * restores what the bridge actually asked for.
+-	 *
+-	 * Zero means "no PVID" (AN8855_PORT_VID_DEFAULT), which is what
+-	 * devm_kzalloc() leaves.
 +	/* Shadow PVIDs. The port PVID registers are a single resource that
 +	 * two subsystems want to own - tag_8021q and a VLAN-aware bridge -
 +	 * so neither writes them directly. Both record their intent here and
 +	 * call an8855_port_commit_vlan(), which programs whichever one the
 +	 * port's current VLAN-awareness selects. Zero means "no PVID"
 +	 * (AN8855_PORT_VID_DEFAULT), which is what devm_kzalloc() leaves.
-+	 */
+ 	 */
 +	u16 pvid_tag_8021q[AN8855_NUM_PORTS];
-+	u16 pvid_bridge[AN8855_NUM_PORTS];
-+
- 	bool phy_require_calib;
+ 	u16 pvid_bridge[AN8855_NUM_PORTS];
  
- 	unsigned int phy_base_new;
+ 	bool phy_require_calib;

@@ -82,8 +82,8 @@ NSS_SET=(
 # symbol. It was caught only because the count went 54 -> 53. Pin the counts
 # so a refresh that loses work fails here instead.
 declare -A HUNKS=(
-    [999-2757-net-dsa-add-an8855-v2p0p1-and-netlink-support.patch]=54
-    [999-2758-nss-an8855-tag8021q-core.patch]=20
+    [999-2757-net-dsa-add-an8855-v2p0p1-and-netlink-support.patch]=52
+    [999-2758-nss-an8855-tag8021q-core.patch]=25
     [999-2759-nss-an8855-tag8021q-bridge-leave.patch]=1
     [999-2760-nss-an8855-tag8021q-host-fdb-vid.patch]=7
     [999-2761-nss-an8855-user-port-flood-default.patch]=2

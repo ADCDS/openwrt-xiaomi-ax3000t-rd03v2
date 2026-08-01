@@ -777,6 +777,20 @@ struct an8855_priv {
 	u8 mirror_tx;
 	u8 port_isolated_map;
 
+	/* Shadow PVID per port, as configured by a VLAN-aware bridge.
+	 *
+	 * The PVID register is cleared whenever VLAN filtering is turned off,
+	 * and the bridge does not replay its VLANs when it is turned back on -
+	 * so the register alone cannot be trusted to say whether the port has
+	 * a PVID. Record the intent here and let an8855_port_commit_vlan()
+	 * program the hardware, so a runtime `vlan_filtering 0 -> 1` toggle
+	 * restores what the bridge actually asked for.
+	 *
+	 * Zero means "no PVID" (AN8855_PORT_VID_DEFAULT), which is what
+	 * devm_kzalloc() leaves.
+	 */
+	u16 pvid_bridge[AN8855_NUM_PORTS];
+
 	bool phy_require_calib;
 };
 
