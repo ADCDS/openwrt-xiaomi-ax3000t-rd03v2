@@ -1,0 +1,244 @@
+ecm: put the egress tag_8021q VID in NSS rules so routed frames deliver precisely
+
+ECM resolves a DSA user port (or a bridge over one) to its bare GMAC conduit
+(patch 0026), so routed rules carry no VLAN and the NSS firmware emits the
+forwarded frames UNTAGGED on the conduit. The AN8855 classifies untagged CPU
+ingress into the CPU port's PVID - pinned to the all-ports VID 0 - and FLOODS.
+That delivers (it is what the 895 Mbit/s-era builds relied on implicitly), but
+switch flood replication is gated by the slowest member port: a 100 Mb/s
+device on the LAN caps every routed flow near its own link speed (measured:
+~60 Mbit/s TCP with such a port in the flood set, 860 Mbit/s without).
+
+Instead, put each side's tag_8021q VID into vlan_primary_rule: the 'to' side
+VID as egress_vlan_tag (flow-direction egress) and the 'from' side VID as
+ingress_vlan_tag (return-direction egress; it also matches the tag the CPU
+port itself adds on ingress frames, since the CPU port's per-VID egress
+tagging is TAGGED for every tag_8021q VID). The switch then ARL-forwards
+within that VID to exactly the learned port - verified by raw-frame injection:
+bridge-VID-tagged frames deliver 5/5 with zero flood leak.
+
+The VID is taken from each side's INNERMOST hierarchy element
+([x_ifaces_first]) - the same element whose AE number became the rule's
+flow/return interface number - which in every DSA-backed topology is the DSA
+user port itself (ecm_interface_heirarchy_construct() descends br-lan/lanN,
+br-wan/lanN and pppoe-wan -> br-wan -> lanN all the way to the port). Outer
+elements are never consulted: a bridge at the top of the list does not imply
+the flow egresses a DSA port (it may egress a Wi-Fi member of the same
+bridge). The helper additionally refuses to yield a VID when the switch does
+not run a tag_8021q tagger (the VID would be meaningless to e.g. qca8k) and
+when the port's bridge is VLAN-aware (delivery then follows the bridge's real
+VLANs; the vsc73xx tagger's own xmit refuses the bridge VID in that case
+too, and the port's PVID is the bridge PVID so NSS-ingress frames would not
+carry the tag_8021q VID either).
+
+Routed connections only; a rule already claimed by a real VLAN interface (or
+the bridged passthrough) is left alone. VID 0 doubles as "not DSA-backed", so
+non-DSA topologies are untouched.
+
+Gate per side, not both-sides-combined: when the L3 interface is itself a VLAN
+netdev (br-lan.1 over a vlan_filtering bridge - the standard OpenWrt shape),
+the stock VLAN branch legitimately claims that side of the rule, and a
+combined gate then skips the DSA side entirely, leaving its egress on the
+flood path. Measured on the target: combined gate = 55 Mbit/s TCP (flood,
+gated by a 100 Mb/s member port); per-side gate = 940 Mbit/s TCP at 98.9%
+idle, 14 retransmits, zero flood leak.
+
+--- a/frontends/nss/ecm_nss_common.h
++++ b/frontends/nss/ecm_nss_common.h
+@@ -114,6 +114,72 @@
+ 	return dev;
+ }
+ 
++#if IS_ENABLED(CONFIG_NET_DSA)
++#include <linux/dsa/8021q.h>
++#include <linux/if_bridge.h>
++#endif
++
++/*
++ * ecm_nss_common_dsa_8021q_vid_get()
++ *	The tag_8021q VID that delivers a frame PRECISELY to `dev` when dev is
++ *	a DSA user port whose switch runs a tag_8021q tagger:
++ *
++ *	  - a bridged DSA user port  -> its bridge's tag_8021q VID (the switch
++ *	    then ARL-forwards within that VID to the learned port), but only
++ *	    while the bridge is NOT VLAN-aware: a VLAN-aware bridge delivers by
++ *	    its real VLANs and the tagger itself refuses the bridge VID then
++ *	    (see vsc73xx_xmit());
++ *	  - a standalone DSA user port -> its standalone VID (members: the port
++ *	    and its CPU conduit only).
++ *
++ *	Returns 0 (never a tag_8021q VID) when dev is not a DSA user port, the
++ *	switch does not run a tag_8021q tagger, or the bridge is VLAN-aware -
++ *	callers use the value as both VID and found-flag. Bridge masters are
++ *	deliberately NOT resolved here: a bridge above the interface list does
++ *	not imply the flow egresses a DSA port (it may egress a Wi-Fi or other
++ *	non-DSA member of the same bridge), so only the port itself is ever a
++ *	valid anchor.
++ */
++static inline uint16_t ecm_nss_common_dsa_8021q_vid_get(struct net_device *dev)
++{
++#if IS_ENABLED(CONFIG_NET_DSA)
++	struct dsa_port *dp;
++	struct net_device *br;
++
++	if (!dsa_user_dev_check(dev)) {
++		return 0;
++	}
++
++	dp = dsa_port_from_netdev(dev);
++	if (IS_ERR_OR_NULL(dp)) {
++		return 0;
++	}
++
++	/*
++	 * Only a tag_8021q tagger delivers by these VIDs. On any other tag
++	 * protocol (e.g. qca8k) the switch knows nothing of them and the
++	 * inserted tag would break delivery outright.
++	 */
++	if (!dp->ds->tag_8021q_ctx) {
++		return 0;
++	}
++
++	br = dsa_port_bridge_dev_get(dp);
++	if (br) {
++		unsigned int bridge_num = dsa_port_bridge_num_get(dp);
++
++		if (!bridge_num || br_vlan_enabled(br)) {
++			return 0;
++		}
++		return dsa_tag_8021q_bridge_vid(bridge_num);
++	}
++
++	return dsa_tag_8021q_standalone_vid(dp);
++#else
++	return 0;
++#endif
++}
++
+ /*
+  * This macro converts ECM ip_addr_t to NSS IPv6 address
+  */
+--- a/frontends/nss/ecm_nss_ported_ipv4.c
++++ b/frontends/nss/ecm_nss_ported_ipv4.c
+@@ -1091,6 +1091,68 @@
+ 		}
+ 	}
+ 
++	/*
++	 * DSA/tag_8021q precise egress. ECM resolved the flow's L2 endpoints to
++	 * bare GMAC conduits (ecm_nss_common_dsa_conduit_get()), so this rule
++	 * carries no VLAN and the NSS emits routed frames UNTAGGED on the
++	 * conduit. The switch then classifies them into the CPU port's PVID
++	 * (pinned to the all-ports VID 0) and FLOODS - delivery works but is
++	 * gated by the slowest member port. Put each side's tag_8021q VID in the
++	 * rule instead, so the switch ARL-forwards precisely: the 'to' side VID
++	 * as egress_vlan_tag (flow-direction egress), the 'from' side VID as
++	 * ingress_vlan_tag (return-direction egress; it also matches the tag the
++	 * CPU port itself puts on ingress frames, since the per-VID egress
++	 * tagging on the CPU port is TAGGED for every tag_8021q VID).
++	 *
++	 * Routed connections only, and only when no real VLAN interface already
++	 * claimed the rule. The VID comes from each side's INNERMOST interface
++	 * ([x_ifaces_first]) - the same element whose AE number became the
++	 * rule's flow/return interface - which in every DSA-backed topology is
++	 * the DSA user port itself (br-lan/lanN, br-wan/lanN and
++	 * pppoe-wan -> br-wan -> lanN all resolve it there). Outer list
++	 * elements are never consulted: a bridge at the top of the list does
++	 * not imply the flow egresses a DSA port (it may egress a Wi-Fi
++	 * member of the same bridge). VID 0 means "not DSA/tag_8021q" and
++	 * leaves the rule alone.
++	 */
++	if (ecm_db_connection_is_routed_get(feci->ci)) {
++		uint16_t dsa_vid;
++		struct net_device *dsa_dev;
++
++		/*
++		 * Gate PER SIDE, not combined: an L3 interface that is itself a
++		 * VLAN netdev (br-lan.1 on a vlan_filtering bridge is the common
++		 * case) legitimately claims its own side via the VLAN branch
++		 * above, and the OTHER side still needs its tag_8021q VID or its
++		 * egress falls back to the PVID-0 flood.
++		 */
++		dsa_dev = NULL;
++		if (nircm->vlan_primary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)
++			dsa_dev = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(to_ifaces[to_ifaces_first]));
++		if (dsa_dev) {
++			dsa_vid = ecm_nss_common_dsa_8021q_vid_get(dsa_dev);
++			dev_put(dsa_dev);
++			if (dsa_vid) {
++				nircm->vlan_primary_rule.egress_vlan_tag = (ETH_P_8021Q << 16) | dsa_vid;
++				nircm->valid_flags |= NSS_IPV4_RULE_CREATE_VLAN_VALID;
++				DEBUG_TRACE("%px: dsa egress vid: %u\n", feci, dsa_vid);
++			}
++		}
++
++		dsa_dev = NULL;
++		if (nircm->vlan_primary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)
++			dsa_dev = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(from_ifaces[from_ifaces_first]));
++		if (dsa_dev) {
++			dsa_vid = ecm_nss_common_dsa_8021q_vid_get(dsa_dev);
++			dev_put(dsa_dev);
++			if (dsa_vid) {
++				nircm->vlan_primary_rule.ingress_vlan_tag = (ETH_P_8021Q << 16) | dsa_vid;
++				nircm->valid_flags |= NSS_IPV4_RULE_CREATE_VLAN_VALID;
++				DEBUG_TRACE("%px: dsa ingress vid: %u\n", feci, dsa_vid);
++			}
++		}
++	}
++
+ #ifdef ECM_CLASSIFIER_OVS_ENABLE
+ 		/*
+ 		 * Copy the both primary and secondary (if exist) VLAN tags.
+--- a/frontends/nss/ecm_nss_ported_ipv6.c
++++ b/frontends/nss/ecm_nss_ported_ipv6.c
+@@ -1053,6 +1053,50 @@
+ 		}
+ 	}
+ 
++	/*
++	 * DSA/tag_8021q precise egress - see the IPv4 twin in
++	 * ecm_nss_ported_ipv4.c for the full story. Without this, routed frames
++	 * leave the NSS untagged and are flood-delivered via the CPU port's
++	 * PVID-0 fallback, gated by the slowest member port.
++	 */
++	if (ecm_db_connection_is_routed_get(feci->ci)) {
++		uint16_t dsa_vid;
++		struct net_device *dsa_dev;
++
++		/*
++		 * Gate PER SIDE, not combined: an L3 interface that is itself a
++		 * VLAN netdev (br-lan.1 on a vlan_filtering bridge is the common
++		 * case) legitimately claims its own side via the VLAN branch
++		 * above, and the OTHER side still needs its tag_8021q VID or its
++		 * egress falls back to the PVID-0 flood.
++		 */
++		dsa_dev = NULL;
++		if (nircm->vlan_primary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)
++			dsa_dev = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(to_ifaces[to_ifaces_first]));
++		if (dsa_dev) {
++			dsa_vid = ecm_nss_common_dsa_8021q_vid_get(dsa_dev);
++			dev_put(dsa_dev);
++			if (dsa_vid) {
++				nircm->vlan_primary_rule.egress_vlan_tag = (ETH_P_8021Q << 16) | dsa_vid;
++				nircm->valid_flags |= NSS_IPV6_RULE_CREATE_VLAN_VALID;
++				DEBUG_TRACE("%px: dsa egress vid: %u\n", feci, dsa_vid);
++			}
++		}
++
++		dsa_dev = NULL;
++		if (nircm->vlan_primary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)
++			dsa_dev = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(from_ifaces[from_ifaces_first]));
++		if (dsa_dev) {
++			dsa_vid = ecm_nss_common_dsa_8021q_vid_get(dsa_dev);
++			dev_put(dsa_dev);
++			if (dsa_vid) {
++				nircm->vlan_primary_rule.ingress_vlan_tag = (ETH_P_8021Q << 16) | dsa_vid;
++				nircm->valid_flags |= NSS_IPV6_RULE_CREATE_VLAN_VALID;
++				DEBUG_TRACE("%px: dsa ingress vid: %u\n", feci, dsa_vid);
++			}
++		}
++	}
++
+ #ifdef ECM_CLASSIFIER_OVS_ENABLE
+ 		/*
+ 		 * Copy the both primary and secondary (if exist) VLAN tags.
