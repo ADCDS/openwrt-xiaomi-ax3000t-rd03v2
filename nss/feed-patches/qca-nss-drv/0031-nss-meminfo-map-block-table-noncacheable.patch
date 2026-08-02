@@ -1,0 +1,58 @@
+Map the NSS meminfo block table non-cacheable.
+
+The block table tells the UBI32 firmware where n2h_rings, h2n_rings,
+nss_if_mem_map, the debug log descriptor and its DDR heap live. The core is not
+cache-coherent with the ARM (nss@40000000 has no dma-coherent property), and
+nss_meminfo_init_block_lists() no longer flushes the table: 0004-nss-drv-rework-
+NSS_CORE_DMA_CACHE_MAINT-ops removed the NSS_CORE_DMA_CACHE_MAINT() call and put
+nothing in its place, leaving a comment that promises a flush above a bare
+NSS_CORE_DSB() -- dsb(sy), ordering only. The two neighbouring sites in the same
+file were converted to dma_sync_single_*() because they are kmalloc'd and have a
+dma_addr_t; this one is an ioremap VA and has none, so it was simply dropped.
+
+Mapped write-back cacheable, the firmware read whichever subset of the table had
+been evicted to DRAM by the time it booted, making the boot nondeterministic:
+measured over 60+ cold boots, ~62% came up, ~20% booted then asserted
+("COREDUMP COMPLETE" -> kernel panic -> reboot loop), ~18% never signalled at
+all. Same image every time.
+
+ioremap_wc() is Normal non-cacheable on arm64, which keeps the struct-field and
+strcmp(r->name, ...) accesses legal (plain ioremap() would be Device memory and
+fault on unaligned access) and makes the existing DSB sufficient.
+
+--- a/nss_meminfo.c
++++ b/nss_meminfo.c
+@@ -751,7 +751,32 @@
+ 	}
+ 
+ 	map = &mem_ctx->meminfo_map;
+-	map->start = (uint32_t *)ioremap_cache(meminfo_start[1], NSS_MEMINFO_MAP_SIZE);
++	/*
++	 * Map the meminfo block table NON-cacheable.
++	 *
++	 * This table is how the firmware learns where n2h_rings, h2n_rings,
++	 * nss_if_mem_map, the debug log descriptor and its DDR heap actually live,
++	 * and the UBI32 is not cache-coherent with the ARM (nss@40000000 has no
++	 * dma-coherent property). nss_meminfo_init_block_lists() used to flush it
++	 * with NSS_CORE_DMA_CACHE_MAINT(), but 0004-nss-drv-rework-... deleted that
++	 * call without a replacement -- the two neighbouring sites in this file got
++	 * converted to dma_sync_single_*() because they are kmalloc'd and have a
++	 * dma_addr_t, while this one is an ioremap VA and has none. What is left is
++	 * a comment promising a flush above a bare NSS_CORE_DSB(), which is dsb(sy)
++	 * -- ordering only, no cache maintenance.
++	 *
++	 * Mapped write-back cacheable, the core therefore read whichever subset of
++	 * the ~16 dirty lines had happened to be evicted by the time it booted,
++	 * which is what made the boot nondeterministic: all clean -> boots; a
++	 * pointer needed late is stale -> boots then asserts (COREDUMP); a pointer
++	 * needed early is stale -> never signals at all (SILENT).
++	 *
++	 * ioremap_wc() gives Normal non-cacheable on arm64, so the struct-field and
++	 * strcmp(r->name, ...) accesses below stay legal -- plain ioremap() would be
++	 * Device memory and would fault on unaligned access -- and the existing DSB
++	 * is finally sufficient. One 4 KB page, touched once at probe.
++	 */
++	map->start = (uint32_t *)ioremap_wc(meminfo_start[1], NSS_MEMINFO_MAP_SIZE);
+ 	if (!map->start) {
+ 		nss_info_always("%px: failed to remap meminfo map\n", nss_ctx);
+ 		return false;

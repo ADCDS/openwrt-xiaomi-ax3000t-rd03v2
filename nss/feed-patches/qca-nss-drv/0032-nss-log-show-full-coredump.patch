@@ -1,0 +1,23 @@
+Print enough of the firmware log ring to see why it died.
+
+Each trapped thread dumps 8 lines, so a 25-line tail only ever showed ~3 idle
+threads -- the firmware's own reason, "Error: ASSERTION FAILED main[565]: BOOTUP
+FAILED. Check the GDB backtrace", always scrolled off. It appeared exactly once
+in a 3.3 MB serial capture, by luck.
+
+--- a/nss_log.h
++++ b/nss_log.h
+@@ -45,7 +45,12 @@
+  * This number should be lower than the minimum size of the logbuf
+  * which 32 right now.
+  */
+-#define NSS_LOG_COREDUMP_LINE_NUM	25
++/*
++ * 25 was useless for diagnosis: each trapped thread dumps 8 lines, so the tail
++ * of the ring only ever showed ~3 idle threads and the firmware's own reason --
++ * "Error: ASSERTION FAILED main[565]: BOOTUP FAILED" -- always scrolled off.
++ */
++#define NSS_LOG_COREDUMP_LINE_NUM	250
+ 
+ /*
+  * Saves the ring buffer address for logging per NSS core
