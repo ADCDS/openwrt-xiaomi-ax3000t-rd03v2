@@ -323,22 +323,22 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		bool disable_cpu_vlan = true;
  		struct dsa_port *dp;
 +		u32 port_mode;
-+
+ 
+-		/* Back to VLAN-unaware. Clears the PVID register but keeps the
+-		 * shadow, so re-enabling filtering restores it.
 +		/* This is called after .port_bridge_leave when leaving a VLAN-aware
 +		 * bridge. Don't set standalone ports to fallback mode.
-+		 */
+ 		 */
+-		ret = an8855_port_commit_vlan(ds, port, false);
 +		if (dsa_port_bridge_dev_get(dsa_to_port(ds, port)))
 +			port_mode = AN8855_PORT_FALLBACK_MODE;
 +		else
 +			port_mode = AN8855_PORT_MATRIX_MODE;
- 
--		/* Back to VLAN-unaware. Clears the PVID register but keeps the
--		 * shadow, so re-enabling filtering restores it.
++
 +		/* When a port is removed from the bridge, the port would be set up
 +		 * back to the default as is at initial boot which is a VLAN-unaware
 +		 * port.
- 		 */
--		ret = an8855_port_commit_vlan(ds, port, false);
++		 */
 +		ret = an8855_port_set_vlan_mode(priv, port, port_mode,
 +						AN8855_VLAN_EG_CONSISTENT,
 +						AN8855_VLAN_TRANSPARENT,
@@ -755,7 +755,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  		if (ret)
  			return ret;
  	}
-@@ -2097,6 +2231,57 @@
+@@ -2097,6 +2231,72 @@
  	 */
  	ds->assisted_learning_on_cpu_port = true;
  
@@ -793,6 +793,21 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
 +						AN8855_VLAN_ACC_ALL);
 +		if (ret)
 +			return ret;
++
++		/* NSS-forwarded frames arrive here UNTAGGED (the ECM rule
++		 * carries no VLAN), so they classify into this port's PVID.
++		 * The hardware default is 1; once any VLAN-aware bridge
++		 * installs VID 1, untagged ingress is confined to VID 1's
++		 * member set and a routed port outside it black-holes.
++		 * Pin the PVID to VID 0 - the driver-owned, always-valid,
++		 * all-ports entry from an8855_setup_pvid_vlan() - so
++		 * untagged CPU ingress always has the flood fallback the
++		 * 895 Mbit/s-era builds effectively relied on.
++		 */
++		ret = an8855_port_set_pvid(priv, dp->index,
++					   AN8855_PORT_VID_DEFAULT);
++		if (ret)
++			return ret;
 +	}
 +
 +	/*
@@ -813,7 +828,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	return 0;
  }
  
-@@ -2106,6 +2291,10 @@
+@@ -2106,6 +2306,10 @@
  	struct dsa_port *dp = dsa_phylink_to_port(config);
  	struct an8855_priv *priv = dp->ds->priv;
  
@@ -824,7 +839,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	switch (interface) {
  	case PHY_INTERFACE_MODE_SGMII:
  	case PHY_INTERFACE_MODE_2500BASEX:
-@@ -2844,10 +3033,13 @@
+@@ -2844,10 +3048,13 @@
  	.set_ageing_time = an8855_set_ageing_time,
  	.port_bridge_join = an8855_port_bridge_join,
  	.port_bridge_leave = an8855_port_bridge_leave,
@@ -839,7 +854,7 @@ than silently shipping a stale fork. See tools/check-nss-divergence.sh.
  	.port_pre_bridge_flags = an8855_port_pre_bridge_flags,
  	.port_bridge_flags = an8855_port_bridge_flags,
  	.port_vlan_filtering = an8855_port_vlan_filtering,
-@@ -2928,6 +3120,12 @@
+@@ -2928,6 +3135,12 @@
  					       val && val != 0xffffffff, 1000, 1000000);
  		if (ret)
  			return ret;
