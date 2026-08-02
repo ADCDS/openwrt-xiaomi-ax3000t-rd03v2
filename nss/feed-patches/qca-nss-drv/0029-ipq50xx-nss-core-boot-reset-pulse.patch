@@ -20,19 +20,44 @@
  
  /*
   * GCC reset
-@@ -270,14 +274,26 @@
+@@ -268,18 +272,56 @@
+ 	uint32_t value;
+ 
  	/*
- 	 * Apply ubi32 core reset
+-	 * Apply ubi32 core reset
++	 * Hold the ubi32 core in CSM reset across the WHOLE sequence, the way the
++	 * ipq60xx HAL does, instead of de-asserting the GCC resets first and
++	 * leaving the core briefly free-running.
++	 *
++	 * This is LOAD-BEARING, and not for the reason you would guess. It barely
++	 * moves the core's boot success rate (measured 50% -> 67% over 33 cold
++	 * boots, p~0.33 -- noise). What it decides is whether the core that boots
++	 * can TRANSMIT. With the stock ordering the core boots, prints "booted
++	 * successfully", raises interrupts and services N2H (wire->host) perfectly
++	 * -- while silently swallowing every H2N (host->wire) frame. Measured on
++	 * the identical kernel and config, only this sequence differing:
++	 *
++	 *            host->NSS   NSS->wire   GMAC MIB   ping gateway
++	 *   stock        87          1        frozen     100% loss
++	 *   this        +35         +33        +35       0% loss
++	 *
++	 * The firmware reports no drop and no error for the 86 it ate, and nothing
++	 * at boot time distinguishes the two states, so this failure is invisible
++	 * to every health check except an actual transmit. On a box that routes,
++	 * accelerated flows stay inside the firmware (RX GMAC -> fast path -> TX
++	 * GMAC) and never need H2N, which is why it can look fine there and still
++	 * take a bridge-only AP completely off the network.
  	 */
--	nss_write_32(map, NSS_REGS_RESET_CTRL_OFFSET, 0x1);
--
+ 	nss_write_32(map, NSS_REGS_RESET_CTRL_OFFSET, 0x1);
+ 
  	/*
 -	 * De-assert reset
 +	 * Mainline 6.12 leaves the GCC UBI0 resets DE-asserted at probe (measured
 +	 * 0x0), so the core free-runs from a garbage PC and never boots. Give the
-+	 * whole UBI0 block a clean reset PULSE first (assert -> deassert). The boot
-+	 * config MUST be written AFTER the GCC reset is deasserted -- asserting it
-+	 * clears the CSM config regs (observed AMC/IFETCH reading back 0).
++	 * whole UBI0 block a clean reset PULSE (assert -> de-assert) for a real
++	 * edge. The boot config MUST be written AFTER the GCC de-assert -- the
++	 * assert clears the CSM config regs (observed AMC/IFETCH reading back 0),
++	 * RESET_CTRL included, hence the re-assert below.
  	 */
  	value = nss_read_32(nss_misc_reset, 0x0);
 +	value |= NSS_CORE_GCC_RESET;
@@ -41,16 +66,20 @@
 +	value = nss_read_32(nss_misc_reset, 0x0);
  	value &= ~NSS_CORE_GCC_RESET;
  	nss_write_32(nss_misc_reset, 0x0, value);
-+	udelay(10);
-+
-+	/*
-+	 * Hold the ubi32 core via the CSM reset while we program the boot config.
-+	 */
-+	nss_write_32(map, NSS_REGS_RESET_CTRL_OFFSET, 0x1);
  
  	/*
++	 * Re-assert the CSM reset with NO delay in between: any gap here lets the
++	 * core fetch from the stale boot address. ipq60xx wants a 10-20 cycle
++	 * settle after the GCC de-assert -- take it with the core safely held.
++	 */
++	nss_write_32(map, NSS_REGS_RESET_CTRL_OFFSET, 0x1);
++	usleep_range(10, 20);
++
++	/*
  	 * Program address configuration
-@@ -298,7 +314,7 @@
+ 	 */
+ 	nss_write_32(map, NSS_REGS_CORE_AMC_OFFSET, 0x1);
+@@ -298,7 +340,7 @@
  	nss_write_32(map, NSS_REGS_CORE_IFETCH_RANGE_OFFSET, 0xBF004001);
  
  	/*
