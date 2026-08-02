@@ -1,0 +1,80 @@
+From: Adriel Santos <adriel@adriel.eu>
+Date: Sun, 2 Aug 2026 00:00:00 +0000
+Subject: [PATCH] mtd: spinand: winbond: add W25N01KW (1.8 V) support
+
+Some AX3000T RD03v2 units second-source the SPI-NAND: instead of the
+ESMT F50D1G41LB, the board carries a Winbond W25N01KWZEIG. The chip is
+not in the Winbond ID table, so the probe fails outright:
+
+  spi-nand spi0.0: unknown raw ID efbe210000
+  spi-nand spi0.0: probe with driver spi-nand failed with error -95
+
+No MTD device is registered at all, so /proc/mtd is empty, UBI cannot
+attach ("cannot open mtd rootfs"), and ath11k cannot pull caldata from
+0:ART ("failed to load board data file: -12"). The board is unusable.
+
+W25N01KW is the 1.8 V sibling of the 3.3 V W25N01KV. Winbond assigns the
+1.8 V variant the 3.3 V device ID plus 0x10, matching the existing
+W25N01GV (0xaa) / W25N01GWZEIG (0xba) pair, so 0xae becomes 0xbe.
+
+The geometry deliberately mirrors the W25N01GW entry (64-byte spare)
+rather than the W25N01KV one (96-byte spare). Both the part's datasheet
+and the stock bootloader agree the KW has 64 bytes of spare per page:
+
+  Serial NAND device Manufacturer:W25N01KWZEIG
+  Device Size:128 MiB, Page size:2048, Spare Size:64, ECC:4-bit
+
+This matters because w25n01kv_ooblayout_ecc() places its ECC regions at
+offset 64 + 8 * section, which requires more than 64 bytes of spare.
+Reusing the KV layout here would address spare area the chip does not
+have.
+
+The ECC status handler is w25n02kv_ecc_get_status(), as on the other
+K-generation parts: it reads the real bitflip count through feature 0x30
+and clamps it to the configured strength, so it is correct for a 4-bit
+part. The NULL default would instead map the "corrected at maximum
+capacity" status (0b11) to -EINVAL and report spurious read failures on
+heavily corrected pages.
+
+The OOB layout is reused from the 1-bit GV/GW family because it is the
+only in-tree layout that fits a 64-byte spare area. It has NOT been
+checked against the W25N01KW datasheet, and mainline has previously had
+to correct exactly this class of copied ECC information (see "mtd:
+spi-nand: winbond: Fix 512GW, 01GW, 01JW and 02JW ECC information",
+Oct 2024). This does not affect qualcommax, where the DTS selects the
+QPIC controller as the ECC engine (nand-ecc-engine = <&qpic_nand>) and
+qcom_spi_ecc_init_ctx_pipelined() replaces the per-chip OOB layout with
+qcom_spi_ooblayout, taking its strength from the DT and consuming
+exactly 64 OOB bytes per 2048-byte page. On-die ECC is disabled
+unconditionally in spinand_init(), so the layout and status handler are
+unused on this target. Confirm both against the datasheet before relying
+on this entry on a host that uses the chip's own ECC engine.
+
+ESMT units are unaffected: the two chips sit in different manufacturer
+tables (0xEF vs 0xc8/0x8c) and use different read-ID methods, so
+spinand_match_and_init() never reaches this entry on an ESMT board.
+
+Reported on https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/12
+
+---
+ drivers/mtd/nand/spi/winbond.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+--- a/drivers/mtd/nand/spi/winbond.c
++++ b/drivers/mtd/nand/spi/winbond.c
+@@ -224,6 +224,15 @@
+ 					      &update_cache_variants),
+ 		     0,
+ 		     SPINAND_ECCINFO(&w25n01kv_ooblayout, w25n02kv_ecc_get_status)),
++	SPINAND_INFO("W25N01KW",
++		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xbe, 0x21),
++		     NAND_MEMORG(1, 2048, 64, 64, 1024, 20, 1, 1, 1),
++		     NAND_ECCREQ(4, 512),
++		     SPINAND_INFO_OP_VARIANTS(&read_cache_variants,
++					      &write_cache_variants,
++					      &update_cache_variants),
++		     0,
++		     SPINAND_ECCINFO(&w25m02gv_ooblayout, w25n02kv_ecc_get_status)),
+ 	SPINAND_INFO("W25N02KV",
+ 		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xaa, 0x22),
+ 		     NAND_MEMORG(1, 2048, 128, 64, 2048, 40, 1, 1, 1),
