@@ -19,10 +19,10 @@ NSS=1 ./build.sh
 `build.sh` overlays `../nss/` onto the tree:
 
 - **Two feeds** (`nss/feeds.conf.append`): [qosmio/nss-packages](https://github.com/qosmio/nss-packages) `NSS-12.5-K6.x` (the `qca-nss-drv`/`ecm`/client packages) and `sqm-scripts-nss`.
-- **~11 kernel patches** (`nss/overlay/.../patches-6.12/`): ECM netfilter/PPPoE/DSCP support, NSS clients (l2tp/pptp/bridge-mgr), the `skb_recycler`, and the IPQ5018 **NSS reserved-memory** node.
+- **16 kernel patches** (`nss/overlay/.../patches-6.12/`): ECM netfilter/PPPoE/DSCP support, NSS clients (l2tp/pptp), the `skb_recycler`, the IPQ5018 **NSS reserved-memory** node, and the AN8855 tag_8021q stack (`999-2758..2762`).
 - **`ipq5018-nss.dtsi`**: the `nss@40000000` node (core CSM regs, 8 IRQs, 8 MB reserved DDR at `0x40000000`), `#include`d into the device DTS.
-- **`kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-bridge-mgr nss-firmware-ipq50xx`** added to the device's `DEVICE_PACKAGES`.
-- **The core-boot fix** (`nss/feed-patches/qca-nss-drv/0029-…`) — see below.
+- **`kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-pppoe nss-firmware-ipq50xx`** added to the device's `DEVICE_PACKAGES`. (**Not** `kmod-qca-nss-drv-bridge-mgr`: it is ipq807x/60xx-only — its init returns early on `qcom,ipq5018` and `nss_bridge.o` isn't even built for this target — yet selecting it drags in a `kmod-bonding` dep that breaks ecm. `build.sh` strips it.)
+- **The core-boot fixes** (`nss/feed-patches/qca-nss-drv/0029-…`, `0031-…`) — see below.
 - **The tag_8021q + ecm-frontend fix**: `nss/overlay/.../an8855.c` switches the AN8855 DSA tagger, `nss/feed-patches/qca-nss-ecm/0026-…` teaches ECM about DSA conduits, and `CONFIG_NET_DSA_TAG_VSC73XX_8021Q` selects the tagger — see below.
 - **The tag_8021q host-FDB VID fix** (`999-2760`, issue #7): host/assisted-learning FDB entries must land in the tag_8021q VID the data path uses, or downstream unicast to a roamed wifi client is same-port-filtered against its stale learned entry (DHCP-after-roam fails). See [`an8855-tag8021q-fdb.md`](an8855-tag8021q-fdb.md).
 - **Gateway wiring**: `nss/overlay/.../board.d/02_network` moves the WAN onto the `eth0` CPU port (offload needs WAN and LAN on *different* CPU ports); `.../etc/rc.local` enables `redirect` + `ipv{4,6}_accel_mode` after the modules load.
@@ -52,6 +52,26 @@ qca-nss 7a00000.nss: NSS core 0 booted successfully
 > unless the core is up — so without the fix, adding `qca-nss-drv` breaks **all
 > wired ethernet**, not just offload. With the fix, the core boots, the conduit
 > attaches, and wired + offload both work.
+
+Two later findings, both measured on hardware (2026-08):
+
+- **`0031-nss-meminfo-map-block-table-noncacheable`** fixes a *nondeterministic*
+  core boot: the vendor feed's patch `0004` deleted the cache flush on the
+  meminfo block table (the structure telling the firmware where its rings and
+  heap live) without a replacement, so the core read whatever fraction of the
+  table had been evicted to DRAM. Measured over 33 cold boots: ~50% booted, ~28%
+  coredumped (`nss_fw_coredump_notify()` then *panics the kernel*, producing a
+  reboot loop that self-clears when a boot lands well), ~22% never signalled.
+  Mapping the table `ioremap_wc` took it to 21/21 clean boots.
+- **The exact reset ordering in `0029` decides whether the booted core can
+  TRANSMIT.** Holding the core in CSM reset across the whole GCC pulse barely
+  moves the boot rate (noise), but with the stock ordering the core boots,
+  services N2H (wire→host) perfectly — and silently swallows every H2N
+  (host→wire) frame, with zero drop counters anywhere. Nothing at boot time
+  distinguishes the two states; only an actual transmit does. Quick
+  discriminator on a live box: `ethtool -S eth1 | head -3` — if the first block
+  is a small independent counter set (the firmware's per-`phys_if` stats), NSS
+  owns the data plane; if `rx_packets` tracks the netdev, it does not.
 
 ## The tag_8021q + ecm DSA-conduit fix (why the fast path accelerates)
 
@@ -88,6 +108,49 @@ end (`tcp_accelerated_count` and `ipv4_create_requests` climb, router CPU stays
 > misbehaving fast path can't lock you out. To back it out entirely:
 > `rm /etc/modules.d/33-qca-nss-ecm && reboot` — the box returns to software
 > routing.
+
+## How routed frames actually reach the wire (and the PVID-0 pin)
+
+Discovered by release archaeology + register-level injection (2026-08), because
+accelerated flows black-holed on any config with a `vlan_filtering=1` bridge:
+
+- **ECM's routed rules carry no VLAN.** `vlan_primary_rule` is populated only
+  from `ECM_DB_IFACE_TYPE_VLAN` netdevs; a DSA user port resolves to its bare
+  conduit (patch `0026`), so the NSS firmware emits routed frames **untagged**
+  on the conduit.
+- An untagged frame entering the switch on a CPU port is classified into that
+  port's **PVID**. The driver never wrote CPU-port PVIDs, so they sat at the
+  hardware default **1**. In the 895 Mbit/s-era configs nothing installed a
+  valid VID 1, so untagged CPU ingress fell into the invalid-VID fallback —
+  **port-matrix flood** — and was delivered. It worked by accident.
+- Once any VLAN-aware bridge installs VID 1 (every modern config here), that
+  same frame is confined to VID 1's member set; a routed port living in its own
+  bridge is not a member, and the flow black-holes — silently, with the rule
+  installed and the CPU ~99% idle.
+- **The fix** (in `999-2758`): pin CPU-port PVIDs to **VID 0**, the
+  driver-owned, always-valid, all-ports entry. Untagged NSS egress then always
+  has a deterministic flood fallback, independent of the user's VLAN config.
+
+**Flood delivery has a real cost:** switch flood replication is gated by the
+*slowest member port*. Measured: with a 100 Mb/s device on the LAN, an
+accelerated TCP flow managed ~60 Mbit/s (massive retransmits); with that port
+out of the flood set, **860 Mbit/s UDP at ~98% idle CPU**. The precise fix —
+putting the egress port's tag_8021q VID into the ECM rule so the switch
+ARL-forwards instead of flooding — is `nss/feed-patches/qca-nss-ecm/0027-…`.
+
+## Runtime knobs — two traps
+
+- **`/proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode` does NOT stop ECM**, and it is
+  one-way at runtime: writing `0` succeeds, writing `1` back returns `-EIO`
+  until reboot (`rc.local` re-arms it at boot). Do not use it for A/B tests.
+- The effective A/B knob is **`/sys/kernel/debug/ecm/front_end_ipv4_stop`**:
+  `1` = ECM stops accelerating new flows (pure CPU slowpath), `0` = normal.
+  This is reversible at runtime.
+- When experimenting with DSA conduits at runtime, release the port from its
+  bridge **in UCI first** (`uci del_list network.@device[0].ports=…` +
+  `bridge-vlan`, commit, reload). A bare `ip link set … nomaster` gets undone
+  by a netifd hotplug within ~3 s, silently re-bridging the port — which makes
+  conduit experiments look broken when they aren't.
 
 ## Verifying on the device
 
@@ -169,6 +232,12 @@ conduits open and LAN-to-LAN hardware forwarding runs — but the firmware
 silently eats every CPU-bound TX frame, so the router itself becomes
 unreachable over ethernet while everything else looks healthy. It is a
 vicious red herring; match the pair.
+
+> The same eats-every-CPU-TX-frame signature also occurs with a **matched**
+> pair when the core-boot reset ordering is wrong — measured with 12.5/12.5
+> and the stock (un-patched) reset sequence. A matched version pair does not
+> clear you; see the `0029` notes above and use the `ethtool -S eth1`
+> discriminator.
 
 **Backing the offload out** (always-working slowpath fallback):
 

@@ -259,13 +259,20 @@ NSS=1 ./build.sh    # ...plus experimental QCA NSS hardware offload (measured: 8
 Or manually: check out OpenWrt at `25ee126`, copy `files/*` over it, `./scripts/feeds update -a && ./scripts/feeds install -a`, seed `.config` with the device + `CONFIG_TARGET_ROOTFS_INITRAMFS=y`, then `make defconfig && make -j$(nproc)`. Images land in `bin/targets/qualcommax/ipq50xx/`.
 
 **NSS hardware offload** (`NSS=1`, opt-in) boots the IPQ5018's NSS network
-processor to offload NAT routing at line rate. Measured on this build
-(LAN→WAN NAT, single TCP flow, gigabit wire):
+processor to offload NAT routing at line rate. Measured (LAN→WAN NAT,
+gigabit wire; 895/619 on the 2026-07-18 build, 860 re-measured on the
+current tree after the delivery-path fix in `999-2758`):
 
 | Path | NAT throughput | Router CPU under load |
 |---|---|---|
 | CPU slowpath | 619 Mbit/s | 95% sirq (saturated) |
-| **NSS offload** | **895 Mbit/s** | **0% sirq, ~95% idle** |
+| **NSS offload** | **895 Mbit/s** TCP / **860 Mbit/s** UDP | **~0% sirq, ~95-98% idle** |
+
+One caveat until the ECM egress-VLAN patch lands: NSS-forwarded frames are
+flood-delivered, and switch flood replication is gated by the *slowest* LAN
+port — a 100 Mb/s device on the LAN caps routed throughput near its own link
+speed. See "How routed frames actually reach the wire" in
+[`docs/nss-offload.md`](docs/nss-offload.md).
 
 (LAN⇄LAN traffic between switch ports is forwarded by the AN8855 fabric at
 line rate — ~890 Mbit/s measured — with or without NSS; the offload matters
