@@ -266,12 +266,12 @@ current tree after the delivery-path fix in `999-2758`):
 | Path | NAT throughput | Router CPU under load |
 |---|---|---|
 | CPU slowpath | 619 Mbit/s | 95% sirq (saturated) |
-| **NSS offload** | **895 Mbit/s** TCP / **860 Mbit/s** UDP | **~0% sirq, ~95-98% idle** |
+| **NSS offload** | **940 Mbit/s** TCP / **898 Mbit/s** UDP | **~0% sirq, ~95-98% idle** |
 
-One caveat until the ECM egress-VLAN patch lands: NSS-forwarded frames are
-flood-delivered, and switch flood replication is gated by the *slowest* LAN
-port — a 100 Mb/s device on the LAN caps routed throughput near its own link
-speed. See "How routed frames actually reach the wire" in
+Routed frames are delivered ARL-precise (the ECM rule carries the egress
+tag_8021q VID — measured 940 Mbit/s TCP at ~99% idle with a 100 Mb/s device
+on the LAN); flows the rule cannot tag fall back to a flood path gated by
+the slowest LAN port. See "How routed frames actually reach the wire" in
 [`docs/nss-offload.md`](docs/nss-offload.md).
 
 (LAN⇄LAN traffic between switch ports is forwarded by the AN8855 fabric at
