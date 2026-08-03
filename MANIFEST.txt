@@ -50,6 +50,21 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          Splits kmod-ath11k into regular + smallbuffers variants
          (kmod-ath11k-smallbuffers, PROVIDES kmod-ath11k). Our device
          selects the smallbuffers variant in ipq50xx.mk DEVICE_PACKAGES.
+  12752  package/kernel/mac80211/patches/ath11k/952-wifi-ath11k-fix-rx-signal-reporting-on-IPQ5018-QCN6122.patch
+         Issue #3. The WLAN.HK.2.7 firmware reports rx signal on an
+         uncalibrated dB scale (~31 dB low on 2.4, ~24 on 5) and an
+         impossible noise floor. Applies per-chip offsets at every dB->dBm
+         site and implements the firmware's dormant GET_NFCAL_POWER exchange
+         for a real per-channel noise floor. Host-side: no board file fixes it.
+
+Buttons
+-------
+   3509  package/kernel/gpio-button-hotplug/patches/100-fix-devicetree-irq-signedness.patch
+         Backport of upstream b0a03893cb52 (2026-07-10), four days after the
+         25ee126 pin. fwnode_irq_get() now returns -EINVAL where it used to
+         return 0, and struct gpio_keys_button::irq is unsigned - so the
+         driver's "if (irq < 0)" clamp is dead code and both buttons end up
+         requesting a nonsense IRQ. Drop this once the pin advances (#10).
 
 target/linux/qualcommax/
 ------------------------
@@ -72,6 +87,10 @@ target/linux/qualcommax/ipq50xx/base-files/
 -------------------------------------------
    1121  target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
          Default interfaces: lan2/lan3/lan4 = LAN, wan = WAN.
+    966  target/linux/qualcommax/ipq50xx/base-files/etc/rc.local
+         Re-arms the U-Boot boot-success flags after a good boot, so the
+         loader's A/B failsafe does not eventually fall back to stock. The
+         NSS build prepends the /proc/sys/dev/nss knobs to this same file.
    4034  target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
          Caldata extraction from 0:ART — 2.4 GHz @ 0x1000,
          5 GHz (QCN6122) @ 0x26800, 0x20000 each.
@@ -99,6 +118,14 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
          AN8855 efuse NVMEM provider (PHY calibration cells).
    1192  target/linux/qualcommax/files/include/linux/mfd/airoha-an8855-mfd.h
          Shared MFD header used by the AN8855 sub-drivers.
+   3820  target/linux/qualcommax/patches-6.12/0413-mtd-spinand-winbond-add-W25N01KW-support.patch
+         Issue #12. The SPI-NAND is second-sourced: some units carry a Winbond
+         W25N01KW where others have the ESMT F50D1G41LB, and the Winbond part
+         was missing from the kernel ID table, so the probe aborted and no MTD
+         device was registered at all. Mirrors the 64-byte-spare W25N01GW
+         geometry, NOT the 96-byte W25N01KV - the KV OOB layout would address
+         spare this chip does not have. ESMT units cannot reach this entry
+         (different manufacturer table and read-ID method).
   12419  target/linux/qualcommax/patches-6.12/737-net-dsa-add-Airoha-AN8855.patch
          Kernel wiring for the AN8855 drivers (Kconfig/Makefile hooks;
          from the upstream "net: dsa: Add Airoha AN8855 support" v11 series).
@@ -146,6 +173,17 @@ Experimental; see docs/nss-offload.md. Layered on top of files/:
           - prepends the /proc/sys/dev/nss knobs to etc/rc.local
           - strips +kmod-bonding from qca-nss-clients, copies the feed patches,
             and pins CONFIG_NSS_FIRMWARE_VERSION_12_5
+
+        build.sh (KMODS=1) appends CONFIG_ALL_KMODS=y and builds with
+        IGNORE_ERRORS="n m" BUILD_LOG=1. Every kmod is then compiled and
+        packaged as `m` - packaged, never installed, so the image's package
+        set is unchanged. It is NOT image-neutral though: package-metadata.pl
+        collects Kernel-Config symbols from any package that is not 'n', and
+        .vermagic is an md5 over the sorted '=[ym]' set, so the kernel package
+        version changes. Kmods therefore only install on an image from the
+        same build run, which is why release images are built with KMODS=1.
+        tools/mkrelease.sh pairs each image set with its own tree's kmods and
+        refuses to mix them.
 
         The two builds
         --------------
