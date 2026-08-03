@@ -89,6 +89,20 @@ if [ "$WITH_NSS" = "1" ]; then
 	# NSS kernel config symbols (skb_recycler, conntrack DSCP-remark ext)
 	cat ../nss/config.append >> target/linux/qualcommax/config-6.12
 
+	# 0600-6 (DSCPREMARK) makes xt_DSCP.c call
+	# nf_conntrack_dscpremark_ext_set_dscp_rule_valid(), so on the NSS kernel
+	# xt_DSCP.ko gains a symbol dependency on nf_conntrack.ko - but xt_DSCP
+	# ships inside kmod-ipt-ipopt, whose DEPENDS only carries kmod-ipt-core.
+	# The normal NSS build never selects that package so nothing noticed;
+	# KMODS=1 builds it and OpenWrt's dependency check fails the whole
+	# package/kernel/linux build ("missing dependencies ... nf_conntrack.ko").
+	# Left unfixed it would also mean a hand-installed kmod-ipt-ipopt cannot
+	# load on an NSS image. Declaring the dep is what the same file already
+	# does for other conntrack-using ipt modules.
+	anchor 1 '^define KernelPackage/ipt-ipopt$' package/kernel/linux/modules/netfilter.mk
+	sed -i '/^define KernelPackage\/ipt-ipopt$/,/^endef$/ s#\$(call AddDepends/ipt)#$(call AddDepends/ipt,+kmod-nf-conntrack)#' \
+		package/kernel/linux/modules/netfilter.mk
+
 	# board.d + rc.local NSS deltas. These files used to be shadowed by full
 	# copies under nss/overlay/ (a fix to files/ never reached the NSS build);
 	# they are now single-source in files/ and their small NSS-only deltas are
