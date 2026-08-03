@@ -9,11 +9,21 @@
 #   NSS=1 ./build.sh
 # layers ./nss/ on top — see docs/nss-offload.md. The default build is
 # pure mainline and does NOT pull the QCA NSS feeds/patches.
+#
+# Optional full installable kernel-module set (for the release kmod tarball):
+#   KMODS=1 ./build.sh
+# builds every kmod the target can build (~1100 packages) as `m` — packaged
+# into bin/targets/.../packages/, NOT installed into the image. It does not
+# change the image's package set, but it DOES change the kernel vermagic (a
+# kmod at `m` still contributes its Kernel-Config symbols), so kmods only
+# install on an image from the SAME build run. Release images must therefore
+# be built with KMODS=1 too. Expect a multi-hour build.
 set -e
 
 cd "$(dirname "$0")"
 
 WITH_NSS="${NSS:-0}"
+WITH_KMODS="${KMODS:-0}"
 
 # Fail before doing anything if the AN8855 driver has silently diverged between
 # the two builds, or if an NSS patch stopped applying cleanly. Takes ~1s and
@@ -43,6 +53,14 @@ cp -a ../files/. .
 # ---- optional: QCA NSS hardware offload (NSS=1) ----
 if [ "$WITH_NSS" = "1" ]; then
 	echo ">>> NSS=1: layering QCA NSS hardware offload (experimental)"
+	# Defined up here because the DEVICE_PACKAGES sed below needs it too: sed
+	# exits 0 when it matches nothing, so an unanchored substitution whose
+	# anchor has drifted silently produces a build that is missing what the sed
+	# was supposed to add. That is how the NSS dtsi include was lost once.
+	anchor() {  # anchor <count-expected> <pattern> <file>
+		local n; n=$(grep -c -- "$2" "$3")
+		[ "$n" = "$1" ] || { echo "ERROR: anchor '$2' matched $n times (want $1) in $3" >&2; exit 1; }
+	}
 	# extra feeds: qosmio nss-packages (qca-nss-drv/ecm/...) + sqm-scripts-nss
 	cat ../nss/feeds.conf.append >> feeds.conf.default
 	# overlay NSS files: kernel patches, reserved-mem + NSS-node dtsi,
@@ -58,6 +76,14 @@ if [ "$WITH_NSS" = "1" ]; then
 	# over a pppoe wan (ipv4_create_requests stays 0). Do NOT add
 	# kmod-qca-nss-drv-bridge-mgr: it is @ipq807x/60xx-only (never builds here)
 	# yet kconfig still force-selects its +kmod-bonding dep, which breaks ecm.
+	#
+	# The anchor matters: this substitution keys on kmod-ath11k-smallbuffers
+	# being the FIRST entry of DEVICE_PACKAGES. Insert anything ahead of it in
+	# ipq50xx.mk and the pattern stops matching, sed still exits 0, and the NSS
+	# build quietly ships without the four packages that make offload work.
+	# Add new packages to the .config heredoc below instead of to that line.
+	anchor 1 'DEVICE_PACKAGES := kmod-ath11k-smallbuffers ' \
+		target/linux/qualcommax/image/ipq50xx.mk
 	sed -i 's#DEVICE_PACKAGES := kmod-ath11k-smallbuffers #DEVICE_PACKAGES := kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-pppoe nss-firmware-ipq50xx kmod-ath11k-smallbuffers #' \
 		target/linux/qualcommax/image/ipq50xx.mk
 	# NSS kernel config symbols (skb_recycler, conntrack DSCP-remark ext)
@@ -66,12 +92,8 @@ if [ "$WITH_NSS" = "1" ]; then
 	# board.d + rc.local NSS deltas. These files used to be shadowed by full
 	# copies under nss/overlay/ (a fix to files/ never reached the NSS build);
 	# they are now single-source in files/ and their small NSS-only deltas are
-	# applied here. anchor() fails the build loudly if an anchor is missing or
-	# ambiguous — a silently-skipped sed is how the NSS dtsi include was lost.
-	anchor() {  # anchor <count-expected> <pattern> <file>
-		local n; n=$(grep -c -- "$2" "$3")
-		[ "$n" = "$1" ] || { echo "ERROR: anchor '$2' matched $n times (want $1) in $3" >&2; exit 1; }
-	}
+	# applied here. anchor() (defined at the top of this block) fails the build
+	# loudly if an anchor is missing or ambiguous.
 	# Gateway topology: move the WAN onto the eth0 (1G) CPU port so WAN<->LAN
 	# routing crosses two CPU ports, which NSS offload requires.
 	NET=target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
@@ -159,6 +181,17 @@ CONFIG_TARGET_ROOTFS_INITRAMFS=y
 # silently never come up.
 CONFIG_PACKAGE_wpad-mbedtls=y
 # CONFIG_PACKAGE_wpad-basic-mbedtls is not set
+# LuCI over plain HTTP (uhttpd). `luci` is a collection that `select`s
+# luci-light + luci-app-package-manager, so this one symbol pulls the whole
+# set - no companion needed. Deliberately NOT luci-ssl: that adds px5g, which
+# generates a self-signed cert on first boot (slow on this SoC) for a warning
+# every browser shows anyway. ~2 MB installed, ~0.6 MB in the image.
+CONFIG_PACKAGE_luci=y
+# Commonly wanted and tiny; asked for in #12. Everything else is installable
+# from the release kmod tarball (KMODS=1) without rebuilding the kernel.
+CONFIG_PACKAGE_kmod-tun=y
+CONFIG_PACKAGE_kmod-inet-diag=y
+CONFIG_PACKAGE_kmod-nft-tproxy=y
 EOF
 
 # NSS firmware MUST match the driver ABI. The nss feed branch (NSS-12.5-K6.x)
@@ -175,8 +208,47 @@ CONFIG_NSS_FIRMWARE_VERSION_12_5=y
 EOF
 fi
 
+# ---- optional: full installable kmod set (KMODS=1) ----
+# ALL_KMODS flips every kmod-* package to `m`: compiled and packaged, but not
+# installed (package/Makefile builds the install list from package-y only).
+# ALL_KMODS alone is right - CONFIG_ALL and CONFIG_ALL_NONSHARED *select* it,
+# not the reverse, and would drag in userspace packages too.
+#
+# It is NOT image-neutral. package-metadata.pl collects Kernel-Config symbols
+# from any package that is not 'n', so `m` kmods land in the kernel config,
+# and .vermagic is an md5 over the sorted '=[ym]' set. The `kernel` package
+# version therefore changes, and every kmod hard-depends on it exactly - which
+# is why kmods from a KMODS=1 tree will not install on an image built without
+# it. Build release images and their kmod tarball in the same run.
+if [ "$WITH_KMODS" = "1" ]; then
+	cat >> .config <<'EOF'
+CONFIG_ALL_KMODS=y
+EOF
+fi
+
 make defconfig
-make -j"$(nproc)"
+
+# With ~1100 extra modules in play, one broken out-of-tree module must not take
+# the whole build down. IGNORE_ERRORS="n m" is what OpenWrt's own buildbot uses
+# for image builds: it tolerates failures only in subdirs whose packages are
+# all n/m, never in one that goes INTO the image. Do NOT add "y" - that would
+# silently ship a firmware missing wpad-mbedtls or ath11k. BUILD_LOG=1 puts
+# each failure in logs/<subdir>/error.txt instead of a multi-hour scrollback.
+MAKE_ARGS=()
+if [ "$WITH_KMODS" = "1" ]; then
+	MAKE_ARGS+=(IGNORE_ERRORS="n m" BUILD_LOG=1)
+fi
+make -j"$(nproc)" "${MAKE_ARGS[@]}"
+
+if [ "$WITH_KMODS" = "1" ] && [ -d logs ]; then
+	errs=$(find logs -name error.txt 2>/dev/null | wc -l)
+	if [ "$errs" != "0" ]; then
+		echo
+		echo ">>> $errs package(s) failed and were SKIPPED (IGNORE_ERRORS):"
+		find logs -name error.txt -printf '    %h\n' | sort
+		echo "    These are absent from the kmod tarball. List them in the release notes."
+	fi
+fi
 
 echo
 echo "Build complete. Images are in:"
@@ -188,4 +260,11 @@ if [ "$WITH_NSS" = "1" ]; then
 	echo
 	echo "NSS hardware offload build. After first boot the NSS core boots and"
 	echo "qca-nss-drv/dp + ecm autoload; see docs/nss-offload.md."
+fi
+if [ "$WITH_KMODS" = "1" ]; then
+	echo
+	echo "KMODS=1: installable kernel modules ($(ls bin/targets/qualcommax/ipq50xx/packages/kmod-*.apk 2>/dev/null | wc -l) packages) are in:"
+	echo "  $(pwd)/bin/targets/qualcommax/ipq50xx/packages/  (per-target dir)"
+	echo "  $(pwd)/staging_dir/packages/qualcommax/          (flat signed repo — what tools/mkrelease.sh ships)"
+	echo "They install ONLY on the image from THIS build (kernel vermagic + signing key)."
 fi

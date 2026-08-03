@@ -13,6 +13,7 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 | WiFi **2.4 GHz** (IPQ5018) | ✅ |
 | WiFi **5 GHz** (QCN6122) | ✅ |
 | Front status LED (blue/amber, 0–255 soft-PWM fade + patterns) | ✅ |
+| **LuCI** web interface (plain HTTP via uhttpd) | ✅ |
 | Updates via `sysupgrade` (from the RAM-booted initramfs — see below) | ✅ |
 
 > Built against **OpenWrt `25ee126`** (Jul 2026 snapshot, kernel 6.12.94).
@@ -56,6 +57,12 @@ Prebuilt images are on the [Releases](../../releases) page:
 | `…-initramfs-uImage.itb` | Boots OpenWrt entirely in RAM. **Required for every flash** — you run `sysupgrade` from this RAM system; it never touches flash by itself |
 | `…-squashfs-sysupgrade.bin` | The permanent image, written to NAND by `sysupgrade` **run from the RAM initramfs above** (not in place — see the warning in step 4) |
 | `…-squashfs-factory.ubi` | Whole-UBI image. **Not used by this guide** — the stock bootloader is locked (no OEM web-flash / no unlocked U-Boot write), so there is no supported way to write it directly. Install via the initramfs + `sysupgrade` path instead |
+| `…-initramfs-factory.ubi` | The RAM image wrapped as a UBI volume. Only for the **no-UART** path — written into `ubi_kernel` from a running system to pivot into the initramfs without serial ([`docs/no-uart-reflash.md`](docs/no-uart-reflash.md)) |
+| `…-kmods.tar.gz` | Every kernel module built against **this exact image**, as installable `.apk`s. See [Installing kernel modules](#installing-kernel-modules) |
+
+Each file also comes in an `-nss` variant (`…-sysupgrade-nss.bin`), built with the experimental
+QCA NSS hardware offload — see [`docs/nss-offload.md`](docs/nss-offload.md). The two are not
+interchangeable: the NSS kernel differs, so its kmod tarball only matches its own image.
 
 The install is a **UART + TFTP** procedure because the stock bootloader is locked. Full walkthrough below.
 
@@ -208,7 +215,48 @@ For repeated flashing, [`tools/uboot-catch.sh`](tools/uboot-catch.sh) does step 
 
 ### 5. First boot
 - LAN is `192.168.1.1`. Ports `lan2/lan3/lan4` bridge into `br-lan`; the `wan` port is the AN8855's WAN.
+- **LuCI** is at `http://192.168.1.1` — plain HTTP, no TLS. There is no password until you set one, so do that first.
 - **Set a root password** (`passwd`) and configure WiFi (LuCI or `uci`). By default the WiFi vifs are created **disabled** — enable them with `uci set wireless.default_radio{0,1}.disabled=0; uci commit wireless; wifi`.
+
+  The radios ship disabled deliberately, matching upstream: the default wireless config carries **no encryption**, so a device that came up with radios on would broadcast an open SSID bridged straight into `br-lan` before anyone had set a root password. Set a WPA key at the same time you enable them. For a permanently preconfigured image, bake the config in with `PROFILE=` at build time instead.
+
+### Installing kernel modules
+
+Kernel modules must match the kernel they were built against, and this port builds its own — so
+the `kmod-*` packages on `downloads.openwrt.org` will not install here. Every release therefore
+ships a `…-kmods.tar.gz` containing every module built against **that release's** image, already
+signed with the key that image trusts.
+
+The tarball holds well over a thousand packages, so extract and serve it from your PC rather than
+copying the whole thing onto a 256 MB router:
+
+```sh
+tar -xzf openwrt-…-v2-kmods.tar.gz -C kmods && cd kmods
+python3 -m http.server 8000
+```
+```sh
+# on the router:
+apk add --repositories-file /dev/null \
+        --repository http://<pc-ip>:8000/packages.adb kmod-usb-storage
+```
+
+Three things that will otherwise bite:
+
+- **Point `--repository` at `packages.adb`, not the directory.** Given a bare directory, `apk`
+  looks for an Alpine-style `aarch64_cortex-a53/` subdirectory that does not exist here.
+- **Install onto the NAND system, not the RAM initramfs.** `apk` refuses a package that would be
+  lost on the next reboot, and the initramfs root is tmpfs.
+- **Use the tarball matching your exact image** — same release *and* same flavour. The NSS build
+  has a different kernel, so its modules are rejected on the default image and vice versa. That is
+  the vermagic check doing its job, not a broken download. Cross-release also fails.
+
+`--repositories-file /dev/null` suppresses the built-in OpenWrt snapshot feeds, which are built
+from a different commit than this pinned tree.
+
+> **The Software page in LuCI points at those snapshot feeds**, not at this build. Modules
+> installed from there are correctly rejected on the vermagic check; userspace packages may
+> install but can drag in a mismatched library. Treat remote installs as unsupported and use the
+> kmod tarball.
 
 ### Controlling the LEDs
 
@@ -255,9 +303,15 @@ Repeat the **TFTP recovery** (step 2) with the stock `recovery.bin` — it refla
 
 ```bash
 git clone <this repo> && cd openwrt-xiaomi-ax3000t-rd03v2
-./build.sh          # clones OpenWrt @ 25ee126, applies files/, builds
-NSS=1 ./build.sh    # ...plus experimental QCA NSS hardware offload (measured: 895 Mbit/s NAT at ~0% CPU)
+./build.sh            # clones OpenWrt @ 25ee126, applies files/, builds
+NSS=1 ./build.sh      # ...plus experimental QCA NSS hardware offload (measured: 895 Mbit/s NAT at ~0% CPU)
+KMODS=1 ./build.sh    # ...plus every kernel module as an installable package (slow; used for releases)
 ```
+
+`KMODS=1` builds ~1100 modules as packages rather than installing them, which is what produces the
+release `kmods.tar.gz`. It leaves the image's package set alone but **does change the kernel
+vermagic**, so modules only install on an image from the same run — release images are therefore
+built with it too. Expect a multi-hour build; without it you get a normal image in normal time.
 Or manually: check out OpenWrt at `25ee126`, copy `files/*` over it, `./scripts/feeds update -a && ./scripts/feeds install -a`, seed `.config` with the device + `CONFIG_TARGET_ROOTFS_INITRAMFS=y`, then `make defconfig && make -j$(nproc)`. Images land in `bin/targets/qualcommax/ipq50xx/`.
 
 **NSS hardware offload** (`NSS=1`, opt-in) boots the IPQ5018's NSS network
