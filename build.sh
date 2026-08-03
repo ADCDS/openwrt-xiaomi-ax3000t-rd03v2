@@ -244,9 +244,12 @@ if [ "$WITH_KMODS" = "1" ] && [ -d logs ]; then
 	errs=$(find logs -name error.txt 2>/dev/null | wc -l)
 	if [ "$errs" != "0" ]; then
 		echo
-		echo ">>> $errs package(s) failed and were SKIPPED (IGNORE_ERRORS):"
-		find logs -name error.txt -printf '    %h\n' | sort
-		echo "    These are absent from the kmod tarball. List them in the release notes."
+		echo ">>> $errs log(s) with build failures, SKIPPED (IGNORE_ERRORS):"
+		# Print the failing package, not the log's directory - "logs/package"
+		# tells you nothing, and this list goes into the release notes.
+		grep -h 'failed to build' $(find logs -name error.txt) 2>/dev/null \
+			| sed 's/^ *ERROR: /    /' | sort -u
+		echo "    Their modules are absent from the kmod tarball. List them in the release notes."
 	fi
 fi
 
