@@ -77,7 +77,7 @@ The install is a **UART + TFTP** procedure because the stock bootloader is locke
 |---|---|---|
 | IC1 | Qualcomm **IPQ5018** | SoC — dual Cortex-A53, integrated 2.4 GHz radio |
 | IC2 | Rayson **RS128M16V0DB** | 256 MB DDR3 SDRAM |
-| IC3 | **ESMT F50D1G41LB** | 128 MB SPI-NAND flash |
+| IC3 | **ESMT F50D1G41LB** *or* **Winbond W25N01KW** | 128 MB SPI-NAND flash — the part is second-sourced, both are supported |
 | IC4 | Airoha **AN8855** | 2.5 GbE DSA switch (the 4 LAN/WAN ports) |
 | IC5 | Qualcomm **QCN6122** | 5 GHz WiFi radio (by the 5G antenna pads) |
 
@@ -144,7 +144,8 @@ sets those two variables replaces it. Options, best first:
    `mkxqimage`, and the backup/restore path have all been re-tested and all
    fail, and the UART is read-only in boot mode so there is no console to
    escape into. Older stock builds may still be reachable.
-3. **External SPI-NAND programmer** on the ESMT F50D1G41LB — version- and
+3. **External SPI-NAND programmer** on the flash chip (ESMT F50D1G41LB or
+   Winbond W25N01KW) — version- and
    Xiaomi-independent, and the only route left on a fully-updated unit. The
    U-Boot environment is a plain MTD partition (`0:APPSBLENV`, offset
    `0x480000`, length `0x80000`); setting the two variables there is enough.
@@ -198,6 +199,7 @@ pins the boot-success flags). Don't re-flash over it.
 | Countdown never pauses, no `IPQ5018#` no matter what you press | `boot_wait=off` (stock booted to userspace since the last recovery) → redo the TFTP recovery (step 2), then `saveenv` on the *very next* boot (step 3) |
 | `not permit upgrade!` / `Upgrade fail!` during the TFTP recovery | Anti-rollback: your `recovery.bin` is older than the last stock version the unit ran → get an image with a version code ≥ yours, or see [If anti-rollback blocks you](#if-anti-rollback-blocks-you) (step 2) |
 | `tftpboot` crawls, endless `#` marks | Normal: U-Boot TFTP is ~100 KB/s → the ~14 MB initramfs takes 2–3 min |
+| `spi-nand: unknown raw ID` + `probe … failed with error -95`, empty `/proc/mtd`, `cannot open mtd rootfs`, ath11k `failed to load board data file: -12` | Your unit has a NAND chip the kernel doesn't know — the part is second-sourced. Fixed for the Winbond W25N01KW after v1.6; on v1.6 or earlier, or with a third variant, the chip needs an ID-table entry ([#12](https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/12)) |
 | **One** `UBI init error 22` on the first boot after flashing | Benign: A/B loader retries and attaches → let it boot |
 | `UBI init error 22` on **every** boot | In-place/torn flash → RAM-boot initramfs + `sysupgrade -n` (steps 3–4) |
 | NSS build: every port `failed to open conduit`, LAN+WAN dead | NSS fw/driver version mismatch → see [`docs/nss-offload.md`](docs/nss-offload.md) Troubleshooting |
