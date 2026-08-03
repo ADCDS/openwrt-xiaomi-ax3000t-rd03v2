@@ -238,6 +238,19 @@ if [ "$WITH_KMODS" = "1" ]; then
 	cat >> .config <<'EOF'
 CONFIG_ALL_KMODS=y
 EOF
+	# ...except nat46, on the NSS build. qca-nss-ecm keys its MAP-T support
+	# off CONFIG_PACKAGE_kmod-nat46 (its Makefile: "ifneq
+	# ($(CONFIG_PACKAGE_kmod-nat46),)"), and that path then includes
+	# <nat46-core.h> from staging - a header nat46 never installs there. So
+	# selecting every kmod switches on a code path that cannot compile, and
+	# since kmod-qca-nss-ecm is in DEVICE_PACKAGES the failure is fatal
+	# rather than skipped. Keep nat46 out of the NSS kmod set; the default
+	# build has no ECM and still ships it.
+	if [ "$WITH_NSS" = "1" ]; then
+		cat >> .config <<'EOF'
+# CONFIG_PACKAGE_kmod-nat46 is not set
+EOF
+	fi
 fi
 
 make defconfig
