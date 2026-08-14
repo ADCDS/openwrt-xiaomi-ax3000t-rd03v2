@@ -38,10 +38,15 @@ TREE="$(cd "$TREE" && pwd)"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+# Anchored on drivers/mtd/nand/spi, because "linux-*/linux-*" alone is
+# ambiguous: build_dir also holds linux-atm and linux-ntfs, so the bare glob
+# expands to three paths and every test on it then fails for the wrong reason.
+# Derive the kernel root back from the one match instead of globbing twice.
 SPI=$(echo "$TREE"/build_dir/target-*/linux-*/linux-*/drivers/mtd/nand/spi)
 [ -d "$SPI" ] || die "no drivers/mtd/nand/spi in $TREE — is the kernel unpacked/built?"
-KCONF=$(echo "$TREE"/build_dir/target-*/linux-*/linux-*/.config)
-[ -f "$KCONF" ] || die "no kernel .config under $TREE/build_dir"
+KSRC=$(cd "$SPI/../../../.." && pwd)
+KCONF="$KSRC/.config"
+[ -f "$KCONF" ] || die "no kernel .config at $KCONF"
 grep -q '^CONFIG_MTD_SPI_NAND=[ym]$' "$KCONF" \
 	|| die "CONFIG_MTD_SPI_NAND is not enabled in $KCONF — this build has no SPI-NAND at all"
 
