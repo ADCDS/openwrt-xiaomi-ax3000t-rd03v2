@@ -104,43 +104,59 @@ if not mfr_byte:
     sys.exit("ERROR: found no SPINAND_MFR_* definitions under %s" % spi)
 
 # ---- parse each vendor file ------------------------------------------------
+# One file does NOT mean one manufacturer. esmt.c declares two - 0x8c and 0xc8 -
+# each with its own spinand_info table, and only the 0xc8 one holds the
+# F50D1G41LB this board actually ships. Taking the file's first ".id =" and
+# attributing every part in the file to it put the ESMT parts under 0x8c and
+# lost c8:11 entirely. So bind each table to the manufacturer that names it in
+# ".chips =", and read the entries out of that table's own braces.
+TABLE_RE = re.compile(
+    r'struct\s+spinand_info\s+(\w+)\s*\[\s*\]\s*=\s*\{(.*?)\n\};', re.S)
+MANUF_RE = re.compile(
+    r'struct\s+spinand_manufacturer\s+\w+\s*=\s*\{(.*?)\n\};', re.S)
+INFO_RE = re.compile(
+    r'SPINAND_INFO\(\s*"([^"]+)"\s*,\s*SPINAND_ID\(\s*SPINAND_READID_METHOD_[A-Z_]+\s*,'
+    r'((?:\s*0x[0-9a-fA-F]+\s*,?)+)\s*\)')
+
 parts = []            # (mfr_byte, dev_byte, part_name, vendor_label)
 for obj in built:
     src = open(os.path.join(spi, obj + '.c')).read()
-    m = re.search(r'\.id\s*=\s*(SPINAND_MFR_[A-Z0-9_]+)', src)
-    if not m:
-        continue
-    mb = mfr_byte.get(m.group(1))
-    if mb is None:
-        continue
-    vm = re.search(r'\.name\s*=\s*"([^"]+)"', src[m.start():m.start() + 400])
-    vendor = vm.group(1) if vm else obj
-    entries = []
-    for pm in re.finditer(
-            r'SPINAND_INFO\(\s*"([^"]+)"\s*,\s*SPINAND_ID\(\s*SPINAND_READID_METHOD_[A-Z_]+\s*,'
-            r'((?:\s*0x[0-9a-fA-F]+\s*,?)+)\s*\)', src):
-        ids = [int(x, 16) for x in re.findall(r'0x[0-9a-fA-F]+', pm.group(2))]
-        if ids:
-            entries.append((pm.group(1), ids))
-    # Every SPINAND_INFO in the file must have been understood. A macro form the
-    # regex does not cover would otherwise drop parts silently, and this file's
-    # whole job is to say which parts are supported — under-reporting it turns
-    # into an installer refusing to flash a unit it could have flashed.
+    tables = {name: body for name, body in TABLE_RE.findall(src)}
+    seen = 0
+    for body in MANUF_RE.findall(src):
+        mm = re.search(r'\.id\s*=\s*(SPINAND_MFR_[A-Z0-9_]+)', body)
+        cm = re.search(r'\.chips\s*=\s*(\w+)', body)
+        if not mm or not cm or cm.group(1) not in tables:
+            continue
+        mb = mfr_byte.get(mm.group(1))
+        if mb is None:
+            sys.exit("ERROR: %s.c uses %s but no #define gives its byte"
+                     % (obj, mm.group(1)))
+        vm = re.search(r'\.name\s*=\s*"([^"]+)"', body)
+        vendor = vm.group(1) if vm else obj
+        entries = [(n, [int(x, 16) for x in re.findall(r'0x[0-9a-fA-F]+', ids)])
+                   for n, ids in INFO_RE.findall(tables[cm.group(1)])]
+        entries = [(n, i) for n, i in entries if i]
+        seen += len(entries)
+        if not entries:
+            continue
+        # Some tables lead their ID with the manufacturer byte and some go
+        # straight to the device byte; flash_type is always the device byte.
+        # Decide per table, from whether *every* entry leads with it — testing
+        # one entry at a time would misread a part whose device byte happens to
+        # equal its manufacturer's.
+        leads = all(len(i) > 1 and i[0] == mb for _, i in entries)
+        for name, ids in entries:
+            parts.append((mb, ids[1] if leads else ids[0], name, vendor))
+    # Every SPINAND_INFO in the file must have ended up attributed to some
+    # manufacturer. A table nobody references, or a macro form the regex does
+    # not cover, would otherwise drop parts silently — and under-reporting this
+    # file turns into an installer refusing to flash a unit that would work.
     declared = len(re.findall(r'SPINAND_INFO\(', src))
-    if len(entries) != declared:
-        sys.exit("ERROR: %s.c declares %d SPINAND_INFO entries but only %d "
-                 "could be parsed — the ID macro form has changed"
-                 % (obj, declared, len(entries)))
-    if not entries:
-        continue
-    # Some vendor tables lead their ID with the manufacturer byte and some go
-    # straight to the device byte; flash_type is always the device byte. Decide
-    # per file, from whether *every* entry leads with it — testing one entry at
-    # a time would misread a part whose device byte happens to equal its
-    # manufacturer's.
-    leads = all(len(ids) > 1 and ids[0] == mb for _, ids in entries)
-    for name, ids in entries:
-        parts.append((mb, ids[1] if leads else ids[0], name, vendor))
+    if seen != declared:
+        sys.exit("ERROR: %s.c declares %d SPINAND_INFO entries but %d were "
+                 "attributed to a manufacturer — an unreferenced table, or the "
+                 "macro form has changed" % (obj, declared, seen))
 
 # ---- the two entries this board is known to need, on real hardware ----------
 have = {(mb, dev) for mb, dev, _, _ in parts}
