@@ -225,6 +225,13 @@ if [ "$WITH_NSS" = "1" ]; then
 	# at L2 and the flow never offloads. See docs/nss-offload.md.
 	mkdir -p feeds/nss_packages/qca-nss-ecm/patches
 	cp ../nss/feed-patches/qca-nss-ecm/*.patch feeds/nss_packages/qca-nss-ecm/patches/
+	# The clients' sub-Makefiles gate -DBONDING_SUPPORT on the kernel's
+	# CONFIG_BONDING, but what it guards is QSDK's *patched* bonding
+	# (bond_get_id(), struct bond_cb), which mainline does not have. Harmless
+	# until KMODS=1 selects kmod-bonding; then kmod-qca-nss-drv-pppoe, which is
+	# in DEVICE_PACKAGES, stops compiling and takes the build with it.
+	mkdir -p feeds/nss_packages/qca-nss-clients/patches
+	cp ../nss/feed-patches/qca-nss-clients/*.patch feeds/nss_packages/qca-nss-clients/patches/
 fi
 
 # Seed config: qualcommax/ipq50xx, AX3000T v2 profile, plus initramfs
@@ -290,9 +297,52 @@ EOF
 	# is not needed: the ecm feature tests are rewritten in the NSS block above.
 	# kmod-nat46 is built as a module on both flavours, as it always was on the
 	# default one.
+	#
+	# qca-nss-clients is the one place ALL_KMODS cannot simply be reinterpreted.
+	# It is a single source tree producing ~30 client modules, one per selected
+	# subpackage, and most of them do not compile against mainline 6.12 - the
+	# QSDK APIs are missing (nss_qdisc wants TCA_NSSBF_*, tun6rd wants
+	# ipip6_update_offload_stats(), map-t wants nat46-core.h, ...). Selecting
+	# them all makes the package fail, and because kmod-qca-nss-drv-pppoe comes
+	# from this same package and IS in DEVICE_PACKAGES, IGNORE_ERRORS cannot skip
+	# it: the whole NSS build stops.
+	#
+	# Turning the flags off is not enough here, unlike ecm: each subpackage's
+	# FILES names a .ko, so a selected-but-not-built subpackage fails at
+	# packaging instead. They have to be deselected outright.
+	#
+	# So build exactly the client the image uses. That is also what every NSS
+	# release before this one shipped - nothing is lost from the kmod tarball,
+	# because none of these modules has ever built here.
+	if [ "$WITH_NSS" = "1" ]; then
+		CLIENTS=feeds/nss_packages/qca-nss-clients/Makefile
+		[ -f "$CLIENTS" ] || { echo "ERROR: $CLIENTS not found" >&2; exit 1; }
+		# Derived from the feed, not hardcoded: the list moves with the feed.
+		NSS_CLIENT_DROP=$(grep -o '^define KernelPackage/[a-zA-Z0-9_-]*' "$CLIENTS" \
+			| sed 's#.*/##' | sort -u | grep -vx 'qca-nss-drv-pppoe')
+		n=$(echo "$NSS_CLIENT_DROP" | wc -l)
+		[ "$n" -ge 10 ] || { echo "ERROR: found only $n qca-nss-clients subpackages (want >=10)" >&2; exit 1; }
+		for p in $NSS_CLIENT_DROP; do
+			echo "# CONFIG_PACKAGE_kmod-$p is not set"
+		done >> .config
+	fi
 fi
 
 make defconfig
+
+# A kconfig `select` beats "is not set" — that is exactly how the old nat46
+# exclusion was silently undone — so confirm the deselection above survived
+# rather than trusting it. Cheap, and the alternative is a build that fails an
+# hour later for a reason that looks unrelated.
+if [ -n "${NSS_CLIENT_DROP:-}" ]; then
+	back=""
+	for p in $NSS_CLIENT_DROP; do
+		grep -q "^CONFIG_PACKAGE_kmod-$p=" .config && back="$back $p"
+	done
+	[ -z "$back" ] || { echo "ERROR: kconfig re-selected qca-nss-clients subpackages:$back" >&2; exit 1; }
+	grep -q '^CONFIG_PACKAGE_kmod-qca-nss-drv-pppoe=y$' .config \
+		|| { echo "ERROR: kmod-qca-nss-drv-pppoe is not in the image — PPPoE offload would be missing" >&2; exit 1; }
+fi
 
 # With ~1100 extra modules in play, one broken out-of-tree module must not take
 # the whole build down. IGNORE_ERRORS="n m" is what OpenWrt's own buildbot uses
