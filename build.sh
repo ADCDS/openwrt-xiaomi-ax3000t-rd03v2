@@ -231,14 +231,28 @@ if [ "$WITH_NSS" = "1" ]; then
 	# acceleration at all, nothing in the log to say why, and the module sitting
 	# in the kmod tarball looking like it belongs there.
 	#
-	# The hints are redundant here - this port names what it wants in
-	# DEVICE_PACKAGES - and four of them (qca-mcs, bonding, vxlan, nat46) point
-	# at features the rewrite above just compiled out. Drop them all; the real
-	# dependencies (+ethtool, +kmod-nf-conntrack, the NSS_DRV_* options) stay.
+	# Drop exactly the four that point at features the rewrite above just
+	# compiled out - qca-mcs, bonding, vxlan, nat46. Those four are the ones
+	# doing the damage: each is self-referential ("+PACKAGE_kmod-nat46:kmod-nat46",
+	# depend on nat46 if nat46 is selected), so under ALL_KMODS each is an active
+	# dependency on a module and each on its own caps ecm at m.
 	#
-	# Done in python because they are backslash continuations: deleting the last
-	# few lines of the list leaves the previous one ending in '\', which swallows
-	# the TITLE: that follows and corrupts the package metadata.
+	# The other five stay, and must: ecm.ko really does reference symbols from
+	# qca-nss-drv.ko, ppp_generic.ko, pppoe.ko and pptp.ko, and OpenWrt's
+	# dependency check fails the package if they are not declared -
+	#
+	#   Package kmod-qca-nss-ecm is missing dependencies for the following
+	#   libraries: ppp_generic.ko pppoe.ko pptp.ko qca-nss-drv.ko
+	#
+	# - which is what dropping all nine produced. Those five also do not cap
+	# anything: kmod-qca-nss-drv and kmod-pppoe are in the image, and the
+	# kmod-pptp/kmod-pppol2tp hints are keyed on kmod-pppoe rather than on
+	# themselves, so they pull those two INTO the image exactly as they did
+	# before KMODS=1 existed.
+	#
+	# Done in python because they are backslash continuations: dropping the last
+	# entry of the list would leave the previous one ending in '\', which
+	# swallows the TITLE: that follows and corrupts the package metadata.
 	python3 - "$ECM_MK" <<'PYEOF'
 import re, sys
 path = sys.argv[1]
@@ -247,11 +261,16 @@ m = re.search(r'(define KernelPackage/qca-nss-ecm\n)(.*?)(\nendef)', src, re.S)
 if not m:
     sys.exit("ERROR: qca-nss-ecm KernelPackage block not found in " + path)
 lines = m.group(2).split('\n')
-keep = [l for l in lines if not re.search(r'\+PACKAGE_kmod-[A-Za-z0-9_-]+:kmod-', l)]
+# The four self-referential hints for features disabled just above. Not "every
+# +PACKAGE_x:kmod-y": ecm.ko needs the qca-nss-drv/ppp/pppoe/pptp ones declared
+# or OpenWrt's library-dependency check fails the package.
+DROP = ('qca-mcs', 'bonding', 'vxlan', 'nat46')
+keep = [l for l in lines
+        if not any('+PACKAGE_kmod-%s:kmod-%s' % (d, d) in l for d in DROP)]
 dropped = len(lines) - len(keep)
-if dropped == 0:
-    sys.exit("ERROR: no optional co-install deps found in kmod-qca-nss-ecm - "
-             "has the feed changed?")
+if dropped != len(DROP):
+    sys.exit("ERROR: dropped %d of the %d expected co-install deps from "
+             "kmod-qca-nss-ecm - has the feed changed?" % (dropped, len(DROP)))
 # Whatever is now last in DEPENDS must not end in a backslash. A real
 # continuation is followed by another dependency, which starts with + or @.
 for i, l in enumerate(keep):
