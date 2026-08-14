@@ -93,15 +93,21 @@ if [ -d "$TREE/staging_dir/packages/qualcommax" ]; then
 fi
 cp -a "$TREE/$RCL" "$STASH/rc.local.orig"
 
+# Must always succeed: every caller is "restore; die <why>", and a restore that
+# returned non-zero under set -e would swallow the message explaining what went
+# wrong.
 restore() {
 	echo ">>> restoring the tree to its non-wifi state"
 	cp -a "$STASH/rc.local.orig" "$TREE/$RCL"
 	cp -a "$STASH/top/." "$TREE/$T/"
-	[ -n "$(ls -A "$STASH/pkgs" 2>/dev/null)" ] && cp -a "$STASH/pkgs/." "$TREE/$T/packages/"
+	if [ -n "$(ls -A "$STASH/pkgs" 2>/dev/null)" ]; then
+		cp -a "$STASH/pkgs/." "$TREE/$T/packages/"
+	fi
 	if [ -d "$STASH/merged" ]; then
 		rm -rf "$TREE/staging_dir/packages/qualcommax"
 		cp -a "$STASH/merged" "$TREE/staging_dir/packages/qualcommax"
 	fi
+	return 0
 }
 
 # ------------------------------------------------------------------ 2. insert
@@ -109,10 +115,16 @@ restore() {
 # /proc/sys/dev/nss knobs to line 1 of this same file, so the two never collide
 # — but check, rather than trust, that we are editing the file we think we are.
 echo ">>> inserting the beaconing block into $RCL"
-n=$(grep -c '^exit 0$' "$TREE/$RCL")
+# grep -c exits 1 on zero matches; that is a reason to report the anchor as
+# missing, not to die without saying so.
+n=$(grep -c '^exit 0$' "$TREE/$RCL" || true)
 [ "$n" = "1" ] || { restore; die "anchor '^exit 0$' matched $n times (want 1) in $TREE/$RCL"; }
 grep -q "$MARKER" "$TREE/$RCL" && { restore; die "$TREE/$RCL already carries the block"; }
-NSS_LINES_BEFORE=$(grep -c 'proc/sys/dev/nss' "$TREE/$RCL" || true)
+# Match the knobs build.sh actually prepends, not the string anywhere in the
+# file: the inserted block *documents* that interaction in a comment, and a
+# looser pattern counts the prose as a knob.
+NSS_KNOB='^echo 1 > /proc/sys/dev/nss/'
+NSS_LINES_BEFORE=$(grep -c "$NSS_KNOB" "$TREE/$RCL" || true)
 
 python3 - "$TREE/$RCL" "$FRAGMENT" <<'PY'
 import sys
@@ -126,7 +138,7 @@ open(rcl, 'w').write(body[:i] + block + '\n' + body[i:])
 PY
 
 grep -q "$MARKER" "$TREE/$RCL" || { restore; die "insert did not take"; }
-NSS_LINES_AFTER=$(grep -c 'proc/sys/dev/nss' "$TREE/$RCL" || true)
+NSS_LINES_AFTER=$(grep -c "$NSS_KNOB" "$TREE/$RCL" || true)
 [ "$NSS_LINES_BEFORE" = "$NSS_LINES_AFTER" ] \
 	|| { restore; die "the insert disturbed the NSS knobs build.sh prepended ($NSS_LINES_BEFORE -> $NSS_LINES_AFTER)"; }
 echo "    ok (NSS knob lines preserved: $NSS_LINES_AFTER)"
@@ -138,13 +150,16 @@ echo "    ok (NSS knob lines preserved: $NSS_LINES_AFTER)"
 # relinks the kernel around the new initramfs and regenerates the images. The
 # kernel *configuration* is untouched, so vermagic cannot move — asserted below.
 echo ">>> re-running the image step (base-files -> rootfs -> images)"
+# Explicit `|| exit` on each step: bash suppresses set -e inside a subshell that
+# is part of an || list, so without them a failing early step would let the rest
+# run and only the last one's status would be seen.
 (
-	cd "$TREE"
+	cd "$TREE" || exit 1
 	rm -f staging_dir/target-*/stamp/.package_install staging_dir/target-*/stamp/.target_install
-	make package/base-files/clean
-	make -j"$(nproc)" package/base-files/compile
-	make -j"$(nproc)" package/install
-	make -j"$(nproc)" target/install
+	make package/base-files/clean          || exit 1
+	make -j"$(nproc)" package/base-files/compile || exit 1
+	make -j"$(nproc)" package/install      || exit 1
+	make -j"$(nproc)" target/install       || exit 1
 ) || { restore; die "the image step failed"; }
 
 # ------------------------------------------------------------------ 4. verify
