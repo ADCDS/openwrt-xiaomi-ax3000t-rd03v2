@@ -25,11 +25,31 @@ named `kernel`, same layout the working system boots from.
    `ubiattach -m <ubi_kernel mtdnum>; dd if=/dev/ubiX_0 of=old-kernel.bin; ubidetach`.
 2. **Write the initramfs**:
    `ubiformat /dev/mtd<ubi_kernel> -f initramfs-factory.ubi -y`, then
-   ubiattach and **verify by read-back** (`dd` the `kernel` volume, compare
-   md5 against the `initramfs-uImage.itb` the artifact wraps) before
-   detaching. Set the boot flags the sanctioned path sets (`boot_wait on`,
-   `uart_en 1`, `flag_boot_rootfs 0`, `flag_last_success 0`,
-   `flag_boot_success 1`, `flag_try_sys{1,2}_failed 8`).
+   ubiattach and **verify by read-back** before detaching — comparing the
+   right bytes. The artifact's single volume is **dynamic**, so it records no
+   used length and reads back whole LEBs: the FIT image followed by `0xff`
+   erase padding. An md5 of the *entire* volume against the
+   `initramfs-uImage.itb` the artifact wraps can therefore never match,
+   however perfect the write was. The `.itb` is a byte-exact **prefix** of the
+   volume — check that:
+
+   ```sh
+   # kernel volume attached as /dev/ubiX_0
+   head -c "$(stat -c %s initramfs-uImage.itb)" /dev/ubiX_0 | md5sum
+   tail -c +"$(( $(stat -c %s initramfs-uImage.itb) + 1 ))" /dev/ubiX_0 \
+     | tr -d '\377' | wc -c
+   ```
+
+   The first must equal `md5sum initramfs-uImage.itb`; the second must print
+   `0` — nothing but erase padding past the image. Use `head -c`, not
+   `dd bs=1`, which crawls through 14 MB a byte at a time. On v1.6 the `.itb`
+   is 13,904,532 bytes and the volume reads back 13,967,360 = 110 LEBs ×
+   126,976, so the trailing 62,828 bytes are `0xff`: that size difference is
+   expected, not a bad flash.
+
+   Set the boot flags the sanctioned path sets (`boot_wait on`, `uart_en 1`,
+   `flag_boot_rootfs 0`, `flag_last_success 0`, `flag_boot_success 1`,
+   `flag_try_sys{1,2}_failed 8`).
 3. **Reboot.** The box comes up in the RAM initramfs with **default config**:
    static `192.168.1.1` + dnsmasq serving DHCP. If a real gateway lives at
    that address, race it: pin `192.168.1.1 → <box MAC>` as a static ARP/neigh
