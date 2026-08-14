@@ -18,6 +18,13 @@
 # kmod at `m` still contributes its Kernel-Config symbols), so kmods only
 # install on an image from the SAME build run. Release images must therefore
 # be built with KMODS=1 too. Expect a multi-hour build.
+#
+# Cutting a release is this script twice (once plain, once NSS=1, both KMODS=1)
+# into two separate directories, then, over each finished tree:
+#   ./tools/wifi-initramfs.sh <tree>   # adds the beaconing -wifi initramfs pair
+#   ./tools/mkrelease.sh               # assembles + verifies the asset set
+# tools/wifi-initramfs.sh re-runs only the image step, so it does not touch the
+# kernel config and the tree's single kmod set still pairs with both passes.
 set -e
 
 cd "$(dirname "$0")"
@@ -286,6 +293,10 @@ echo "  $(pwd)/bin/targets/qualcommax/ipq50xx/"
 echo "  - *-initramfs-uImage.itb      (RAM-boot image; REQUIRED for every flash — you run sysupgrade from it)"
 echo "  - *-squashfs-sysupgrade.bin   (the NAND image; flash with sysupgrade RUN FROM the initramfs, not in place — see README step 4)"
 echo "  - *-squashfs-factory.ubi      (whole-UBI image; not used on this locked device — install via the initramfs path)"
+echo
+echo "Both radios are disabled in this image. For an installer that beacons while"
+echo "running from RAM (cable-free flashing), add the -wifi initramfs pair with:"
+echo "  ./tools/wifi-initramfs.sh $(pwd)"
 if [ "$WITH_NSS" = "1" ]; then
 	echo
 	echo "NSS hardware offload build. After first boot the NSS core boots and"
