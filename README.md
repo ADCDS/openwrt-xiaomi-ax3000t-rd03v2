@@ -58,11 +58,38 @@ Prebuilt images are on the [Releases](../../releases) page:
 | `…-squashfs-sysupgrade.bin` | The permanent image, written to NAND by `sysupgrade` **run from the RAM initramfs above** (not in place — see the warning in step 4) |
 | `…-squashfs-factory.ubi` | Whole-UBI image. **Not used by this guide** — the stock bootloader is locked (no OEM web-flash / no unlocked U-Boot write), so there is no supported way to write it directly. Install via the initramfs + `sysupgrade` path instead |
 | `…-initramfs-factory.ubi` | The RAM image wrapped as a UBI volume. Only for the **no-UART** path — written into `ubi_kernel` from a running system to pivot into the initramfs without serial ([`docs/no-uart-reflash.md`](docs/no-uart-reflash.md)) |
+| `…-initramfs-uImage-wifi.itb`<br>`…-initramfs-factory-wifi.ubi` | The same two RAM images, but this build's initramfs brings **both radios up** while it runs from RAM, so the flash needs no LAN cable |
 | `…-kmods.tar.gz` | Every kernel module built against **this exact image**, as installable `.apk`s. See [Installing kernel modules](#installing-kernel-modules) |
+| `nand-support.txt` | The SPI-NAND parts this release's kernel can drive, keyed by the `flash_type` byte the stock bootloader records. Machine-readable; check it if your unit does not boot |
 
 Each file also comes in an `-nss` variant (`…-sysupgrade-nss.bin`), built with the experimental
 QCA NSS hardware offload — see [`docs/nss-offload.md`](docs/nss-offload.md). The two are not
 interchangeable: the NSS kernel differs, so its kmod tarball only matches its own image.
+The four initramfs artifacts are `…-initramfs-uImage{,-nss}{,-wifi}.itb` and likewise for
+`-initramfs-factory…ubi`; the kmod tarball for a flavour matches **both** of its initramfs
+variants, because they come from one build and differ only in `/etc/rc.local`.
+
+**The `-wifi` installer.** Use it when you have no cable to spare. It comes up beaconing
+`OpenWrt-RD03v2-Installer` (WPA2, key `rd03v2install`) on both bands, bridged into `br-lan`; join
+it, `ssh root@192.168.1.1`, and run step 4 from there. Both the SSID and the key are published, so
+this is not a secret — but the exposure is the flash itself, a few minutes on a box whose root
+account has no password either way, and it ends at the reboot into NAND. The beacon is gated on
+the rootfs being `tmpfs`, i.e. it only happens while running from RAM: the permanent image you
+flash from it is an ordinary `…-squashfs-sysupgrade.bin` and still comes up with the radios off,
+whichever installer wrote it.
+
+**`nand-support.txt`.** This board's SPI-NAND is second-sourced, and a kernel that does not know
+the part does not come up at all (see the `unknown raw ID` row under
+[Quick troubleshooting](#quick-troubleshooting)). The stock bootloader probes the chip and leaves
+its device byte in the U-Boot environment, so a unit will tell you which one it has:
+
+```sh
+fw_printenv flash_type    # from OpenWrt   -> e.g. "flash_type=be"
+nvram get flash_type      # from stock
+```
+
+Look that byte up in the first column of `nand-support.txt`. `11` is the common ESMT
+F50D1G41LB; `be` is the Winbond W25N01KWZEIG, which **no release before v1.7 could probe**.
 
 The install is a **UART + TFTP** procedure because the stock bootloader is locked. Full walkthrough below.
 
@@ -206,7 +233,7 @@ pins the boot-success flags). Don't re-flash over it.
 | Countdown never pauses, no `IPQ5018#` no matter what you press | `boot_wait=off` (stock booted to userspace since the last recovery) → redo the TFTP recovery (step 2), then `saveenv` on the *very next* boot (step 3) |
 | `not permit upgrade!` / `Upgrade fail!` during the TFTP recovery | Anti-rollback: your `recovery.bin` is older than the last stock version the unit ran → get an image with a version code ≥ yours, or see [If anti-rollback blocks you](#if-anti-rollback-blocks-you) (step 2) |
 | `tftpboot` crawls, endless `#` marks | Normal: U-Boot TFTP is ~100 KB/s → the ~14 MB initramfs takes 2–3 min |
-| `spi-nand: unknown raw ID` + `probe … failed with error -95`, empty `/proc/mtd`, `cannot open mtd rootfs`, ath11k `failed to load board data file: -12` | Your unit has a NAND chip the kernel doesn't know — the part is second-sourced. Fixed for the Winbond W25N01KW after v1.6; on v1.6 or earlier, or with a third variant, the chip needs an ID-table entry ([#12](https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/12)) |
+| `spi-nand: unknown raw ID` + `probe … failed with error -95`, empty `/proc/mtd`, `cannot open mtd rootfs`, ath11k `failed to load board data file: -12` | Your unit has a NAND chip the kernel doesn't know — the part is second-sourced. Fixed for the Winbond W25N01KW in **v1.7**; on v1.6 or earlier that unit cannot be flashed at all. Check `fw_printenv flash_type` against the release's `nand-support.txt`; a part listed in neither needs an ID-table entry ([#12](https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/12)) |
 | **One** `UBI init error 22` on the first boot after flashing | Benign: A/B loader retries and attaches → let it boot |
 | `UBI init error 22` on **every** boot | In-place/torn flash → RAM-boot initramfs + `sysupgrade -n` (steps 3–4) |
 | NSS build: every port `failed to open conduit`, LAN+WAN dead | NSS fw/driver version mismatch → see [`docs/nss-offload.md`](docs/nss-offload.md) Troubleshooting |
