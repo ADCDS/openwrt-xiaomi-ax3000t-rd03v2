@@ -45,12 +45,14 @@ IMG=$1; WHAT=$2
 command -v python3 >/dev/null || { echo "ERROR: python3 is required" >&2; exit 2; }
 
 exec python3 - "$IMG" "$WHAT" <<'PYEOF'
-import bz2, collections, lzma, os, signal, struct, subprocess, sys, zlib
+import bz2, collections, lzma, os, struct, subprocess, sys, zlib
 
-# `... --list | head` is the natural way to eyeball an image; don't make that a
-# traceback.
-signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-
+# NB: do NOT restore SIGPIPE to SIG_DFL process-wide to make `--list | head`
+# quiet. _pipe() below feeds a whole image to zstd/lz4/lzop, and a probe that
+# hits a false-positive magic makes the child exit while we are still writing —
+# with SIG_DFL that kills *this* process, and the caller sees the extraction
+# "fail" on a perfectly good image. Python's default (BrokenPipeError) is what
+# lets those probes be non-fatal; the writes we own are guarded at the end.
 img, what = sys.argv[1], sys.argv[2]
 raw = open(img, 'rb').read()
 
@@ -103,12 +105,15 @@ def ubi_volumes(b):
 
 # ------------------------------------------------------- compressed stream(s)
 def _pipe(tool, data):
+    # Nonzero exit and a half-consumed stdin are both expected here: we hand the
+    # tool everything from the magic to EOF, so there is almost always trailing
+    # data after the stream it decodes. Keep whatever it managed to write.
     try:
         p = subprocess.run(tool, input=data, stdout=subprocess.PIPE,
                            stderr=subprocess.DEVNULL)
-    except FileNotFoundError:
+    except (FileNotFoundError, BrokenPipeError):
         return b''
-    return p.stdout                       # trailing garbage => nonzero rc, keep
+    return p.stdout
 
 
 def _gzip(d):
@@ -190,17 +195,25 @@ def cpio_entries(b):
         p = (dp + filesize + 3) & ~3
 
 
-if what == '--cpio':
-    sys.stdout.buffer.write(cpio)
-elif what == '--list':
-    for name, mode, data in cpio_entries(cpio):
-        print('%06o %8d %s' % (mode, len(data), name))
-else:
-    want = what.lstrip('./')
-    for name, mode, data in cpio_entries(cpio):
-        if name.lstrip('./') == want:
-            sys.stdout.buffer.write(data)
-            break
+try:
+    if what == '--cpio':
+        sys.stdout.buffer.write(cpio)
+    elif what == '--list':
+        for name, mode, data in cpio_entries(cpio):
+            print('%06o %8d %s' % (mode, len(data), name))
     else:
-        sys.exit("ERROR: %s not present in the initramfs of %s" % (what, img))
+        want = what.lstrip('./')
+        for name, mode, data in cpio_entries(cpio):
+            if name.lstrip('./') == want:
+                sys.stdout.buffer.write(data)
+                break
+        else:
+            sys.exit("ERROR: %s not present in the initramfs of %s" % (what, img))
+    sys.stdout.buffer.flush()
+except BrokenPipeError:
+    # `... --list | head`. Drop the fd so the interpreter's own flush at exit
+    # cannot re-raise, and report success: the output we were asked for was
+    # produced, the reader simply stopped reading.
+    os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    sys.exit(0)
 PYEOF
