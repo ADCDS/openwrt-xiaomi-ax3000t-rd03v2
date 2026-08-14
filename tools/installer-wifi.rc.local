@@ -53,9 +53,20 @@ installer_rootfs_type() {
 }
 
 if [ "$(installer_rootfs_type 2>/dev/null)" = "tmpfs" ]; then
-	# /etc/config/wireless is generated from board detection during boot; on a
-	# cold first boot rc.local can still win that race, so make sure it exists.
-	[ -s /etc/config/wireless ] || /sbin/wifi config
+	# /etc/config/wireless is generated from board detection during boot, and
+	# ath11k registers this board's two phys as it goes. rc.local runs late
+	# (/etc/init.d/done, START=95) but not necessarily later than that, and
+	# losing the race here means an installer that silently never beacons - in
+	# the one situation where the user has no cable to fall back on. So wait,
+	# briefly and boundedly, instead of testing once.
+	_n=0
+	while :; do
+		[ -s /etc/config/wireless ] || /sbin/wifi config 2>/dev/null
+		uci -q get wireless.radio0 >/dev/null 2>&1 && break
+		_n=$((_n + 1))
+		[ "$_n" -ge 20 ] && break
+		sleep 1
+	done
 
 	# Section names per README "First boot": wireless.radio{0,1} are the
 	# wifi-device sections, wireless.default_radio{0,1} the wifi-iface sections
@@ -79,6 +90,6 @@ if [ "$(installer_rootfs_type 2>/dev/null)" = "tmpfs" ]; then
 	_m2="then: ssh root@192.168.1.1 and sysupgrade -n the squashfs image"
 	logger -t installer-wifi "$_m1; $_m2"
 	printf '\n  %s\n  %s\n\n' "$_m1" "$_m2" > /dev/console 2>/dev/null
-	unset _m1 _m2 _r
+	unset _m1 _m2 _r _n
 fi
 # --- end installer WiFi beacon ---------------------------------------------
