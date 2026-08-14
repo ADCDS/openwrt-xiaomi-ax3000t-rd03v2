@@ -177,28 +177,45 @@ if [ "$WITH_NSS" = "1" ]; then
 	# QSDK-patched-bonding API). We don't use bonding - strip the dep.
 	sed -i '/^define KernelPackage\/qca-nss-drv-pppoe$/,/^endef/{/+kmod-bonding/d}' \
 		feeds/nss_packages/qca-nss-clients/Makefile
-	# qca-nss-ecm keys its MAP-T support off CONFIG_PACKAGE_kmod-nat46 and then
-	# does "#include <nat46-core.h>" — a header the nat46 package never installs
-	# into staging. Nothing selected kmod-nat46 in a normal build, so the path
-	# lay dormant; KMODS=1 wakes it and ecm stops compiling. Since
-	# kmod-qca-nss-ecm is in DEVICE_PACKAGES that is a hard build failure, not an
-	# IGNORE_ERRORS skip.
+	# ecm feature tests: ask "is it in the image?", not "did we package it?".
 	#
-	# Writing "# CONFIG_PACKAGE_kmod-nat46 is not set" into .config does NOT fix
-	# it, which is the trap: kmod-qca-nss-drv-map-t declares "+kmod-nat46", '+'
-	# in DEPENDS becomes a kconfig `select`, ALL_KMODS puts map-t at m, and
-	# `make defconfig` therefore turns nat46 back on. The exclusion looks applied
-	# and is silently undone one line later.
+	# qca-nss-ecm switches ~17 optional features on by testing whether some kmod
+	# is enabled at all:
 	#
-	# So disable the code path at its source instead. That is also the smaller
-	# claim: MAP-T was never compiled into ecm on this port before KMODS=1
-	# existed, so this keeps the module identical to the one that was tested,
-	# rather than switching on 464XLAT support nobody here has run.
-	anchor 1 'ifneq ($(CONFIG_PACKAGE_kmod-nat46),)' feeds/nss_packages/qca-nss-ecm/Makefile
-	sed -i 's#^ifneq ($(CONFIG_PACKAGE_kmod-nat46),)$#ifeq (nat46-core.h,is-not-installed-into-staging)#' \
-		feeds/nss_packages/qca-nss-ecm/Makefile
-	grep -q 'ECM_INTERFACE_MAP_T_ENABLE' feeds/nss_packages/qca-nss-ecm/Makefile \
-		|| { echo "ERROR: MAP-T guard rewrite lost the block it was guarding" >&2; exit 1; }
+	#     ifneq ($(CONFIG_PACKAGE_kmod-qca-mcs),)
+	#     ECM_MAKE_OPTS+=ECM_MULTICAST_ENABLE=y
+	#
+	# `m` satisfies that test. So KMODS=1, which sets every kmod to `m`, compiles
+	# ecm with multicast, MAP-T, IPsec, bonding, macvlan, VXLAN, OVS, MSCS,
+	# L2TPv2, GRE, SIT, IPIP6 and rawip support that this port has never built,
+	# never shipped and never measured. Two of them cannot even compile:
+	#   - MAP-T does "#include <nat46-core.h>", which nat46 never installs into
+	#     staging;
+	#   - multicast does "#include <mc_ecm.h>" from qca-mcs, which does not build
+	#     against the 6.12 bridge at all (mc_osdep.h calls br_pass_frame_up()).
+	# kmod-qca-nss-ecm is in DEVICE_PACKAGES, so both are hard failures that stop
+	# the entire NSS build rather than IGNORE_ERRORS skips.
+	#
+	# ecm links against these at build time, so the test it means to make is "is
+	# this in the image" - which is `y`. Rewrite each test to say that. On a
+	# build without ALL_KMODS this is a no-op (packages are y or unset), which is
+	# exactly the point: the ecm module stays the one that was measured on
+	# hardware, with pppoe/pptp/ppp and the NSS front end on and the rest off.
+	#
+	# Two things that look like fixes and are not:
+	#   - "# CONFIG_PACKAGE_kmod-nat46 is not set" in .config. kmod-qca-nss-drv-
+	#     map-t declares "+kmod-nat46"; a leading '+' in DEPENDS is a kconfig
+	#     `select`, so ALL_KMODS re-selects nat46 and `make defconfig` undoes the
+	#     exclusion one line later, silently. (This is what fad4e1b tried.)
+	#   - excluding macvlan/ipsec/vxlan/bonding/... from the kmod set. It would
+	#     work, and it would cost users those modules in the release tarball to
+	#     work around a build flag.
+	ECM_MK=feeds/nss_packages/qca-nss-ecm/Makefile
+	n=$(grep -c '\$(CONFIG_PACKAGE_kmod-' "$ECM_MK")
+	[ "$n" -ge 10 ] || { echo "ERROR: only $n kmod feature tests in $ECM_MK (want >=10) — has it been rewritten upstream?" >&2; exit 1; }
+	sed -i 's#\$(CONFIG_PACKAGE_kmod-\([a-zA-Z0-9_.-]*\))#$(filter y,$(CONFIG_PACKAGE_kmod-\1))#g' "$ECM_MK"
+	m=$(grep -c 'filter y,\$(CONFIG_PACKAGE_kmod-' "$ECM_MK")
+	[ "$m" = "$n" ] || { echo "ERROR: rewrote $m of $n ecm feature tests" >&2; exit 1; }
 
 	mkdir -p feeds/nss_packages/qca-nss-drv/patches
 	cp ../nss/feed-patches/qca-nss-drv/*.patch feeds/nss_packages/qca-nss-drv/patches/
@@ -269,9 +286,10 @@ if [ "$WITH_KMODS" = "1" ]; then
 CONFIG_ALL_KMODS=y
 EOF
 	# nat46 used to be excluded here, on the NSS build, to stop qca-nss-ecm
-	# compiling its MAP-T path. It does not work and it is not needed: see the
-	# qca-nss-ecm Makefile rewrite in the NSS block above. kmod-nat46 is now
-	# built as a module on both flavours, as it always was on the default one.
+	# compiling its MAP-T path. It does not work (kconfig re-selects it) and it
+	# is not needed: the ecm feature tests are rewritten in the NSS block above.
+	# kmod-nat46 is built as a module on both flavours, as it always was on the
+	# default one.
 fi
 
 make defconfig
