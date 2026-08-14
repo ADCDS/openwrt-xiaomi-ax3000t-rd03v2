@@ -1,0 +1,84 @@
+# --- installer WiFi beacon (release "-wifi" initramfs only) -----------------
+# Inserted verbatim, immediately above rc.local's final "exit 0", by
+# tools/wifi-initramfs.sh. It is deliberately NOT part of files/'s rc.local:
+#
+#   * the default images must stay radio-silent, and
+#   * an *additive* insert fails towards "no beacon". If the anchor ever drifts
+#     the -wifi pass dies; it cannot accidentally turn the ordinary images into
+#     open boxes. Carrying the block in files/ and stripping it for the normal
+#     build would fail the other way round.
+#
+# Inserting above "exit 0" also keeps the NSS build intact: build.sh (NSS=1)
+# *prepends* its /proc/sys/dev/nss knobs to line 1 of this same file, so the two
+# edits never touch the same region.
+#
+# WHY
+#   The RAM initramfs is the only sanctioned way to write this board's NAND
+#   (README step 4 — sysupgrade is run *from* it, never in place), but it comes
+#   up with both radios disabled, so the flash needs a LAN cable. Beaconing here
+#   is what makes a fully over-the-air install possible.
+#
+# THE GATE
+#   rootfs_type = tmpfs means "we are running from RAM". It is the same test
+#   platform_check_image() already uses to refuse an in-place sysupgrade, so it
+#   is load-bearing on this board rather than a new idea. The squashfs the -wifi
+#   pass produces is discarded, but the gate costs nothing and means even a
+#   -wifi image that somehow reached NAND would not beacon: the README is
+#   explicit that a box coming up with radios on before a root password is set
+#   is the thing to avoid. If the type cannot be determined we do NOT beacon.
+#
+#   The window this opens is the flash itself: a few minutes, on a system whose
+#   root account has no password either way, with the operator next to the box.
+#   It closes on the reboot into NAND.
+#
+# THE KEY
+#   SSID and key are fixed and published — the honest tradeoff for a prebuilt
+#   image. Deriving the PSK from the device MAC buys nothing, because the MAC is
+#   the BSSID. WPA2 is still worth having over an open SSID: it keeps a
+#   neighbour's device from auto-joining, and keeps the session off the air in
+#   the clear. Anyone who wants in during those few minutes gets in either way.
+INSTALLER_SSID="OpenWrt-RD03v2-Installer"
+INSTALLER_KEY="rd03v2install"
+
+# rootfs_type() lives in /lib/upgrade/common.sh. Source it if it is there, and
+# fall back to /proc/mounts if a future base-files moves it — never guess.
+[ -e /lib/functions.sh ] && . /lib/functions.sh 2>/dev/null
+[ -e /lib/upgrade/common.sh ] && . /lib/upgrade/common.sh 2>/dev/null
+installer_rootfs_type() {
+	if command -v rootfs_type >/dev/null 2>&1; then
+		rootfs_type
+	else
+		awk '$2 == "/" { t = $3 } END { print t }' /proc/mounts
+	fi
+}
+
+if [ "$(installer_rootfs_type 2>/dev/null)" = "tmpfs" ]; then
+	# /etc/config/wireless is generated from board detection during boot; on a
+	# cold first boot rc.local can still win that race, so make sure it exists.
+	[ -s /etc/config/wireless ] || /sbin/wifi config
+
+	# Section names per README "First boot": wireless.radio{0,1} are the
+	# wifi-device sections, wireless.default_radio{0,1} the wifi-iface sections
+	# generated for them. Both are skipped if absent rather than created, so a
+	# board that grew a third radio does not get a half-configured one.
+	for _r in 0 1; do
+		uci -q get "wireless.radio$_r" >/dev/null || continue
+		uci -q get "wireless.default_radio$_r" >/dev/null || continue
+		uci -q set "wireless.radio$_r.disabled=0"
+		uci -q set "wireless.default_radio$_r.disabled=0"
+		uci -q set "wireless.default_radio$_r.mode=ap"
+		uci -q set "wireless.default_radio$_r.network=lan"
+		uci -q set "wireless.default_radio$_r.ssid=$INSTALLER_SSID"
+		uci -q set "wireless.default_radio$_r.encryption=psk2"
+		uci -q set "wireless.default_radio$_r.key=$INSTALLER_KEY"
+	done
+	uci -q commit wireless
+	/sbin/wifi reload
+
+	_m1="RAM installer: WiFi up on \"$INSTALLER_SSID\" (WPA2, key \"$INSTALLER_KEY\")"
+	_m2="then: ssh root@192.168.1.1 and sysupgrade -n the squashfs image"
+	logger -t installer-wifi "$_m1; $_m2"
+	printf '\n  %s\n  %s\n\n' "$_m1" "$_m2" > /dev/console 2>/dev/null
+	unset _m1 _m2 _r
+fi
+# --- end installer WiFi beacon ---------------------------------------------
