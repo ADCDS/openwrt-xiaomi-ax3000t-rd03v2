@@ -217,6 +217,51 @@ if [ "$WITH_NSS" = "1" ]; then
 	m=$(grep -c 'filter y,\$(CONFIG_PACKAGE_kmod-' "$ECM_MK")
 	[ "$m" = "$n" ] || { echo "ERROR: rewrote $m of $n ecm feature tests" >&2; exit 1; }
 
+	# ...and the same problem again in kmod-qca-nss-ecm's DEPENDS, where it is
+	# silent instead of loud. Nine of its dependencies are optional
+	# co-installation hints of the form
+	#
+	#     +PACKAGE_kmod-nat46:kmod-nat46
+	#
+	# i.e. "if nat46 is selected at all, pull it in too". Under ALL_KMODS they
+	# are all selected - at `m`. A package cannot be built into the image while
+	# depending on a module, so kconfig quietly DEMOTES kmod-qca-nss-ecm from y
+	# to m even though ipq50xx.mk names it in DEVICE_PACKAGES. The build then
+	# succeeds and produces an NSS image with no connection manager in it: no
+	# acceleration at all, nothing in the log to say why, and the module sitting
+	# in the kmod tarball looking like it belongs there.
+	#
+	# The hints are redundant here - this port names what it wants in
+	# DEVICE_PACKAGES - and four of them (qca-mcs, bonding, vxlan, nat46) point
+	# at features the rewrite above just compiled out. Drop them all; the real
+	# dependencies (+ethtool, +kmod-nf-conntrack, the NSS_DRV_* options) stay.
+	#
+	# Done in python because they are backslash continuations: deleting the last
+	# few lines of the list leaves the previous one ending in '\', which swallows
+	# the TITLE: that follows and corrupts the package metadata.
+	python3 - "$ECM_MK" <<'PYEOF'
+import re, sys
+path = sys.argv[1]
+src = open(path).read()
+m = re.search(r'(define KernelPackage/qca-nss-ecm\n)(.*?)(\nendef)', src, re.S)
+if not m:
+    sys.exit("ERROR: qca-nss-ecm KernelPackage block not found in " + path)
+lines = m.group(2).split('\n')
+keep = [l for l in lines if not re.search(r'\+PACKAGE_kmod-[A-Za-z0-9_-]+:kmod-', l)]
+dropped = len(lines) - len(keep)
+if dropped == 0:
+    sys.exit("ERROR: no optional co-install deps found in kmod-qca-nss-ecm - "
+             "has the feed changed?")
+# Whatever is now last in DEPENDS must not end in a backslash. A real
+# continuation is followed by another dependency, which starts with + or @.
+for i, l in enumerate(keep):
+    if l.rstrip().endswith('\\') and (
+            i + 1 == len(keep) or not keep[i + 1].lstrip().startswith(('+', '@'))):
+        keep[i] = l.rstrip()[:-1].rstrip()
+open(path, 'w').write(src[:m.start(2)] + '\n'.join(keep) + src[m.end(2):])
+print("    dropped %d optional co-install deps from kmod-qca-nss-ecm" % dropped)
+PYEOF
+
 	mkdir -p feeds/nss_packages/qca-nss-drv/patches
 	cp ../nss/feed-patches/qca-nss-drv/*.patch feeds/nss_packages/qca-nss-drv/patches/
 	# ecm DSA-conduit awareness: map a DSA user port (or a bridge master over one)
@@ -343,6 +388,22 @@ if [ -n "${NSS_CLIENT_DROP:-}" ]; then
 	grep -q '^CONFIG_PACKAGE_kmod-qca-nss-drv-pppoe=y$' .config \
 		|| { echo "ERROR: kmod-qca-nss-drv-pppoe is not in the image — PPPoE offload would be missing" >&2; exit 1; }
 fi
+
+# The NSS packages ipq50xx.mk puts in DEVICE_PACKAGES must be IN the image, not
+# merely packaged. kconfig demotes a y package to m rather than failing when a
+# dependency is only a module, so "it built" is not evidence: an NSS image
+# without kmod-qca-nss-ecm boots fine, accelerates nothing, and says nothing.
+# See the DEPENDS rewrite above for how that happened. Check every one.
+if [ "$WITH_NSS" = "1" ]; then
+	for p in kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-pppoe nss-firmware-ipq50xx; do
+		grep -q "^CONFIG_PACKAGE_$p=y\$" .config || {
+			echo "ERROR: $p is '$(grep -m1 "^CONFIG_PACKAGE_$p=" .config || echo unset)', not y." >&2
+			echo "       It is in DEVICE_PACKAGES, so this image would ship without it." >&2
+			exit 1
+		}
+	done
+fi
+
 
 # With ~1100 extra modules in play, one broken out-of-tree module must not take
 # the whole build down. IGNORE_ERRORS="n m" is what OpenWrt's own buildbot uses
