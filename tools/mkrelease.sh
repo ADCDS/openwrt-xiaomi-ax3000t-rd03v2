@@ -129,7 +129,9 @@ check_tree() {  # check_tree <tree> <label>
 	done
 	[ -f "$tree/staging_dir/packages/qualcommax/packages.adb" ] \
 		|| die "$label: no merged package index at staging_dir/packages/qualcommax"
-	n=$(ls "$tree/$T/packages/"kmod-*.apk 2>/dev/null | wc -l)
+	# `|| true` so pipefail does not turn "no kmods at all" — the case this
+	# check exists for — into a silent exit before the message is printed.
+	n=$(ls "$tree/$T/packages/"kmod-*.apk 2>/dev/null | wc -l || true)
 	[ "$n" -ge "$MIN_KMODS" ] \
 		|| die "$label: only $n kmods in $T/packages — rebuild with KMODS=1"
 	# The index is signed with this tree's own key, and the image ships that
@@ -177,7 +179,7 @@ kmodtar() {  # kmodtar <tree> <output.tar.gz> <label>
 		echo "flavour=$label"
 		echo "kernel=$(kver "$tree")"
 		echo "openwrt=$(cat "$tree/$T/version.buildinfo" 2>/dev/null || echo unknown)"
-		echo "packages=$(ls "$tree"/staging_dir/packages/qualcommax/*.apk 2>/dev/null | wc -l)"
+		echo "packages=$(ls "$tree"/staging_dir/packages/qualcommax/*.apk 2>/dev/null | wc -l || true)"
 		echo
 		echo "These packages install ONLY on the $label image from this same"
 		echo "release. A kmod depends on kernel=$(kver "$tree") exactly, and the"
