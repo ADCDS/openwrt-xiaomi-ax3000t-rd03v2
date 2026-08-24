@@ -4,8 +4,11 @@ Mainline OpenWrt on the IPQ5018 has **no hardware NAT offload**, so routing is
 CPU-bound at roughly **~380 Mbps** (with software flow-offload). The IPQ5018 has
 a dedicated network processor — the **NSS** (Network Sub System, a UBI32 core) —
 that offloads the routing/NAT fast path and reaches **line rate**. Measured on
-this port across a routed + NAT gigabit path: **862 Mbps at ~99 % router-CPU
-idle** with the offload engaged, versus ~275 Mbps CPU-bound on the software path.
+this port across a routed + NAT gigabit path, on the current tree (after the ECM
+egress fix in `5a89896`): **940 Mbit/s TCP / 898 Mbit/s UDP at ~0 % sirq**. The
+pre-egress-fix tree measured 862 Mbps on the same path; figures quoted further
+down as "895 Mbit/s-era" or "860 Mbit/s UDP" belong to that earlier tree and are
+kept because the experiments they describe were run there.
 
 This is an **opt-in, experimental** build. The default `./build.sh` stays pure
 mainline. To build with NSS:

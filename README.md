@@ -8,7 +8,7 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 |---|---|
 | SoC bring-up (IPQ5018, kernel 6.12) | ✅ |
 | Boots from NAND, unattended, persistent config | ✅ |
-| Airoha **AN8855** 2.5 GbE switch (4× LAN) | ✅ |
+| Airoha **AN8855** DSA switch (3× LAN + WAN; 2.5 G CPU link, ports link at 1 G) | ✅ |
 | Wired LAN data path | ✅ |
 | WiFi **2.4 GHz** (IPQ5018) | ✅ |
 | WiFi **5 GHz** (QCN6122) | ✅ |
@@ -34,8 +34,8 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 
 This port stands on the shoulders of prior work:
 
-- **[csharper2005](https://github.com/csharper2005/openwrt)** — the **Airoha AN8855 DSA switch driver**, the base device tree, and the `qca-nss-dp` phy-less-2500 fix. Without this, the 2.5 GbE switch (the hard part of this SoC) wouldn't work. The DTS and driver here are their work.
-- **[thmalmeida](https://forum.openwrt.org/t/adding-support-for-xiaomi-ax3000t-rd03v2/235136/28)** and the OpenWrt-forum thread **[“Adding support for Xiaomi AX3000T (RD03v2)”](https://forum.openwrt.org/t/adding-support-for-xiaomi-ax3000t-rd03v2/235136)** — the community reverse-engineering effort: board teardown, the annotated UART/chip photo used in this README, and much of the early legwork on this hardware revision.
+- **[csharper2005](https://github.com/csharper2005/openwrt)** — brought the **Airoha AN8855 DSA driver** to this target (the driver is Min Yao / Airoha's, with Christian Marangi's netdev submission), wrote the **base device tree**, and fixed **phy-less-2500 in `qca-nss-dp`**. Without that work the 2.5 GbE switch — the hard part of this SoC — wouldn't come up at all; the DTS and the driver integration here are theirs, carried from the `an8855h` branch.
+- **[thmalmeida](https://forum.openwrt.org/t/adding-support-for-xiaomi-ax3000t-rd03v2/235136/28)** and the OpenWrt-forum thread **[“Adding support for Xiaomi AX3000T (RD03v2)”](https://forum.openwrt.org/t/adding-support-for-xiaomi-ax3000t-rd03v2/235136)** — the board teardown and the annotated UART/chip photo used in this README (post 28). The earlier legwork in that thread is largely **Edrikk**'s — the serial/boot logs and the UART-readonly + TFTP-recovery procedure (posts 7/9/14) that step 2 of this guide descends from — with stamandr, alexq and anon63541380 filling in the hardware picture.
 - **[Ziyang Huang (hzyitc)](https://github.com/hzyitc)** — the **ath11k “smallbuffers” low-memory support** ([OpenWrt PR #21495](https://github.com/openwrt/openwrt/pull/21495)), which halves ath11k's RAM footprint and is what lets both radios run comfortably on this 256 MB board. Carried here as a patch under `files/` with authorship preserved.
 - **[OpenWrt](https://openwrt.org/)** — the `qualcommax/ipq50xx` target and everything underneath.
 
@@ -368,7 +368,7 @@ Repeat the **TFTP recovery** (step 2) with the stock `recovery.bin` — it refla
 ```bash
 git clone <this repo> && cd openwrt-xiaomi-ax3000t-rd03v2
 ./build.sh            # clones OpenWrt @ 25ee126, applies files/, builds
-NSS=1 ./build.sh      # ...plus experimental QCA NSS hardware offload (measured: 895 Mbit/s NAT at ~0% CPU)
+NSS=1 ./build.sh      # ...plus experimental QCA NSS hardware offload (measured: 940 Mbit/s NAT at ~0% CPU)
 KMODS=1 ./build.sh    # ...plus every kernel module as an installable package (slow; used for releases)
 ```
 
@@ -379,9 +379,10 @@ built with it too. Expect a multi-hour build; without it you get a normal image 
 Or manually: check out OpenWrt at `25ee126`, copy `files/*` over it, `./scripts/feeds update -a && ./scripts/feeds install -a`, seed `.config` with the device + `CONFIG_TARGET_ROOTFS_INITRAMFS=y`, then `make defconfig && make -j$(nproc)`. Images land in `bin/targets/qualcommax/ipq50xx/`.
 
 **NSS hardware offload** (`NSS=1`, opt-in) boots the IPQ5018's NSS network
-processor to offload NAT routing at line rate. Measured (LAN→WAN NAT,
-gigabit wire; 895/619 on the 2026-07-18 build, 860 re-measured on the
-current tree after the delivery-path fix in `999-2758`):
+processor to offload NAT routing at line rate. Measured LAN→WAN NAT over a
+gigabit wire. The offload figures below are from the **current tree**, taken
+after the ECM egress fix (`5a89896`) landed; the earlier `999-2758` tree
+measured 895 TCP / 860 UDP on the same path:
 
 | Path | NAT throughput | Router CPU under load |
 |---|---|---|
@@ -417,7 +418,7 @@ See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 
 **Bridge VLAN filtering under `tag_8021q` (NSS build).** The NSS build swaps the Airoha special tag for DSA's `tag_8021q` (the NSS datapath cannot parse the 4-byte special tag, so it exceptions every routed frame to the host), which means the CPU link carries a plain 802.1Q header whose VID encodes the source port. That collides head-on with a VLAN-aware bridge, which wants the same VID space and the same per-port PVID register. Up to v1.4 the driver lost that collision badly: the inherited mt7530 `.port_vlan_filtering` forced the **CPU** port to `EG_CONSISTENT` ("untagged in, untagged out"), so the conduit received frames with no VLAN header at all, the tagger had no VID to demux, and the host RX path died for every user port on that CPU port — while TX kept working, so the box stayed visible in the upstream router's FDB while being unreachable. A config revert didn't recover it; only a reboot did. The fix (`999-2762`) follows the mainline sja1105/vsc73xx model: CPU-port egress tagging is owned by `an8855_setup()` alone, and the two writers of the PVID register — `tag_8021q` and the bridge — keep **shadow PVIDs** that a single `commit` function arbitrates on the port's VLAN-awareness. Bridge VLANs in 3072–4095 are now rejected instead of silently corrupting the `tag_8021q` table. See [`docs/an8855-vlan-filtering.md`](docs/an8855-vlan-filtering.md).
 
-**Memory (256 MB, and the smallbuffers fix).** After the SoC reserves ~76 MB for the WiFi co-processor and bootloader, Linux sees ~180 MB — and by default the two ath11k radios hold ~85–90 MB of *unswappable* kernel memory (DMA ring buffers + firmware host memory). That left only ~15 MB free, and under load the kernel OOM-killer would shoot `hostapd`/`netifd`, dropping WiFi. The fix is **`kmod-ath11k-smallbuffers`** — Ziyang Huang's [PR #21495](https://github.com/openwrt/openwrt/pull/21495), which shrinks ath11k's DP ring buffers (TX-completion 32768→2048, RX-DMA 4096→1024, monitor rings 4096→128), mirroring the long-standing `ath10k-smallbuffers`. It cuts the ath11k footprint from ~85 MB to **~38 MB**, leaving **~66–100 MB free** — normal-router headroom. Tested: a 70 MB memory-pressure spike (far beyond any real load) produces **zero OOM kills** with both radios up — on real RAM alone, no swap needed. Trade-off: smaller buffers mean a little less headroom at extreme throughput, and monitor-mode capture is degraded — both irrelevant for an AP, and the accepted trade-off for low-RAM devices.
+**Memory (256 MB, and the smallbuffers fix).** After the SoC reserves ~66 MB for the WiFi co-processor and bootloader, Linux sees **175 MB** (`MemTotal: 175760 kB`) — and by default the two ath11k radios hold ~85–90 MB of *unswappable* kernel memory (DMA ring buffers + firmware host memory). That left only ~15 MB free, and under load the kernel OOM-killer would shoot `hostapd`/`netifd`, dropping WiFi. The fix is **`kmod-ath11k-smallbuffers`** — Ziyang Huang's [PR #21495](https://github.com/openwrt/openwrt/pull/21495), which shrinks ath11k's DP ring buffers (TX-completion 32768→2048, RX-DMA 4096→1024, monitor rings down to 128–512), mirroring the long-standing `ath10k-smallbuffers`. It cuts the ath11k footprint from ~85 MB to **~38 MB** (PR #21495's figures; the before-state was not re-measured on this board). Measured here on a v1.7 NSS build serving as an AP with both radios up and 6 clients: **~45 MB `MemFree`, ~33 MB `MemAvailable`** after a week of uptime — most of the ~65 MB Slab is unreclaimable, so `MemAvailable` is the honest figure. Not roomy, but stable. Tested: a 70 MB memory-pressure spike (far beyond any real load) produces **zero OOM kills** with both radios up — on real RAM alone, no swap needed. Trade-off: smaller buffers mean less headroom at extreme throughput, and monitor-mode capture is degraded. The first one does bite occasionally — the same AP logged one burst of ten `ath11k: failed to transmit frame -28` (ENOSPC on the shrunken TX ring) over that week, with no user-visible effect. It remains the right trade for a low-RAM device, but it is a real cost, not a free win.
 
 ---
 
