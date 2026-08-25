@@ -435,4 +435,17 @@ PRs welcome — especially help getting this **upstream into OpenWrt**. The AN88
 
 ## License
 
-Follows OpenWrt's licensing (GPL-2.0 / device files as in-tree). The AN8855 driver and DTS retain their original authors' licenses and copyright.
+**GPL-2.0-only** — full text in [`LICENSE`](LICENSE).
+
+This is not really a free choice: the kernel, driver and package patches under
+`files/` and `nss/` are derivative works of GPL-2.0 code, and it matches OpenWrt
+and the Linux kernel, which everything here is built against. The build scripts,
+`tools/`, and the documentation are original to this repo and are offered under
+the same terms.
+
+Individual patches keep their original authors' copyright and `Signed-off-by`
+lines, and the patch headers are the authoritative record of who wrote what — in
+particular the **AN8855 DSA driver** (Min Yao / Airoha, with Christian Marangi's
+netdev submission, carried here via csharper2005), the **base device tree**
+(csharper2005), and the **ath11k smallbuffers** patch (Ziyang Huang). See
+[Credits](#credits).
