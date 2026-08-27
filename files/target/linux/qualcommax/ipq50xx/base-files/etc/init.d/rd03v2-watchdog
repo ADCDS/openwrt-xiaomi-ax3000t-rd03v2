@@ -1,5 +1,5 @@
 #!/bin/sh /etc/rc.common
-# WiFi Q6 firmware death watchdog — home-network-inventory #1
+# WiFi Q6 firmware death watchdog — issue #15
 START=99
 USE_PROCD=1
 

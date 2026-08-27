@@ -40,17 +40,17 @@ package/
 WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
 ----------------------------------------------------------------------
   2162  package/kernel/mac80211/patches/ath11k/950-wifi-ath11k-implement-CE-interrupt-enable-disable-for-AHB.patch
-         Issue #1. ath11k_ahb_hif_ops_ipq8074 never set ce_irq_enable/
+         Issue #15. ath11k_ahb_hif_ops_ipq8074 never set ce_irq_enable/
          ce_irq_disable, so ath11k_hif_ce_irq_disable() was a no-op on AHB
          and the copy-engine tasklets stayed live across rproc_shutdown().
          From openwrt/openwrt#24578.
   2786  package/kernel/mac80211/patches/ath11k/953-wifi-ath11k-disable-interrupts-during-firmware-crash-recovery.patch
-         Issue #1. Without it a firmware assert panics on a freed datapath
+         Issue #15. Without it a firmware assert panics on a freed datapath
          (null deref in ath11k_hal_srng_access_begin from the monitor rings)
          and the SoC reboots. From openwrt/openwrt#24578, renumbered off
          951 which is taken here.
   2391  package/kernel/mac80211/patches/ath11k/954-wifi-ath11k-only-spare-the-wake-CE-on-chips-that-can-suspend.patch
-         Issue #1. The except_wake_irq pair skips CE2 so a chip suspended
+         Issue #15. The except_wake_irq pair skips CE2 so a chip suspended
          with WoW keeps its wakeup interrupt armed - but the recovery path
          re-enables every CE, so on chips that cannot suspend at all
          (qcn6122, wcn6750) each crash recovery did one surplus
@@ -114,7 +114,7 @@ target/linux/qualcommax/ipq50xx/base-files/
          Caldata extraction from 0:ART — 2.4 GHz @ 0x1000,
          5 GHz (QCN6122) @ 0x26800, 0x20000 each.
  10266  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
-         Issue #1. Backstop for the WiFi failures the driver does not
+         Issue #15. Backstop for the WiFi failures the driver does not
          recover by itself: any of remoteproc0/pd-1/pd-2 not "running"
          for 2 samples, or the in-use channel's survey active time frozen
          for 4 (the silent death, which raises no fatal IRQ). Escalates
@@ -152,12 +152,12 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
    1192  target/linux/qualcommax/files/include/linux/mfd/airoha-an8855-mfd.h
          Shared MFD header used by the AN8855 sub-drivers.
   1811  target/linux/qualcommax/patches-6.12/0819-remoteproc-qcom_q6v5_mpd-fix-userpd-array-overflow.patch
-         Issue #1. qcom_get_pd_asid() returns 1..3, but struct q6_wcss's
+         Issue #15. qcom_get_pd_asid() returns 1..3, but struct q6_wcss's
          upd[] has only MAX_UPD (3) entries, so registering pd-3 writes one
          pointer past the end. Harmless only because upd[] is the last
          member; it corrupts whatever is added after it.
   2507  target/linux/qualcommax/patches-6.12/0821-remoteproc-qcom_q6v5_mpd-tear-down-user-pd-when-root-pd-is-dead.patch
-         Issue #1. On a ROOT pd fatal the user PDs still read RPROC_RUNNING,
+         Issue #15. On a ROOT pd fatal the user PDs still read RPROC_RUNNING,
          so wcss_pd_stop() waited for a stop-ack from dead firmware, timed
          out, and returned before the MSA unlock and the rproc_shutdown()
          that drops the root's refcount. Skip the handshake when the root
@@ -172,7 +172,7 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
          spare this chip does not have. ESMT units cannot reach this entry
          (different manufacturer table and read-ID method).
   2039  target/linux/qualcommax/patches-6.12/0822-remoteproc-qcom_q6v5_mpd-unwind-a-failed-root-pd-start.patch
-         Issue #1. q6_wcss_start() returned on failure without
+         Issue #15. q6_wcss_start() returned on failure without
          qcom_scm_pas_shutdown() or qcom_q6v5_unprepare(), so every retry
          inherited the previous failure (and leaked an IRQ enable, the
          "Unbalanced enable for IRQ" warning). Also takes the start
