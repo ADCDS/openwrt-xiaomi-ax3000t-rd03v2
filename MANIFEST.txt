@@ -118,6 +118,18 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
          AN8855 efuse NVMEM provider (PHY calibration cells).
    1192  target/linux/qualcommax/files/include/linux/mfd/airoha-an8855-mfd.h
          Shared MFD header used by the AN8855 sub-drivers.
+  1811  target/linux/qualcommax/patches-6.12/0819-remoteproc-qcom_q6v5_mpd-fix-userpd-array-overflow.patch
+         Issue #1. qcom_get_pd_asid() returns 1..3, but struct q6_wcss's
+         upd[] has only MAX_UPD (3) entries, so registering pd-3 writes one
+         pointer past the end. Harmless only because upd[] is the last
+         member; it corrupts whatever is added after it.
+  2507  target/linux/qualcommax/patches-6.12/0821-remoteproc-qcom_q6v5_mpd-tear-down-user-pd-when-root-pd-is-dead.patch
+         Issue #1. On a ROOT pd fatal the user PDs still read RPROC_RUNNING,
+         so wcss_pd_stop() waited for a stop-ack from dead firmware, timed
+         out, and returned before the MSA unlock and the rproc_shutdown()
+         that drops the root's refcount. Skip the handshake when the root
+         is CRASHED/OFFLINE. Measured: the stop went from -ETIMEDOUT after
+         5 s (state stuck "running") to rc=0 reaching "offline".
    3820  target/linux/qualcommax/patches-6.12/0413-mtd-spinand-winbond-add-W25N01KW-support.patch
          Issue #12. The SPI-NAND is second-sourced: some units carry a Winbond
          W25N01KW where others have the ESMT F50D1G41LB, and the Winbond part
