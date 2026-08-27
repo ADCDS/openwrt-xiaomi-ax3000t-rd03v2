@@ -39,6 +39,16 @@ package/
 
 WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
 ----------------------------------------------------------------------
+  2162  package/kernel/mac80211/patches/ath11k/950-wifi-ath11k-implement-CE-interrupt-enable-disable-for-AHB.patch
+         Issue #1. ath11k_ahb_hif_ops_ipq8074 never set ce_irq_enable/
+         ce_irq_disable, so ath11k_hif_ce_irq_disable() was a no-op on AHB
+         and the copy-engine tasklets stayed live across rproc_shutdown().
+         From openwrt/openwrt#24578.
+  2786  package/kernel/mac80211/patches/ath11k/953-wifi-ath11k-disable-interrupts-during-firmware-crash-recovery.patch
+         Issue #1. Without it a firmware assert panics on a freed datapath
+         (null deref in ath11k_hal_srng_access_begin from the monitor rings)
+         and the SoC reboots. From openwrt/openwrt#24578, renumbered off
+         951 which is taken here.
    1791  package/kernel/mac80211/patches/ath11k/951-wifi-ath11k-introduct-CONFIG_ATH11K_SMALLBUFFERS.patch
          Ziyang Huang's patch (OpenWrt PR #21495, authorship preserved):
          gates ath11k's DP ring-buffer sizes behind CONFIG_ATH11K_SMALLBUFFERS

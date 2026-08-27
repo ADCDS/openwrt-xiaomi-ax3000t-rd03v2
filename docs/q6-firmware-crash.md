@@ -1,10 +1,11 @@
 # When the WiFi firmware dies (Q6 / WCSS root-PD fatal)
 
-> TL;DR — a fatal error in the **root** PD of the WiFi Q6 kills both radios.
-> Three separate driver bugs stood between that and recovery, and all three are
-> fixed here. The last one was the interesting one: the Q6 restarts perfectly
-> well, and the kernel was discarding the interrupt that says so. The port still
-> ships a watchdog, because something has to catch a recovery that fails.
+> TL;DR — a fatal error in the **root** PD of the WiFi Q6 used to kill both
+> radios until the box was rebooted. It now recovers by itself in about a
+> second. Four driver bugs stood in the way; the interesting one is that the Q6
+> restarts perfectly well and the kernel was discarding the interrupt that says
+> so. The port still ships a watchdog, because something has to catch a
+> recovery that fails.
 
 ## The failure
 
@@ -119,6 +120,43 @@ and produced the `Unbalanced enable for IRQ` warning. That made "it fails
 identically every time" look like a hardware limit when attempts 2..N were
 simply never independent. `0822-` fixes it, and the sibling
 `qcom_q6v5_wcss_sec.c` in this same tree already did it that way.
+
+## 4. The datapath was freed while its interrupts were still live
+
+With the restart working, a real firmware assert stopped leaving the radios
+dead and started **rebooting the SoC instead** — instantly, before a one-second
+sampling loop could take its first reading. The earlier stall had been hiding
+this.
+
+`ath11k_core_reset()` calls `ath11k_hif_ce_irq_disable()` before powering the
+target down, but the AHB ops never set `ce_irq_enable`/`ce_irq_disable`, so on
+AHB that call did nothing: the copy-engine interrupts and their tasklets stayed
+live across `rproc_shutdown()`, touching register space that was no longer
+there. The result is a null dereference in `ath11k_hal_srng_access_begin()`
+from the monitor rings, and a panic.
+
+Fixed by cherry-picking **openwrt/openwrt#24578** (patches `950-` and `953-`;
+the PR's own `951-` is renumbered because this tree already has a `951-`).
+
+## The whole chain, working
+
+```
+[42.51] remoteproc remoteproc1: stopped remote processor pd-1
+[42.55] remoteproc remoteproc0: stopped remote processor cd00000.remoteproc
+[42.55] remoteproc remoteproc2: stopped remote processor pd-2
+[42.67] remoteproc remoteproc0: remote processor cd00000.remoteproc is now up
+[42.68] remoteproc remoteproc1: remote processor pd-1 is now up
+[42.70] remoteproc remoteproc2: remote processor pd-2 is now up
+[43.36] ath11k c000000.wifi: pdev 1 successfully recovered
+[43.73] ath11k b00a040.wifi: pdev 1 successfully recovered
+```
+
+A deliberate `simulate_fw_crash` assert, both radios back **1.2 seconds**
+later, no reboot, box uptime continuous. Counters afterwards read `fatal=1`,
+`ready=2`, `handover=2`, and `spawn-ack=2` on both user PDs — everything
+restarted exactly once. Both radios pass traffic and both SSIDs are up.
+
+For comparison, the reboot path this replaces took **1 m 47 s**.
 
 ## Also fixed: a latent array overflow
 
