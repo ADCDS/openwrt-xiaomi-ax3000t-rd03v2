@@ -169,22 +169,44 @@ allocator slack — it silently corrupts whatever is placed after it. Fixed by
 
 ## What the port does about it
 
-`/usr/sbin/rd03v2-watchdog` (procd service, `START=99`) reboots the box when
-the radios are gone for good. It triggers on either:
+`/usr/sbin/rd03v2-watchdog` (procd service, `START=99`) is a **backstop**, not
+the primary recovery path — the driver handles a firmware crash by itself in
+about a second, and the watchdog is there for what it does not cover. It
+triggers on either:
 
 - any of `remoteproc0` / `pd-1` / `pd-2` not `running` for 2 samples (~60 s), or
 - the in-use channel's survey **active time frozen** for 4 samples (~2 min) —
   this is what catches the silent death, which raises no interrupt.
 
-Before rebooting it writes the evidence to `/overlay/rd03v2-watchdog/`:
+When it fires it **escalates** instead of reaching straight for a reboot:
+
+1. **ath11k reset of the affected radio** (~1 s) — `hw-restart`, which rebuilds
+   the driver state and respawns that user PD's firmware without touching the
+   root PD. This is what fixes a wedged radio.
+2. **Stop and start that user PD** (~16 s) — heavier, reloads firmware, but
+   still costs the box nothing in uptime.
+3. **Reboot** (~1 m 47 s) — only if both fail.
+
+Only the affected radio is touched: a fault on 5 GHz does not cost 2.4 GHz
+clients a reset. At most 3 in-place attempts are allowed per hour, so a fault
+that needs constant nursing gets a reboot rather than being papered over every
+couple of minutes.
+
+Before touching anything it writes the evidence to `/overlay/rd03v2-watchdog/`:
 remoteproc states, the `q6v5` IRQ counters (these survive a log wrap and are
 the best forensic record), meminfo, and the tail of `dmesg`/`logread`.
 
 Guards: it will not reboot within the first 10 minutes of uptime, nor within an
 hour of its previous reboot, so a persistent fault cannot turn into a boot loop.
 
-Measured on a real crash: **detected in 39 s, service restored 1 m 47 s after
-the crash**, unattended.
+Verified on the bench, four ways:
+
+| test | result |
+|---|---|
+| real firmware assert (driver recovers in ~1 s) | watchdog correctly does **nothing** — no incident logged |
+| `pd-2` stopped by hand | detected in ~60 s, healed by ath11k reset, **no reboot** (spawn-ack 26→27) |
+| same, checking blast radius | only `phy1-ap0` reset; the 2.4 GHz radio untouched |
+| in-place recovery unavailable | falls through to a reboot, as designed |
 
 To turn it off:
 

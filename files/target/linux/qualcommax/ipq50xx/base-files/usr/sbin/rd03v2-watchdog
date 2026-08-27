@@ -1,16 +1,29 @@
 #!/bin/sh
-# rd03v2-watchdog: reboot the box when the WiFi Q6 firmware dies unrecoverably.
-# home-network-inventory #1: a Q6 root fatal deadlocks remoteproc recovery
-# (userpd stop-ack never arrives, refcounts pin the root), and the Aug-19-style
-# silent 5GHz death raises no fatal IRQ at all — so watch both remoteproc
-# states and per-radio survey liveness, capture evidence, then reboot.
+# rd03v2-watchdog: keep the WiFi alive when the Q6 firmware misbehaves.
+#
+# The driver recovers a firmware crash by itself in about a second, so this is
+# a backstop for the cases it does not cover: a radio that stops without ever
+# raising a fatal (no crash, nothing in the log, only the survey counter goes
+# flat), and a recovery that failed and left a protection domain down.
+#
+# It escalates rather than going straight for the reboot it used to:
+#   1. ath11k reset of the affected radio  (~1 s)
+#   2. stop/start of the affected user PD  (~16 s)
+#   3. reboot                              (~1 m 47 s)
+# Evidence is written before anything is touched, so a fix does not destroy
+# the record of what needed fixing.
+#
 # Touch /etc/rd03v2-watchdog.disable to neuter it.
 
 INTERVAL=30
-STATE_BAD_LIMIT=2      # consecutive bad rproc samples before trigger (~60s)
-FREEZE_LIMIT=4         # consecutive frozen survey samples before trigger (~2min)
-MIN_UPTIME=600         # never reboot inside the first 10 min after boot
+STATE_BAD_LIMIT=2      # consecutive bad rproc samples before acting (~60s)
+FREEZE_LIMIT=4         # consecutive frozen survey samples before acting (~2min)
+MIN_UPTIME=600         # do nothing at all in the first 10 min after boot
 HOLD_SECS=3600         # min gap between watchdog-initiated reboots
+INPLACE_MAX=3          # in-place recovery attempts allowed per INPLACE_WINDOW
+INPLACE_WINDOW=3600
+SETTLE_ATH=20          # seconds to let an ath11k reset take effect
+SETTLE_PD=35           # seconds to let a user PD restart take effect
 EVID_DIR=/overlay/rd03v2-watchdog
 STATE_DIR=/tmp/rd03v2-watchdog
 DISABLE_FILE=/etc/rd03v2-watchdog.disable
@@ -18,8 +31,11 @@ DISABLE_FILE=/etc/rd03v2-watchdog.disable
 log() { logger -t rd03v2-watchdog "$1"; }
 up_secs() { cut -d. -f1 /proc/uptime; }
 
+# --- observation -------------------------------------------------------------
+
+# The root PD plus the two user PDs that carry radios. pd-3 is unused on this
+# board and is offline by design, so it is deliberately not checked.
 rproc_bad() {
-	# root + the two used userpds; pd-3 is unused and offline by design
 	for r in /sys/class/remoteproc/remoteproc0 \
 	         /sys/class/remoteproc/remoteproc1 \
 	         /sys/class/remoteproc/remoteproc2; do
@@ -29,22 +45,69 @@ rproc_bad() {
 	return 1
 }
 
-survey_active() {
-	# one "ifname:active_ms" line per AP interface's in-use channel
-	for ifc in $(iw dev 2>/dev/null | awk '$1=="Interface"{print $2}'); do
-		t=$(iw dev "$ifc" survey dump 2>/dev/null | \
-			awk '/\[in use\]/{f=1} f && /channel active time/{print $4; exit}')
-		[ -n "$t" ] && echo "$ifc:$t"
+wifi_ifaces() { iw dev 2>/dev/null | awk '$1=="Interface"{print $2}'; }
+
+# Active time of the channel an interface is actually on. Frozen across
+# several samples is the signature of the silent death.
+iface_active() {
+	iw dev "$1" survey dump 2>/dev/null | \
+		awk '/\[in use\]/{f=1} f && /channel active time/{print $4; exit}'
+}
+
+# phy numbering is not stable (it shifts when the driver is reloaded), so map
+# the interface to its ath11k device through sysfs rather than assuming.
+iface_debugfs() {
+	dev=$(readlink -f "/sys/class/net/$1/phy80211/device" 2>/dev/null)
+	[ -n "$dev" ] || return 1
+	dev=$(basename "$dev")
+	for d in /sys/kernel/debug/ath11k/*"$dev"; do
+		[ -d "$d" ] && { echo "$d"; return 0; }
+	done
+	return 1
+}
+
+# Which user PD backs an interface: pd-1 is the internal 2.4 GHz radio
+# (c000000.wifi), pd-2 the QCN6122 (b00a040.wifi).
+iface_rproc() {
+	dev=$(readlink -f "/sys/class/net/$1/phy80211/device" 2>/dev/null)
+	case "$(basename "$dev" 2>/dev/null)" in
+		c000000.wifi) echo /sys/class/remoteproc/remoteproc1 ;;
+		b00a040.wifi) echo /sys/class/remoteproc/remoteproc2 ;;
+		*) return 1 ;;
+	esac
+}
+
+# Interfaces backed by a given remoteproc, so a fault in one radio does not
+# cost the other one a reset. A dead root PD implicates every radio.
+rproc_ifaces() {
+	case "$1" in
+		*remoteproc0*) wifi_ifaces; return 0 ;;
+		*remoteproc1*) want=c000000.wifi ;;
+		*remoteproc2*) want=b00a040.wifi ;;
+		*) return 1 ;;
+	esac
+	for ifc in $(wifi_ifaces); do
+		dev=$(readlink -f "/sys/class/net/$ifc/phy80211/device" 2>/dev/null)
+		[ "$(basename "$dev" 2>/dev/null)" = "$want" ] && echo "$ifc"
 	done
 }
 
-do_incident() {
-	reason="$1"
-	now=$(date +%Y%m%d-%H%M%S)
-	mkdir -p "$EVID_DIR"
-	f="$EVID_DIR/incident-$now.log"
+healthy() {
+	rproc_bad >/dev/null && return 1
+	for ifc in $(wifi_ifaces); do
+		a=$(iface_active "$ifc"); sleep 3; b=$(iface_active "$ifc")
+		[ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ] || return 1
+	done
+	return 0
+}
+
+# --- evidence ----------------------------------------------------------------
+
+dump_evidence() {
+	reason="$1"; stamp="$2"
+	f="$EVID_DIR/incident-$stamp.log"
 	{
-		echo "=== rd03v2-watchdog incident $now ==="
+		echo "=== rd03v2-watchdog incident $stamp ==="
 		echo "reason: $reason"
 		date; echo "uptime: $(cat /proc/uptime)"
 		echo "--- remoteproc states ---"
@@ -52,44 +115,143 @@ do_incident() {
 			echo "$r $(cat "$r/name" 2>/dev/null) $(cat "$r/state" 2>/dev/null)"
 		done
 		echo "--- q6v5 irq counters ---"; grep q6v5 /proc/interrupts
-		echo "--- meminfo ---"; grep -E "MemAvailable|MemFree|^Slab|SUnreclaim" /proc/meminfo
+		echo "--- survey ---"
+		for ifc in $(wifi_ifaces); do echo "$ifc active=$(iface_active "$ifc")"; done
+		echo "--- meminfo ---"
+		grep -E "MemAvailable|MemFree|^Slab|SUnreclaim" /proc/meminfo
 		echo "--- dmesg tail ---"; dmesg | tail -200
 	} > "$f" 2>&1
 	sync
-	# grab the devcoredump if one was produced (it auto-expires ~5 min in)
-	for d in /sys/class/devcoredump/devcd*/data; do
-		[ -e "$d" ] || continue
-		free_kb=$(df -k /overlay | awk 'NR==2{print $4}')
-		if [ "$free_kb" -gt 20480 ]; then
-			gzip -c "$d" 2>/dev/null | head -c 40000000 > "$EVID_DIR/devcd-$now.gz"
-			echo "devcd saved: $(wc -c < "$EVID_DIR/devcd-$now.gz") bytes gz" >> "$f"
-		else
-			echo "devcd skipped: overlay low ($free_kb kB free)" >> "$f"
-		fi
-	done
-	# logd last: it can wedge, and everything above is already on flash
-	logread -l 100 >> "$f" 2>&1
+	echo "$f"
+}
+
+# --- recovery ----------------------------------------------------------------
+
+# Rate-limit in-place attempts: a fault that needs constant nursing should get
+# a reboot instead of being papered over every couple of minutes.
+inplace_allowed() {
+	now=$(date +%s)
+	c=0
+	if [ -f "$EVID_DIR/inplace-attempts" ]; then
+		while read -r t; do
+			[ -n "$t" ] && [ $((now - t)) -lt $INPLACE_WINDOW ] && c=$((c + 1))
+		done < "$EVID_DIR/inplace-attempts"
+	fi
+	[ "$c" -lt $INPLACE_MAX ]
+}
+
+record_inplace() {
+	now=$(date +%s)
+	{ [ -f "$EVID_DIR/inplace-attempts" ] && cat "$EVID_DIR/inplace-attempts"; echo "$now"; } \
+		| tail -20 > "$EVID_DIR/inplace-attempts.new"
+	mv "$EVID_DIR/inplace-attempts.new" "$EVID_DIR/inplace-attempts"
 	sync
-	# boot-loop guards
+}
+
+# Step 1: ath11k's own reset. Rebuilds the driver state and respawns the user
+# PD firmware without touching the root PD. This is what fixes a wedged radio.
+# $1 = interfaces to act on; empty means every radio.
+try_ath_reset() {
+	targets="$1"
+	[ -n "$targets" ] || targets=$(wifi_ifaces)
+	did=0
+	for ifc in $targets; do
+		d=$(iface_debugfs "$ifc") || continue
+		[ -w "$d/simulate_fw_crash" ] || continue
+		log "in-place: ath11k reset of $ifc ($(basename "$d"))"
+		echo hw-restart > "$d/simulate_fw_crash" 2>/dev/null && did=1
+	done
+	[ "$did" = 1 ] || return 1
+	sleep $SETTLE_ATH
+	healthy
+}
+
+# Step 2: stop and start only the user PDs that actually need it - a PD that is
+# already down, or the one behind a frozen radio. Bouncing a healthy radio to
+# fix its neighbour would be its own small outage.
+# $1 = interfaces implicated by a survey freeze (may be empty).
+try_pd_restart() {
+	targets=""
+	for r in /sys/class/remoteproc/remoteproc1 /sys/class/remoteproc/remoteproc2; do
+		[ -d "$r" ] || continue
+		[ "$(cat "$r/state" 2>/dev/null)" = "running" ] || targets="$targets $r"
+	done
+	if [ -z "$targets" ]; then
+		for ifc in $1; do
+			r=$(iface_rproc "$ifc") && targets="$targets $r"
+		done
+	fi
+	[ -n "$targets" ] || return 1
+
+	did=0
+	for r in $targets; do
+		log "in-place: restarting $(cat "$r/name" 2>/dev/null)"
+		if [ "$(cat "$r/state" 2>/dev/null)" = "running" ]; then
+			timeout 40 sh -c "echo stop > $r/state" 2>/dev/null
+			sleep 2
+		fi
+		timeout 60 sh -c "echo start > $r/state" 2>/dev/null && did=1
+	done
+	[ "$did" = 1 ] || return 1
+	sleep $SETTLE_PD
+	healthy
+}
+
+do_reboot() {
+	reason="$1"; evid="$2"
 	if [ "$(up_secs)" -lt $MIN_UPTIME ]; then
-		log "incident '$reason' logged; uptime <${MIN_UPTIME}s, holding (no reboot)"
+		log "would reboot ($reason) but uptime <${MIN_UPTIME}s, holding"
 		return
 	fi
 	marker="$EVID_DIR/last-reboot"
-	nowt=$(date +%s)
+	now=$(date +%s)
 	if [ -f "$marker" ]; then
 		last=$(cat "$marker" 2>/dev/null)
-		if [ -n "$last" ] && [ $((nowt - last)) -ge 0 ] && [ $((nowt - last)) -lt $HOLD_SECS ]; then
-			log "incident '$reason' logged; last watchdog reboot $((nowt - last))s ago, holding"
+		if [ -n "$last" ] && [ $((now - last)) -ge 0 ] && [ $((now - last)) -lt $HOLD_SECS ]; then
+			log "would reboot ($reason) but last watchdog reboot $((now - last))s ago, holding"
 			return
 		fi
 	fi
-	echo "$nowt" > "$marker"
-	sync
-	log "REBOOTING: $reason (evidence: $f)"
+	echo "$now" > "$marker"; sync
+	log "REBOOTING: $reason (evidence: $evid)"
 	sleep 2
 	reboot
 }
+
+handle() {
+	reason="$1"; affected="$2"
+	stamp=$(date +%Y%m%d-%H%M%S)
+	evid=$(dump_evidence "$reason" "$stamp")
+	log "detected: $reason (evidence: $evid)"
+
+	if [ "$(up_secs)" -lt $MIN_UPTIME ]; then
+		log "uptime <${MIN_UPTIME}s, not intervening yet"
+		return
+	fi
+
+	if ! inplace_allowed; then
+		log "in-place recovery used $INPLACE_MAX times in the last hour; rebooting instead"
+		do_reboot "$reason (in-place budget exhausted)" "$evid"
+		return
+	fi
+
+	record_inplace
+	if try_ath_reset "$affected"; then
+		log "RECOVERED in place via ath11k reset: $reason"
+		echo "recovered: ath11k reset" >> "$evid"; sync
+		return
+	fi
+	if try_pd_restart "$affected"; then
+		log "RECOVERED in place via user PD restart: $reason"
+		echo "recovered: user PD restart" >> "$evid"; sync
+		return
+	fi
+
+	echo "in-place recovery failed; rebooting" >> "$evid"; sync
+	do_reboot "$reason (in-place recovery failed)" "$evid"
+}
+
+# --- main --------------------------------------------------------------------
 
 main() {
 	if [ -f "$DISABLE_FILE" ]; then
@@ -97,46 +259,59 @@ main() {
 		while :; do sleep 3600; done
 	fi
 	mkdir -p "$STATE_DIR" "$EVID_DIR"
-	# keep only the newest 20 incident files
 	ls -t "$EVID_DIR"/incident-* 2>/dev/null | tail -n +21 | while read -r old; do rm -f "$old"; done
-	# give radios time to come up before arming (max ~5 min)
+
+	# Let the radios come up before arming (max ~5 min).
 	i=0
 	while [ $i -lt 10 ]; do
 		rproc_bad >/dev/null || break
-		sleep 30; i=$((i+1))
+		sleep 30; i=$((i + 1))
 	done
-	log "armed (interval=${INTERVAL}s, state_limit=$STATE_BAD_LIMIT, freeze_limit=$FREEZE_LIMIT)"
+	log "armed (interval=${INTERVAL}s, rproc_limit=$STATE_BAD_LIMIT, freeze_limit=$FREEZE_LIMIT, in-place first)"
+
 	badc=0
 	while :; do
 		sleep $INTERVAL
+
 		bad=$(rproc_bad)
-		if [ -n "$bad" ]; then
-			badc=$((badc + 1))
-		else
-			badc=0
-		fi
+		if [ -n "$bad" ]; then badc=$((badc + 1)); else badc=0; fi
 		if [ $badc -ge $STATE_BAD_LIMIT ]; then
-			do_incident "remoteproc not running: $bad"
-			badc=0; sleep 600; continue
+			bad_ifcs=""
+			for r in /sys/class/remoteproc/remoteproc0 \
+			         /sys/class/remoteproc/remoteproc1 \
+			         /sys/class/remoteproc/remoteproc2; do
+				[ "$(cat "$r/state" 2>/dev/null)" = "running" ] && continue
+				bad_ifcs="$bad_ifcs $(rproc_ifaces "$r")"
+			done
+			handle "remoteproc not running: $bad" "$bad_ifcs"
+			badc=0
+			rm -f "$STATE_DIR"/frz_* "$STATE_DIR"/surv_*
+			sleep 120
+			continue
 		fi
-		frozen=""
-		for line in $(survey_active); do
-			ifc=${line%%:*}; val=${line##*:}
+
+		frozen=""; frozen_ifcs=""
+		for ifc in $(wifi_ifaces); do
+			val=$(iface_active "$ifc")
+			[ -n "$val" ] || continue
 			pf="$STATE_DIR/surv_$ifc"; cf="$STATE_DIR/frz_$ifc"
 			prev=$(cat "$pf" 2>/dev/null)
 			if [ -n "$prev" ] && [ "$val" = "$prev" ]; then
 				c=$(( $(cat "$cf" 2>/dev/null || echo 0) + 1 ))
 				echo "$c" > "$cf"
-				[ "$c" -ge $FREEZE_LIMIT ] && frozen="$frozen $ifc(active=$val)"
+				if [ "$c" -ge $FREEZE_LIMIT ]; then
+					frozen="$frozen $ifc(active=$val)"
+					frozen_ifcs="$frozen_ifcs $ifc"
+				fi
 			else
 				echo 0 > "$cf"
 			fi
 			echo "$val" > "$pf"
 		done
 		if [ -n "$frozen" ]; then
-			do_incident "survey freeze:$frozen"
+			handle "survey freeze:$frozen" "$frozen_ifcs"
 			rm -f "$STATE_DIR"/frz_* "$STATE_DIR"/surv_*
-			sleep 600; continue
+			sleep 120
 		fi
 	done
 }
