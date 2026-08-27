@@ -94,6 +94,18 @@ target/linux/qualcommax/ipq50xx/base-files/
    4034  target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
          Caldata extraction from 0:ART — 2.4 GHz @ 0x1000,
          5 GHz (QCN6122) @ 0x26800, 0x20000 each.
+  4740  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
+         Issue #1. Reboots the box when the WiFi Q6 firmware dies in a way
+         the driver cannot recover from: any of remoteproc0/pd-1/pd-2 not
+         "running" for 2 samples, or the in-use channel's survey active
+         time frozen for 4 (catches the silent 5 GHz death, which raises
+         no fatal IRQ). Writes rproc states, q6v5 IRQ counters, meminfo
+         and dmesg/logread tails to /overlay/rd03v2-watchdog/ first.
+         10-minute minimum uptime and a 1-hour hold between reboots guard
+         against boot loops; touch /etc/rd03v2-watchdog.disable to neuter
+         it. See docs/q6-firmware-crash.md.
+   259  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog
+         procd service for the above (START=99, respawns).
    5705  target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
          sysupgrade/NAND-install + U-Boot boot-flags: initramfs prepare,
          fw_setenv boot_wait/uart_en, flag_boot_rootfs toggle.

@@ -1,0 +1,143 @@
+#!/bin/sh
+# rd03v2-watchdog: reboot the box when the WiFi Q6 firmware dies unrecoverably.
+# home-network-inventory #1: a Q6 root fatal deadlocks remoteproc recovery
+# (userpd stop-ack never arrives, refcounts pin the root), and the Aug-19-style
+# silent 5GHz death raises no fatal IRQ at all — so watch both remoteproc
+# states and per-radio survey liveness, capture evidence, then reboot.
+# Touch /etc/rd03v2-watchdog.disable to neuter it.
+
+INTERVAL=30
+STATE_BAD_LIMIT=2      # consecutive bad rproc samples before trigger (~60s)
+FREEZE_LIMIT=4         # consecutive frozen survey samples before trigger (~2min)
+MIN_UPTIME=600         # never reboot inside the first 10 min after boot
+HOLD_SECS=3600         # min gap between watchdog-initiated reboots
+EVID_DIR=/overlay/rd03v2-watchdog
+STATE_DIR=/tmp/rd03v2-watchdog
+DISABLE_FILE=/etc/rd03v2-watchdog.disable
+
+log() { logger -t rd03v2-watchdog "$1"; }
+up_secs() { cut -d. -f1 /proc/uptime; }
+
+rproc_bad() {
+	# root + the two used userpds; pd-3 is unused and offline by design
+	for r in /sys/class/remoteproc/remoteproc0 \
+	         /sys/class/remoteproc/remoteproc1 \
+	         /sys/class/remoteproc/remoteproc2; do
+		s=$(cat "$r/state" 2>/dev/null)
+		[ "$s" = "running" ] || { echo "$(cat "$r/name" 2>/dev/null)=$s"; return 0; }
+	done
+	return 1
+}
+
+survey_active() {
+	# one "ifname:active_ms" line per AP interface's in-use channel
+	for ifc in $(iw dev 2>/dev/null | awk '$1=="Interface"{print $2}'); do
+		t=$(iw dev "$ifc" survey dump 2>/dev/null | \
+			awk '/\[in use\]/{f=1} f && /channel active time/{print $4; exit}')
+		[ -n "$t" ] && echo "$ifc:$t"
+	done
+}
+
+do_incident() {
+	reason="$1"
+	now=$(date +%Y%m%d-%H%M%S)
+	mkdir -p "$EVID_DIR"
+	f="$EVID_DIR/incident-$now.log"
+	{
+		echo "=== rd03v2-watchdog incident $now ==="
+		echo "reason: $reason"
+		date; echo "uptime: $(cat /proc/uptime)"
+		echo "--- remoteproc states ---"
+		for r in /sys/class/remoteproc/remoteproc*; do
+			echo "$r $(cat "$r/name" 2>/dev/null) $(cat "$r/state" 2>/dev/null)"
+		done
+		echo "--- q6v5 irq counters ---"; grep q6v5 /proc/interrupts
+		echo "--- meminfo ---"; grep -E "MemAvailable|MemFree|^Slab|SUnreclaim" /proc/meminfo
+		echo "--- dmesg tail ---"; dmesg | tail -200
+	} > "$f" 2>&1
+	sync
+	# grab the devcoredump if one was produced (it auto-expires ~5 min in)
+	for d in /sys/class/devcoredump/devcd*/data; do
+		[ -e "$d" ] || continue
+		free_kb=$(df -k /overlay | awk 'NR==2{print $4}')
+		if [ "$free_kb" -gt 20480 ]; then
+			gzip -c "$d" 2>/dev/null | head -c 40000000 > "$EVID_DIR/devcd-$now.gz"
+			echo "devcd saved: $(wc -c < "$EVID_DIR/devcd-$now.gz") bytes gz" >> "$f"
+		else
+			echo "devcd skipped: overlay low ($free_kb kB free)" >> "$f"
+		fi
+	done
+	# logd last: it can wedge, and everything above is already on flash
+	logread -l 100 >> "$f" 2>&1
+	sync
+	# boot-loop guards
+	if [ "$(up_secs)" -lt $MIN_UPTIME ]; then
+		log "incident '$reason' logged; uptime <${MIN_UPTIME}s, holding (no reboot)"
+		return
+	fi
+	marker="$EVID_DIR/last-reboot"
+	nowt=$(date +%s)
+	if [ -f "$marker" ]; then
+		last=$(cat "$marker" 2>/dev/null)
+		if [ -n "$last" ] && [ $((nowt - last)) -ge 0 ] && [ $((nowt - last)) -lt $HOLD_SECS ]; then
+			log "incident '$reason' logged; last watchdog reboot $((nowt - last))s ago, holding"
+			return
+		fi
+	fi
+	echo "$nowt" > "$marker"
+	sync
+	log "REBOOTING: $reason (evidence: $f)"
+	sleep 2
+	reboot
+}
+
+main() {
+	if [ -f "$DISABLE_FILE" ]; then
+		log "disabled by $DISABLE_FILE, idling"
+		while :; do sleep 3600; done
+	fi
+	mkdir -p "$STATE_DIR" "$EVID_DIR"
+	# keep only the newest 20 incident files
+	ls -t "$EVID_DIR"/incident-* 2>/dev/null | tail -n +21 | while read -r old; do rm -f "$old"; done
+	# give radios time to come up before arming (max ~5 min)
+	i=0
+	while [ $i -lt 10 ]; do
+		rproc_bad >/dev/null || break
+		sleep 30; i=$((i+1))
+	done
+	log "armed (interval=${INTERVAL}s, state_limit=$STATE_BAD_LIMIT, freeze_limit=$FREEZE_LIMIT)"
+	badc=0
+	while :; do
+		sleep $INTERVAL
+		bad=$(rproc_bad)
+		if [ -n "$bad" ]; then
+			badc=$((badc + 1))
+		else
+			badc=0
+		fi
+		if [ $badc -ge $STATE_BAD_LIMIT ]; then
+			do_incident "remoteproc not running: $bad"
+			badc=0; sleep 600; continue
+		fi
+		frozen=""
+		for line in $(survey_active); do
+			ifc=${line%%:*}; val=${line##*:}
+			pf="$STATE_DIR/surv_$ifc"; cf="$STATE_DIR/frz_$ifc"
+			prev=$(cat "$pf" 2>/dev/null)
+			if [ -n "$prev" ] && [ "$val" = "$prev" ]; then
+				c=$(( $(cat "$cf" 2>/dev/null || echo 0) + 1 ))
+				echo "$c" > "$cf"
+				[ "$c" -ge $FREEZE_LIMIT ] && frozen="$frozen $ifc(active=$val)"
+			else
+				echo 0 > "$cf"
+			fi
+			echo "$val" > "$pf"
+		done
+		if [ -n "$frozen" ]; then
+			do_incident "survey freeze:$frozen"
+			rm -f "$STATE_DIR"/frz_* "$STATE_DIR"/surv_*
+			sleep 600; continue
+		fi
+	done
+}
+main
