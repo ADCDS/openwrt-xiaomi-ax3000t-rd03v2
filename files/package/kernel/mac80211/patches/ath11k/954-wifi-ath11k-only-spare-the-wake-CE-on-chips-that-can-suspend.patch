@@ -1,0 +1,58 @@
+From: Adriel Santos <adriel.turox@gmail.com>
+Subject: [PATCH] wifi: ath11k: only spare the wake CE on chips that can suspend
+
+The except_wake_irq pair skips ATH11K_PCI_CE_WAKE_IRQ (CE2) so that a
+chip suspended with WoW keeps its wakeup interrupt armed. That skip is
+unconditional, but suspend itself is not: ath11k_core_suspend() refuses
+outright on any chip with !hw_params.supports_suspend, which includes
+both AHB-attached users of these helpers (wcn6750 and qcn6122).
+
+On those chips the asymmetry is a bug. The firmware crash path tears
+interrupts down with ath11k_hif_ce_irq_disable() - the except-wake
+disable, which leaves CE2 untouched - while the recovery path re-enables
+through ath11k_pcic_ce_irqs_enable(), which takes every CE. CE2 then
+gets an enable_irq() at depth zero on every single recovery:
+
+  Unbalanced enable for IRQ 67
+  WARNING: CPU: 0 PID: 12 at kernel/irq/manage.c:801 __enable_irq+0x4c/0x80
+  Workqueue: ath11k_wq ath11k_core_restart [ath11k]
+
+Observed 22 times across a 24-cycle crash/recover soak on IPQ5018 +
+QCN6122, once per QCN6122 recovery.
+
+Skip the wake CE only when the chip can actually suspend. Chips with
+supports_suspend keep the current behaviour exactly; chips that can
+never suspend get the symmetric all-CE semantics their recovery path
+already assumes.
+
+Signed-off-by: Adriel Santos <adriel.turox@gmail.com>
+---
+--- a/drivers/net/wireless/ath/ath11k/pcic.c
++++ b/drivers/net/wireless/ath/ath11k/pcic.c
+@@ -844,8 +844,11 @@ void ath11k_pci_enable_ce_irqs_except_wa
+ 	int i;
+ 
+ 	for (i = 0; i < ab->hw_params.ce_count; i++) {
+-		if (ath11k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR ||
+-		    i == ATH11K_PCI_CE_WAKE_IRQ)
++		if (ath11k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR)
++			continue;
++		/* only a chip that can suspend needs its wake CE left armed */
++		if (ab->hw_params.supports_suspend &&
++		    i == ATH11K_PCI_CE_WAKE_IRQ)
+ 			continue;
+ 		ath11k_pcic_ce_irq_enable(ab, i);
+ 	}
+@@ -862,8 +865,10 @@ void ath11k_pci_disable_ce_irqs_except_w
+ 		ce_pipe = &ab->ce.ce_pipe[i];
+ 		irq_idx = ATH11K_PCI_IRQ_CE0_OFFSET + i;
+ 
+-		if (ath11k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR ||
+-		    i == ATH11K_PCI_CE_WAKE_IRQ)
++		if (ath11k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR)
++			continue;
++		if (ab->hw_params.supports_suspend &&
++		    i == ATH11K_PCI_CE_WAKE_IRQ)
+ 			continue;
+ 
+ 		disable_irq_nosync(ab->irq_num[irq_idx]);
