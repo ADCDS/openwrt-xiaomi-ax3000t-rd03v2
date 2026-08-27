@@ -49,6 +49,15 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          (null deref in ath11k_hal_srng_access_begin from the monitor rings)
          and the SoC reboots. From openwrt/openwrt#24578, renumbered off
          951 which is taken here.
+  2391  package/kernel/mac80211/patches/ath11k/954-wifi-ath11k-only-spare-the-wake-CE-on-chips-that-can-suspend.patch
+         Issue #1. The except_wake_irq pair skips CE2 so a chip suspended
+         with WoW keeps its wakeup interrupt armed - but the recovery path
+         re-enables every CE, so on chips that cannot suspend at all
+         (qcn6122, wcn6750) each crash recovery did one surplus
+         enable_irq(): "Unbalanced enable for IRQ 67", 22 times across a
+         24-cycle soak. Skip the wake CE only when
+         hw_params.supports_suspend. Verified: 6 crash cycles after, zero
+         warnings.
    1791  package/kernel/mac80211/patches/ath11k/951-wifi-ath11k-introduct-CONFIG_ATH11K_SMALLBUFFERS.patch
          Ziyang Huang's patch (OpenWrt PR #21495, authorship preserved):
          gates ath11k's DP ring-buffer sizes behind CONFIG_ATH11K_SMALLBUFFERS
