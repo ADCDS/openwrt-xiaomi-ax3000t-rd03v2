@@ -1,0 +1,130 @@
+From: Adriel Santos <adriel.turox@gmail.com>
+Subject: [PATCH] soc: qcom: smp2p: clear cached inbound values across a restart
+
+qcom_smp2p_notify_in() raises an interrupt only for bits that changed
+since the previous notification:
+
+	status = val ^ entry->last_value;
+	entry->last_value = val;
+	if (!status)
+		continue;
+
+The SMEM items, however, outlive the remote processor. When the WCSS Q6
+on IPQ5018 is shut down and started again, the firmware republishes the
+same ready bit it published on the first boot, last_value still holds it
+from that boot, the XOR is zero, and handle_nested_irq() is never
+called. qcom_q6v5_wait_for_start() then times out and the root PD start
+fails with -110 -- on a processor that booted perfectly well.
+
+Measured on a Xiaomi AX3000T v2 (IPQ5018 + QCN6122): after a clean,
+non-crash teardown (wifi down; rmmod ath11k_ahb), the parent smp2p
+summary interrupt increments during the failed start, so the Q6 does
+kick us, while the "q6v5 ready" interrupt count stays at its cold-boot
+value of 1. The doorbell arrives and the edge is swallowed.
+
+Export a helper that drops the cached values for an edge, and call it
+from q6_wcss_start() while the Q6 is still held in reset so its next
+publish registers as a change. QSDK does the same thing on the SoCs
+where it hit this (qcom_clear_smp2p_last_value(), enabled for IPQ5332
+and IPQ9574), and mainline's smp2p v2 support clears the same state on
+SSR detection.
+
+Signed-off-by: Adriel Santos <adriel.turox@gmail.com>
+---
+--- a/include/linux/soc/qcom/smem_state.h
++++ b/include/linux/soc/qcom/smem_state.h
+@@ -59,4 +59,16 @@
+ 
+ #endif
+ 
++#if IS_ENABLED(CONFIG_QCOM_SMP2P)
++
++void qcom_smp2p_clear_last_value(unsigned int remote_pid);
++
++#else
++
++static inline void qcom_smp2p_clear_last_value(unsigned int remote_pid)
++{
++}
++
++#endif
++
+ #endif
+--- a/drivers/soc/qcom/smp2p.c
++++ b/drivers/soc/qcom/smp2p.c
+@@ -160,9 +160,39 @@
+ 	struct list_head inbound;
+ 	struct list_head outbound;
+ 
++	struct list_head node;
++
+ 	bool need_ssr_ack;
+ };
+ 
++static LIST_HEAD(smp2p_instances);
++
++/**
++ * qcom_smp2p_clear_last_value() - forget the cached inbound values of an edge
++ * @remote_pid:	processor id of the remote end
++ *
++ * qcom_smp2p_notify_in() raises an interrupt only for the bits that changed
++ * since the previous notification, but the SMEM items outlive a remote
++ * processor's shutdown. A remote that reboots and republishes a value it had
++ * already published therefore produces no edge at all, and whoever waits on
++ * that bit waits forever. Call this while the remote is held in reset so that
++ * its next publish is seen as a change.
++ */
++void qcom_smp2p_clear_last_value(unsigned int remote_pid)
++{
++	struct qcom_smp2p *smp2p;
++	struct smp2p_entry *entry;
++
++	list_for_each_entry(smp2p, &smp2p_instances, node) {
++		if (smp2p->remote_pid != remote_pid)
++			continue;
++
++		list_for_each_entry(entry, &smp2p->inbound, node)
++			entry->last_value = 0;
++	}
++}
++EXPORT_SYMBOL_GPL(qcom_smp2p_clear_last_value);
++
+ #define CREATE_TRACE_POINTS
+ #include "trace-smp2p.h"
+ 
+@@ -651,6 +681,8 @@
+ 	if (ret)
+ 		goto set_wake_irq_fail;
+ 
++	list_add(&smp2p->node, &smp2p_instances);
++
+ 	return 0;
+ 
+ set_wake_irq_fail:
+@@ -680,6 +712,8 @@
+ 	struct qcom_smp2p *smp2p = platform_get_drvdata(pdev);
+ 	struct smp2p_entry *entry;
+ 
++	list_del(&smp2p->node);
++
+ 	dev_pm_clear_wake_irq(&pdev->dev);
+ 
+ 	list_for_each_entry(entry, &smp2p->inbound, node)
+--- a/drivers/remoteproc/qcom_q6v5_mpd.c
++++ b/drivers/remoteproc/qcom_q6v5_mpd.c
+@@ -131,6 +131,15 @@
+ 
+ 	qcom_q6v5_prepare(&wcss->q6);
+ 
++	/*
++	 * The Q6 is held in reset here, so nothing races this. Its SMEM items
++	 * survived the shutdown and it is about to republish the same ready
++	 * bit it published on the previous boot, which smp2p would see as "no
++	 * change" and swallow -- leaving the wait below to time out on a
++	 * processor that actually came up.
++	 */
++	qcom_smp2p_clear_last_value(REMOTE_PID);
++
+ 	ret = qcom_scm_pas_auth_and_reset(desc->pasid);
+ 	if (ret) {
+ 		dev_err(wcss->dev, "wcss_reset failed\n");

@@ -150,6 +150,20 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
          geometry, NOT the 96-byte W25N01KV - the KV OOB layout would address
          spare this chip does not have. ESMT units cannot reach this entry
          (different manufacturer table and read-ID method).
+  2039  target/linux/qualcommax/patches-6.12/0822-remoteproc-qcom_q6v5_mpd-unwind-a-failed-root-pd-start.patch
+         Issue #1. q6_wcss_start() returned on failure without
+         qcom_scm_pas_shutdown() or qcom_q6v5_unprepare(), so every retry
+         inherited the previous failure (and leaked an IRQ enable, the
+         "Unbalanced enable for IRQ" warning). Also takes the start
+         timeout from 5 s to the vendor's 10 s.
+  4043  target/linux/qualcommax/patches-6.12/0918-soc-qcom-smp2p-clear-cached-inbound-values-on-restart.patch
+         Issue #1, the actual fix for a dead radio. smp2p only raises an
+         interrupt for bits that CHANGED, but its SMEM items outlive the
+         Q6: on restart the firmware republishes the same ready bit, the
+         XOR is zero, and wait_for_start() times out on a processor that
+         booted fine. Clears the cached values while the Q6 is held in
+         reset. Pairs with qcom,smp2p-feature-ssr-ack in the board DTS -
+         both are required.
   12419  target/linux/qualcommax/patches-6.12/737-net-dsa-add-Airoha-AN8855.patch
          Kernel wiring for the AN8855 drivers (Kconfig/Makefile hooks;
          from the upstream "net: dsa: Add Airoha AN8855 support" v11 series).

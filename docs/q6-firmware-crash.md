@@ -1,10 +1,10 @@
 # When the WiFi firmware dies (Q6 / WCSS root-PD fatal)
 
-> TL;DR — a fatal error in the **root** PD of the WiFi Q6 kills both radios and
-> the driver cannot bring them back. Two of the three reasons were driver bugs
-> and are fixed here; the third is the Q6 itself refusing to restart, which no
-> amount of driver work in `qcom_q6v5_mpd` has been able to solve. That is why
-> the port ships a watchdog that reboots the box instead.
+> TL;DR — a fatal error in the **root** PD of the WiFi Q6 kills both radios.
+> Three separate driver bugs stood between that and recovery, and all three are
+> fixed here. The last one was the interesting one: the Q6 restarts perfectly
+> well, and the kernel was discarding the interrupt that says so. The port still
+> ships a watchdog, because something has to catch a recovery that fails.
 
 ## The failure
 
@@ -55,46 +55,70 @@ from the user PDs downwards (so the root is still `RUNNING` while they are torn
 down) does fix this — all three PDs then reach `offline` and the root gets a
 real `qcom_scm_pas_shutdown()`.
 
-**3. The Q6 does not restart — and the driver never unwinds the failed
-attempt.** After a clean shutdown the firmware reloads and
-`qcom_scm_pas_auth_and_reset()` *succeeds*, but the Q6 never raises its ready
-interrupt and `qcom_q6v5_wait_for_start()` times out (`-110`). Look at what
-`q6_wcss_start()` does with that failure:
+**3. The Q6's ready interrupt was being thrown away.** This was the real one,
+and it is fixed.
+
+After a clean shutdown the firmware reloads, `qcom_scm_pas_auth_and_reset()`
+*succeeds*, and then `qcom_q6v5_wait_for_start()` times out with `-110`. It
+looks exactly like a processor that will not boot. It is not — the Q6 boots
+fine, and we discard the signal that says so.
+
+`qcom_smp2p_notify_in()` raises an interrupt only for bits that **changed**:
 
 ```c
-	qcom_q6v5_prepare(&wcss->q6);              /* running = true, enable_irq() */
-	ret = qcom_scm_pas_auth_and_reset(desc->pasid);
-	if (ret) {
-		dev_err(wcss->dev, "wcss_reset failed\n");
-		return ret;                        /* no unprepare */
-	}
-	ret = qcom_q6v5_wait_for_start(&wcss->q6, 5 * HZ);
-	if (ret == -ETIMEDOUT)
-		dev_err(wcss->dev, "start timed out\n");
-	return ret;                                /* no pas_shutdown, no unprepare */
+	status = val ^ entry->last_value;
+	entry->last_value = val;
+	if (!status)
+		continue;          /* no change -> no handle_nested_irq() */
 ```
 
-Nothing is undone. The peripheral is left authenticated-and-reset in TrustZone
-with no matching `qcom_scm_pas_shutdown()`, and the q6v5 context is still
-"prepared" (`running == true`, handover IRQ enabled — which is where the
-`Unbalanced enable for IRQ` warning comes from). **Every later attempt starts
-from that poisoned state**, so "it fails every time" is not independent
-evidence of a hardware limit: attempts 2..N are consequences of attempt 1
-never being cleaned up.
+The SMP2P SMEM items outlive the remote processor. On its second boot the Q6
+republishes the *same* ready bit it published on the first, `last_value` still
+holds it from that boot, the XOR is zero, and the interrupt is never delivered.
 
-The sibling driver in this same tree, `qcom_q6v5_wcss_sec.c`, routes *every*
-error path through `goto unprepare`. This one does neither. Whether adding
-that unwind (plus a `pas_shutdown` on the timeout) makes the restart succeed is
-**untested** — it is the next experiment, not a settled answer.
+The measurement that proved it, before any fix: during a failed start the
+**parent** smp2p summary interrupt increments (the Q6 does kick us) while the
+`q6v5 ready` count stays pinned at its cold-boot value of 1. The doorbell
+arrives; the edge is swallowed.
 
-What *is* settled: ath11k's own reset path works on this hardware. Writing
-`hw-restart` to `simulate_fw_crash` tears both radios down and brings them
-back, no reboot, `pdev 1 successfully recovered`, both survey counters
-advancing again. So restarting radios in software is demonstrably possible
-here when the Q6 is alive; only the crashed-root case is unresolved.
+```sh
+grep -E 'GIC-0 209|q6v5 ready' /proc/interrupts   # before and after a restart
+```
 
-Because (3) is unresolved today, the fix for (2) buys nothing user-visible yet
-and is **not** shipped — only (1) and the array-overflow fix below are.
+Two things were missing, and both are needed:
+
+- **`qcom,smp2p-feature-ssr-ack`** on the IPQ5018 `master-kernel` node. IPQ8074
+  and IPQ6018 have carried it for years — see patches `0120-` and `0907-`, the
+  latter of whose commit message describes this bug exactly: *"Without this
+  first load is OK, but subsequent loads would hang and fail to complete."* The
+  consuming code was already in the kernel; only the DT property was absent.
+- **`0918-soc-qcom-smp2p-clear-cached-inbound-values-on-restart`**, which
+  exports `qcom_smp2p_clear_last_value()` and calls it from `q6_wcss_start()`
+  while the Q6 is held in reset, so its next publish registers as a change.
+  `qcom_smp2p_do_ssr_ack()` only toggles the RESTART_ACK flag and kicks — it
+  never touches `last_value` — so the DT property alone does not fix it. QSDK
+  does the same thing (`qcom_clear_smp2p_last_value()`, enabled there for
+  IPQ5332 and IPQ9574), and mainline's smp2p v2 support clears the same state
+  on SSR detection.
+
+With both in place a clean stop and start of the root PD works:
+
+```
+after rmmod:  cd00000.remoteproc=offline pd-1=offline pd-2=offline   ready_irq=1
+  ROOT+pd-1 RUNNING again after 6s
+final:        cd00000.remoteproc=running pd-1=running pd-2=running   ready_irq=2
+```
+
+`ready_irq` 1 → 2 is the edge finally being delivered. Both radios come back
+and their survey counters advance again, with no reboot.
+
+A footnote on how this was nearly missed: the failed-start path in
+`q6_wcss_start()` also unwinds nothing — no `qcom_scm_pas_shutdown()`, no
+`qcom_q6v5_unprepare()` — so every retry inherited the previous failure's state
+and produced the `Unbalanced enable for IRQ` warning. That made "it fails
+identically every time" look like a hardware limit when attempts 2..N were
+simply never independent. `0822-` fixes it, and the sibling
+`qcom_q6v5_wcss_sec.c` in this same tree already did it that way.
 
 ## Also fixed: a latent array overflow
 
