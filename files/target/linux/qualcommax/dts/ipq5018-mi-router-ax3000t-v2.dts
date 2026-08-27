@@ -779,3 +779,15 @@
 	qcom,bdf-addr = <0x4d100000>;
 	qcom,m3-dump-addr = <0x4df00000>;
 };
+
+/*
+ * The WCSS firmware needs the host to acknowledge every SMP2P interrupt for
+ * the edge to be renegotiated after the Q6 restarts. Without it the first
+ * load works and every later one hangs in qcom_q6v5_wait_for_start(), which
+ * is what "start timed out"/-110 on a second root PD start is. IPQ8074 and
+ * IPQ6018 already carry this (see 0120- and 0907-), and QSDK sets it for
+ * IPQ5018 too; only the upstream-targeted IPQ5018 node omits it.
+ */
+&wcss_smp2p_out {
+	qcom,smp2p-feature-ssr-ack;
+};
