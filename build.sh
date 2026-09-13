@@ -31,6 +31,10 @@ cd "$(dirname "$0")"
 
 WITH_NSS="${NSS:-0}"
 WITH_KMODS="${KMODS:-0}"
+if [ -n "${WIFI_NSS_DONOR:-}" ] && [ "$WITH_NSS" != "1" ]; then
+	echo "ERROR: WIFI_NSS_DONOR requires NSS=1" >&2
+	exit 1
+fi
 
 # Fail before doing anything if the AN8855 driver has silently diverged between
 # the two builds, or if an NSS patch stopped applying cleanly. Takes ~1s and
@@ -392,7 +396,33 @@ EOF
 	fi
 fi
 
-make defconfig
+if [ -n "${WIFI_NSS_DONOR:-}" ]; then
+	python3 ../tools/integrate-wifi-nss.py "$PWD" "$WIFI_NSS_DONOR"
+	python3 ../tools/track-nss-memory-profile.py "$PWD"
+	python3 ../tools/enable-nss-radio-map.py "$PWD"
+	# Current optional LibreSpeed virtual providers form a Kconfig cycle.
+	# They are not part of this prototype's image. Leave feed sources intact.
+	./scripts/feeds uninstall librespeed-cli librespeed-cli-rust librespeed-common luci-app-librespeed
+fi
+
+if [ -n "${WIFI_NSS_DONOR:-}" ]; then
+	if ! make defconfig > wifi-nss-defconfig.log 2>&1; then
+		cat wifi-nss-defconfig.log
+		exit 1
+	fi
+	cat wifi-nss-defconfig.log
+	if grep -q 'recursive dependency detected' wifi-nss-defconfig.log; then
+		echo "ERROR: Kconfig dependency cycle; refusing experimental build" >&2
+		exit 1
+	fi
+	./scripts/feeds list -s > wifi-nss-feeds-lock.txt
+else
+	make defconfig
+fi
+
+if [ -n "${WIFI_NSS_DONOR:-}" ]; then
+	python3 ../tools/integrate-wifi-nss.py --check-config "$PWD"
+fi
 
 # A kconfig `select` beats "is not set" — that is exactly how the old nat46
 # exclusion was silently undone — so confirm the deselection above survived
@@ -434,7 +464,11 @@ MAKE_ARGS=()
 if [ "$WITH_KMODS" = "1" ]; then
 	MAKE_ARGS+=(IGNORE_ERRORS="n m" BUILD_LOG=1)
 fi
-make -j"$(nproc)" "${MAKE_ARGS[@]}"
+if [ "${PREPARE_ONLY:-0}" = "1" ]; then
+	echo "Prepared source and config: $PWD (not compiled)"
+	exit 0
+fi
+make -j"${JOBS:-$(nproc)}" "${MAKE_ARGS[@]}"
 
 if [ "$WITH_KMODS" = "1" ] && [ -d logs ]; then
 	errs=$(find logs -name error.txt 2>/dev/null | wc -l)
