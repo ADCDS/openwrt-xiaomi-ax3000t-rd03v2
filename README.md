@@ -11,7 +11,7 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 | Airoha **AN8855** DSA switch (3× LAN + WAN; 2.5 G CPU link, ports link at 1 G) | ✅ |
 | Wired LAN data path | ✅ |
 | WiFi **2.4 GHz** (IPQ5018) | ✅ |
-| WiFi **5 GHz** (QCN6122) | ✅ |
+| WiFi **5 GHz** (QCN6102) | ✅ |
 | Front status LED (blue/amber, 0–255 soft-PWM fade + patterns) | ✅ |
 | **LuCI** web interface (plain HTTP via uhttpd) | ✅ |
 | Updates via `sysupgrade` (from the RAM-booted initramfs — see below) | ✅ |
@@ -22,7 +22,7 @@ Pure, mainline-based **OpenWrt** for the **Xiaomi AX3000T**, hardware revision *
 
 ## ⚠️ Read this first
 
-- **This is for the `RD03v2` hardware revision only** (IPQ5018 + AN8855 switch + QCN6122 5 GHz). Check the sticker/board. Other AX3000T revisions (e.g. the MT7981 "RD23" variant) are **completely different hardware** — this will brick them.
+- **This is for the `RD03v2` hardware revision only** (IPQ5018 + AN8855 switch + QCN6102 5 GHz). Check the sticker/board. Other AX3000T revisions (e.g. the MT7981 "RD23" variant) are **completely different hardware** — this will brick them.
 - **Check your stock ROM version first.** This install needs a stock `recovery.bin` **at least as new as the version your unit last ran** — the bootloader enforces anti-rollback ([step 2](#2-re-enable-the-bootloader-console-tftp-recovery)). Images for **2.0.12** and **2.0.28** (the current newest release) are both available, so a fully-updated unit is **not** shut out — see [Getting a stock `recovery.bin`](#getting-a-stock-recoverybin). If your unit is on something newer than 2.0.28, please open an issue. The stock web UI shows the ROM version.
 - **You need a USB↔UART (3.3 V) serial adapter** and to solder/attach to the board's UART pads for the *initial* install. After OpenWrt is on NAND, updates need no serial.
 - **There is real brick risk.** Flashing NAND on a locked-bootloader device can go wrong. Every step here is recoverable — once you are past step 3 the U-Boot prompt stays available (the install persists `boot_wait=on`/`uart_en=1`), and the stock TFTP recovery is the backstop underneath it, **provided you hold a `recovery.bin` new enough to be accepted** (below). But **do this at your own risk.** We are not responsible for bricked routers.
@@ -113,7 +113,7 @@ The install is a **UART + TFTP** procedure because the stock bootloader is locke
 | IC2 | Rayson **RS128M16V0DB** | 256 MB DDR3 SDRAM |
 | IC3 | **ESMT F50D1G41LB** *or* **Winbond W25N01KW** | 128 MB SPI-NAND flash — the part is second-sourced, both are supported |
 | IC4 | Airoha **AN8855** | 2.5 GbE DSA switch (the 4 LAN/WAN ports) |
-| IC5 | Qualcomm **QCN6122** | 5 GHz WiFi radio (by the 5G antenna pads) |
+| IC5 | Qualcomm **QCN6102** | 5 GHz WiFi radio (by the 5G antenna pads); ath11k and its firmware/board files call it QCN6122 |
 
 ### 0. What you need
 - The router, an RD03v2.
