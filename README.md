@@ -449,3 +449,5 @@ particular the **AN8855 DSA driver** (Min Yao / Airoha, with Christian Marangi's
 netdev submission, carried here via csharper2005), the **base device tree**
 (csharper2005), and the **ath11k smallbuffers** patch (Ziyang Huang). See
 [Credits](#credits).
+
+Experimental NSS Wi-Fi offload and local wired-to-5GHz measurements are documented in [docs/nss-wifi-validation.md](docs/nss-wifi-validation.md).
