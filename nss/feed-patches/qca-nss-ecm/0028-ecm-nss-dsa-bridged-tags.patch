@@ -1,0 +1,59 @@
+ecm: include DSA tag_8021q metadata for bridged TCP/UDP rules
+
+A bridged lan3 to
+phy1-ap0 connection resolves to NSS interfaces 1 and 32, but patch 0027
+skips DSA VLAN metadata for is_routed=0. Apply the same per-side DSA lookup
+to bridged connections. The existing helper leaves non-DSA interfaces,
+non-tag_8021q switches and VLAN-aware bridges alone. Existing VLAN rule
+fields remain protected by the per-side NOT_CONFIGURED checks.
+
+Observed: new wired-to-WiFi iperf control flows stall with ECM enabled,
+while new flows with ECM IPv4 stopped complete. This motivates the patch
+and the correction restored accelerated IPv4 bridging. IPv6 is compile-only
+until a separate runtime test. No change to bridge/routed rule flags.
+
+--- a/frontends/nss/ecm_nss_ported_ipv4.c
++++ b/frontends/nss/ecm_nss_ported_ipv4.c
+@@ -1094,7 +1094,7 @@
+ 	/*
+ 	 * DSA/tag_8021q precise egress. ECM resolved the flow's L2 endpoints to
+ 	 * bare GMAC conduits (ecm_nss_common_dsa_conduit_get()), so this rule
+-	 * carries no VLAN and the NSS emits routed frames UNTAGGED on the
++	 * would otherwise carry no VLAN and the NSS emits frames UNTAGGED on the
+ 	 * conduit. The switch then classifies them into the CPU port's PVID
+ 	 * (pinned to the all-ports VID 0) and FLOODS - delivery works but is
+ 	 * gated by the slowest member port. Put each side's tag_8021q VID in the
+@@ -1104,7 +1104,7 @@
+ 	 * CPU port itself puts on ingress frames, since the per-VID egress
+ 	 * tagging on the CPU port is TAGGED for every tag_8021q VID).
+ 	 *
+-	 * Routed connections only, and only when no real VLAN interface already
++	 * Routed and bridged connections, only when no real VLAN interface already
+ 	 * claimed the rule. The VID comes from each side's INNERMOST interface
+ 	 * ([x_ifaces_first]) - the same element whose AE number became the
+ 	 * rule's flow/return interface - which in every DSA-backed topology is
+@@ -1115,7 +1115,7 @@
+ 	 * member of the same bridge). VID 0 means "not DSA/tag_8021q" and
+ 	 * leaves the rule alone.
+ 	 */
+-	if (ecm_db_connection_is_routed_get(feci->ci)) {
++	{
+ 		uint16_t dsa_vid;
+ 		struct net_device *dsa_dev;
+ 
+--- a/frontends/nss/ecm_nss_ported_ipv6.c
++++ b/frontends/nss/ecm_nss_ported_ipv6.c
+@@ -1055,11 +1055,11 @@
+ 
+ 	/*
+ 	 * DSA/tag_8021q precise egress - see the IPv4 twin in
+-	 * ecm_nss_ported_ipv4.c for the full story. Without this, routed frames
++	 * ecm_nss_ported_ipv4.c for the full story. Routed and bridged frames otherwise
+ 	 * leave the NSS untagged and are flood-delivered via the CPU port's
+ 	 * PVID-0 fallback, gated by the slowest member port.
+ 	 */
+-	if (ecm_db_connection_is_routed_get(feci->ci)) {
++	{
+ 		uint16_t dsa_vid;
+ 		struct net_device *dsa_dev;
+ 

@@ -1,0 +1,34 @@
+nss-dp: honor AN8855 pause frames on the RD03v2 switch conduit
+
+The switch-facing GMAC has no attached PHY and starts with receive flow
+control disabled. Accelerated WiFi-to-LAN bursts then overflow the switch:
+a 10-second run produced 464 FlowControlDrop increments and 464 TCP retries.
+Temporarily setting only GMAC RX pause increased receiver throughput from
+116 to 768 Mbit/s, with zero retries and zero added switch drops.
+
+Use the existing HAL callback at each successful netdev open, including
+NSS data-plane takeover, scoped to RD03v2 MAC2 without a PHY. Do not enable
+TX pause or alter other boards. Full-image boot and local TCP were validated.
+
+--- a/nss_dp_main.c
++++ b/nss_dp_main.c
+@@ -482,6 +482,19 @@
+ 		phy_start(dp_priv->phydev);
+ 		phy_start_aneg(dp_priv->phydev);
+ 	}
++
++	/*
++	 * The RD03v2 AN8855 CPU port sends pause frames when its LAN
++	 * egress queues fill. There is no PHY negotiation on this GMAC;
++	 * explicitly honor those frames on the switch-facing MAC only.
++	 * Apply after data-plane/HAL startup, including NSS takeover.
++	 */
++	if (of_machine_is_compatible("xiaomi,mi-router-ax3000t-v2") &&
++	    dp_priv->macid == 2 && !dp_priv->phydev &&
++	    dp_priv->gmac_hal_ops->rxflowcontrol) {
++		dp_priv->gmac_hal_ops->rxflowcontrol(dp_priv->gmac_hal_ctx, true);
++		dp_priv->pause |= FLOW_CTRL_RX;
++	}
+ 
+ 	return 0;
+ }

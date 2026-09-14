@@ -257,3 +257,12 @@ Experimental; see docs/nss-offload.md. Layered on top of files/:
         that is what caused issue #9 and three further one-sided bugs. Do not
         reintroduce a shadowing copy - tools/check-nss-divergence.sh fails if one
         appears, and build.sh runs it on every build.
+
+NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
+  tools/integrate-wifi-nss.py imports a pinned qosmio patch series and SMALLBUFFERS overrides.
+  tools/enable-nss-radio-map.py assigns the two RD03v2 radio priorities.
+  tools/track-nss-memory-profile.py tracks NSS memory choices in rebuild dependencies.
+  tools/check-wifi-nss-port.sh audits the full backports patch sequence.
+  experimental/wifi-nss/patch-overrides/ retains donor authorship and fixes QCN6122 BAR/windows.
+  nss/feed-patches/qca-nss-ecm/0028-ecm-nss-dsa-bridged-tags.patch tags bridged ported flows.
+  files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch enables RD03v2 MAC2 RX pause.
