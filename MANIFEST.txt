@@ -263,6 +263,7 @@ NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
   tools/enable-nss-radio-map.py assigns the two RD03v2 radio priorities.
   tools/track-nss-memory-profile.py tracks NSS memory choices in rebuild dependencies.
   tools/check-wifi-nss-port.sh audits the full backports patch sequence.
-  experimental/wifi-nss/patch-overrides/ retains donor authorship and fixes QCN6122 BAR/windows.
+  experimental/wifi-nss/patch-overrides/ retains donor authorship, fixes QCN6122 BAR/windows and
+    orders the NSS teardown after 953's crash-path interrupt quiesce (999-998).
   nss/feed-patches/qca-nss-ecm/0028-ecm-nss-dsa-bridged-tags.patch tags bridged ported flows.
   files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch enables RD03v2 MAC2 RX pause.

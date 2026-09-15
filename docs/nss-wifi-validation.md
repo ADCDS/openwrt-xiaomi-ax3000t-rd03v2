@@ -18,13 +18,19 @@ NSS=1 WIFI_NSS_DONOR="$(realpath ../wifi-nss-donor)" JOBS=2 bash build.sh
 
 The donor must be clean. Without `WIFI_NSS_DONOR`, ath11k NSS remains disabled.
 `PREPARE_ONLY=1` stops after configuration. The integration retains SMALLBUFFERS,
-selects NSS firmware 12.5 and the LOW NSS memory profile, and assigns radio
+selects NSS firmware 12.5 and the MEDIUM NSS memory profile (the existing NSS
+build's; `WIFI_NSS_MEM_PROFILE=LOW` selects LOW, which caps accelerated
+connections at 512 per IP family), and assigns radio
 priorities 0/1 to the board's `wifi`/`wifi1` labels. It tracks memory-profile
 configuration changes in the NSS driver's package stamp. Mesh and generic
 mac80211 redirect remain disabled. The existing firmware memory mode is retained.
 
 Four donor patch overrides preserve the device's small-buffer definitions and
-rebase surrounding contexts; original patch authorship is retained. The donor
+rebase surrounding contexts; original patch authorship is retained. Two RD03v2
+patches follow the series: `999-998` moves the NSS teardown in firmware-crash
+recovery after the interrupt quiesce added by `953` (the donor hunk lands before
+it) and clears freed tx-descriptor addresses so a failed re-setup cannot free
+them twice; `999-999` is the QCN6122 register fix below. The donor
 series itself is fetched from the pinned source, not re-attributed here.
 Optional LibreSpeed feed links are excluded in this mode because their virtual
 providers caused a Kconfig cycle in the tested feed set. This does not delete
