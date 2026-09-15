@@ -334,6 +334,10 @@ NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
   tools/check-wifi-nss-port.sh audits the full backports patch sequence.
   experimental/wifi-nss/patch-overrides/ retains donor authorship, fixes QCN6122 BAR/windows and
     orders the NSS teardown after 953's crash-path interrupt quiesce (999-998).
+    999-999-rd03v2-nss-recovery-1 clears stale LMAC ring pointers on in-place
+    recovery (hardware A/B confirmed), nss-recovery-2 deletes the NSS peers and
+    releases the VAP/ext-VAP nodes in unload order; together they make
+    in-place crash recovery work with offload on.
     999-999-rd03v2-nss-vlan-eapol-to-pae-group delivers EAPOL to hostapd on
     VLAN-aware bridges; 999-999-rd03v2-reo-update-queue-noncoherent-free frees
     queued REO update descriptors the way they were allocated.

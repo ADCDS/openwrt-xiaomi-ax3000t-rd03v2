@@ -6,6 +6,8 @@ See [build instructions, fixes and hardware validation](../../docs/nss-wifi-vali
 `92a2d104145c8d265851c4b388a41bd8e9c21cd9` and adds the RD03v2 QCN6122
 register-address fix and the crash-recovery ordering fix (`999-998`). The
 original donor authorship headers are retained.
+The `999-999-rd03v2-nss-recovery-*` patches make in-place crash recovery work
+with offload on.
 `999-999-rd03v2-nss-vlan-eapol-to-pae-group` delivers EAPOL on VLAN-aware
 bridges, and `999-999-rd03v2-reo-update-queue-noncoherent-free` fixes the
 donor's REO update-queue free.

@@ -31,8 +31,8 @@ patches follow the series: `999-998` moves the NSS teardown in firmware-crash
 recovery after the interrupt quiesce added by `953` (the donor hunk lands before
 it) and clears freed tx-descriptor addresses so a failed re-setup cannot free
 them twice; `999-999` is the QCN6122 register fix below. The other
-`999-999-rd03v2-*` patches are described under "ECM VLAN tags for Wi-Fi over a
-VLAN-aware bridge". The donor
+`999-999-rd03v2-*` patches are described under "Crash recovery with offload on"
+and "ECM VLAN tags for Wi-Fi over a VLAN-aware bridge". The donor
 series itself is fetched from the pinned source, not re-attributed here.
 Optional LibreSpeed feed links are excluded in this mode because their virtual
 providers caused a Kconfig cycle in the tested feed set. This does not delete
@@ -256,6 +256,38 @@ with `sysupgrade -u -b` while `rc.local` is unedited, or after the restore run
 
 Nothing ships by default to turn pause off. `ethtool` is in every image: NSS
 builds get it through `qca-nss-ecm` and `build.sh` adds it to the default build.
+
+### Crash recovery with offload on
+
+Without the two patches below, in-place recovery with `nss_offload=1`
+(`simulate_fw_crash hw-restart`, or a firmware crash) leaves the radio dead: a
+Q6 NOC error on IPQ5018, a radio that stops passing traffic on QCN6122. With
+both, root-PD asserts and hw-restarts recover in place on the bench.
+
+| Patch (`experimental/wifi-nss/patch-overrides/ath11k/`) | Change |
+| --- | --- |
+| `999-999-rd03v2-nss-recovery-1-clear-stale-lmac-srng-pointers` | Zero the shared rdp/wrp ring-pointer buffers in `ath11k_hal_srng_clear()` and the LMAC slots at ring setup (upstream fix by Kyle Farnung, Fixes 32be3ca4cf78b). |
+| `999-999-rd03v2-nss-recovery-2-release-vdevs-on-restart` | Before the NSS teardown, in unload order: NSS peer deletes for the stations, VAP down, AP self peer, AP_VLAN ext vdevs, VAP delete. Runs from `ath11k_core_halt()` on hw-restart and from `reconfigure_on_crash` on the crash path. An AP_VLAN ext vdev that no 4addr station ever joined is released later, when mac80211 re-adds it. Also fixes a `spin_lock_bh`/`spin_unlock` mismatch. |
+
+The first is confirmed by a hardware A/B with offload on (2026-09-13, through
+a temporary switch and diagnostic prints since removed): with the clear off,
+the firmware was handed the RXDMA buffer ring with a stale NSS-written head
+pointer (198) over a zeroed ring, and the Q6 raised a NOC error 0.6 s after
+recovery; with it on, 14/14 hw-restarts and every root-PD assert recovered. It
+also changes offload-off recovery: the host now fills the whole refill ring,
+where it used to fill about half.
+
+Two bench candidates were dropped: tearing NSS down before the hw-restart
+power cycle (never shown to help) and recovering by `device_reprobe()` (the AP
+interface was not recreated).
+
+Bench checks for these patches:
+- Firmware-crash path of `nss-recovery-2` without a root PD assert: run
+  `echo stop > /sys/class/remoteproc/remoteproc2/state`, wait, `echo start`,
+  then the same on `remoteproc1`. Expect NSS deallocate/allocate pairs, no hung
+  task on `conf_mutex`, and `successfully recovered`.
+- Every recovery trial with offload on: `dmesg | grep -E 'COREDUMP|NSS-FW logbuffer|coredump finished|peer delete failed|failed to free nss'`
+  must stay empty; an NSS core fault takes the whole router down.
 
 ### ath11k crash-recovery fixes in both builds
 

@@ -1,0 +1,78 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] ath11k: clear stale LMAC ring pointers on in-place recovery
+
+Since 32be3ca4cf78b ("wifi: ath11k: HAL SRNG: don't deinitialize and
+re-initialize again") ath11k_core_reconfigure_on_crash() calls
+ath11k_hal_srng_clear(), which keeps the shared rdp/wrp pointer buffers
+and does not zero them. Its comment says the hw_init path clears every
+slot, but LMAC rings return from ath11k_hal_srng_setup() before
+ath11k_hal_srng_hw_init(), so their slots keep the previous firmware
+instance's head/tail pointers. Without offload the host fills the RXDMA
+buffer ring and rewrites its head pointer before HTT ring setup. With
+NSS offload that fill is skipped, so the new firmware can be handed a
+zeroed ring behind an NSS-written head pointer. This caused the IPQ5018
+NOC error after in-place recovery with offload on (A/B below), and is the
+likely cause of the QCN6122 zombie radio seen in the same setup.
+The same fix was posted upstream (Kyle Farnung, "wifi: ath11k: clear
+shared SRNG pointer state on restart", Fixes: 32be3ca4cf78b).
+
+Zero rdp/wrp in ath11k_hal_srng_clear() and the LMAC slots again when
+the ring is set up. Note that this also changes offload=0 recovery: the
+host now posts a full RXDMA refill ring instead of about half of it.
+
+Hardware A/B with NSS offload (2026-09-13, through a temporary switch
+and diagnostic prints since removed): with the clear off, the RXDMA buffer
+ring's head pointer was 198 at HTT ring setup and the Q6 raised a NOC error
+0.6 s after recovery; with it on, 14/14 hw-restarts and every root-PD
+assert recovered.
+
+--- a/drivers/net/wireless/ath/ath11k/hal.c
++++ b/drivers/net/wireless/ath/ath11k/hal.c
+@@ -1114,6 +1114,9 @@
+ 			srng->u.src_ring.hp_addr = (void *)(hal->wrp.vaddr +
+ 						   lmac_idx);
+ 			srng->flags |= HAL_SRNG_FLAGS_LMAC_RING;
++			/* LMAC rings skip hw_init: start from an empty ring */
++			*srng->u.src_ring.hp_addr = 0;
++			*srng->u.src_ring.tp_addr = 0;
+ 		} else {
+ 			if (!ab->hw_params.supports_shadow_regs)
+ 				srng->u.src_ring.hp_addr =
+@@ -1147,6 +1150,9 @@
+ 			srng->u.dst_ring.tp_addr = (void *)(hal->wrp.vaddr +
+ 						   lmac_idx);
+ 			srng->flags |= HAL_SRNG_FLAGS_LMAC_RING;
++			/* LMAC rings skip hw_init: start from an empty ring */
++			*srng->u.dst_ring.tp_addr = 0;
++			*srng->u.dst_ring.hp_addr = 0;
+ 		} else {
+ 			if (!ab->hw_params.supports_shadow_regs)
+ 				srng->u.dst_ring.tp_addr =
+@@ -1439,10 +1445,24 @@
+ 
+ void ath11k_hal_srng_clear(struct ath11k_base *ab)
+ {
+-	/* No need to memset rdp and wrp memory since each individual
+-	 * segment would get cleared in ath11k_hal_srng_src_hw_init()
+-	 * and ath11k_hal_srng_dst_hw_init().
++	struct ath11k_hal *hal = &ab->hal;
++
++	/*
++	 * Keep the shared pointer buffers allocated, but drop the previous
++	 * firmware instance's hp/tp values. Non-LMAC rings get their slots
++	 * zeroed in ath11k_hal_srng_{src,dst}_hw_init(), LMAC rings do not:
++	 * their host-owned pointer is only rewritten when the host itself
++	 * fills the ring. With NSS offload the RXDMA buffer ring is filled
++	 * by NSS after HTT ring setup, so the new firmware would otherwise
++	 * see the old head pointer over a zeroed ring.
+ 	 */
++	if (hal->rdp.vaddr)
++		memset(hal->rdp.vaddr, 0,
++		       sizeof(*hal->rdp.vaddr) * HAL_SRNG_RING_ID_MAX);
++	if (hal->wrp.vaddr)
++		memset(hal->wrp.vaddr, 0,
++		       sizeof(*hal->wrp.vaddr) * HAL_SRNG_NUM_LMAC_RINGS);
++
+ 	memset(ab->hal.srng_list, 0,
+ 	       sizeof(ab->hal.srng_list));
+ 	memset(ab->hal.shadow_reg_addr, 0,
