@@ -75,7 +75,7 @@ but completed with the IPv4 ECM frontend stopped. Afterwards, wired-to-Wi-Fi
 TCP reached 838.89 Mbit/s in an intermediate run with NSS packet/hash-hit
 counters increasing. IPv6 was compiled but was not runtime-tested.
 
-### Receive pause on the switch-facing GMAC
+### Receive pause on the switch-facing GMAC (all builds)
 
 The PHY-less MAC2 starts with RX flow control disabled although the AN8855 CPU
 port sends pause frames. In a controlled Wi-Fi-to-wired run, TCP throughput was
@@ -83,11 +83,114 @@ port sends pause frames. In a controlled Wi-Fi-to-wired run, TCP throughput was
 counter increased by exactly 464. Temporarily enabling only GMAC RX pause raised
 throughput to 767.89 Mbit/s with zero retransmissions or additional drops.
 
-The permanent patch invokes the existing HAL callback at the end of netdev open,
-after HAL/data-plane startup, including NSS takeover. It is restricted to the
-RD03v2 compatible, MAC2 and no attached PHY; TX pause is unchanged. A read-only
+The patch (`files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch`)
+is part of every build: default, plain NSS and NSS Wi-Fi. RX pause defaults on
+and is applied through the existing HAL callback at the end of netdev open, after
+HAL/data-plane startup, including NSS takeover. It is restricted to the RD03v2
+compatible, MAC2 and no attached PHY; TX pause is refused. A read-only
 register check after boot confirmed flow-control value `0x4` without the temporary
 write module, and the value remained `0x4` after traffic.
+
+A later A/B bench on the NSS Wi-Fi image toggled pause with `ethtool` over three
+15-second 5GHz-to-wired TCP runs per setting, to two different wired hosts. The
+Wi-Fi link limited throughput to about 50 Mbit/s either way. With pause off the
+AN8855 CPU port dropped 110-188 frames per run and TCP retransmitted 111-217
+times. With pause on there were no switch drops and 14-42 retransmissions.
+One slow port does delay other ports: a 5 Mbit/s 2.4GHz-to-wired UDP stream into
+an idle 1 Gbit port lost 47-48 % with pause on while a 5GHz flow flooded a
+10 Mbit port. With pause off it lost 53 %, and the switch also dropped about 70k
+frames. The switch's shared buffer causes that blocking with or without pause;
+pause did not make it worse.
+
+A second A/B on the same image emulated a plain-NSS build: NSS Wi-Fi offload
+was off (`nss_offload=0`, no `wifili` activity), so Wi-Fi traffic took the
+host path while wired traffic stayed on the NSS data plane. It covered one path
+only: three 15-second 5GHz-to-wired TCP runs per setting to the `lan3` host, at
+32-45 Mbit/s received (the runs to the WAN host failed to connect). The switch
+sent no pause frames in any run: `eth1`'s `rx_pause` counter did not move with
+pause on or off, while it rose by 442-848 per pause-on run in the A/B above.
+The `eth1` CPU port (p05) dropped nothing either. Pause was never asserted, so
+this run shows neither a benefit nor a cost. TCP retransmitted 34-41 times per
+run with pause off and 12-28 with it on; with no pause frames on the wire that
+difference is Wi-Fi noise and cannot be attributed to pause.
+
+Routed wired WAN-to-LAN TCP on the same image ran at 882-939 Mbit/s received
+(per setting, three one-stream and two four-stream runs; wired only, so the
+Wi-Fi offload setting plays no part). In the gateway layout the WAN port
+`lan2` reaches the NSS data plane through `eth0`, and the routed stream leaves
+through `eth1` into p05 towards the `lan3` host. That is the direction RX pause
+throttles. Even so the switch sent no pause frames (`eth1` `rx_pause` flat in
+every run) and p05 dropped nothing: 1 Gbit in to 1 Gbit out did not congest
+the CPU port. This run therefore shows neither a benefit nor a cost either.
+`lan2` counted 52-2,601 RxDrop in four of the ten runs, two in each mode, while
+pause stayed idle. Its CPU port (p04, `eth0`) counters were not captured.
+
+The default build was measured on two images with the same A/B (Wi-Fi to and
+from the `lan3` host, TCP, all three clients, `ethtool` toggling pause). The
+switch did send pause frames there: 36-42 per pause-on round on the first image
+and 10 on the second, with no switch drops. With pause off the CPU port (p05)
+dropped 18 frames in one of two rounds on the first image and 22 on the
+second. Throughput was within Wi-Fi noise either way.
+
+**Pending bench confirmation:** a real plain-NSS build has not been measured.
+The plain-NSS emulation above never triggered pause and covered only Wi-Fi to
+the `lan3` host. Still open on the plain-NSS host path are Wi-Fi to `lan2` and
+the slow-port blocking test, and wired 2-to-1 fan-in into one 1 Gbit port has
+not been run on any image. The patch ships in that build too because the
+mechanism (a PHY-less GMAC ignoring the switch's pause frames) does not depend
+on the data path. If it shows a regression, it can be switched off without a
+rebuild.
+
+#### Turning RX pause off
+
+At runtime, until the next reboot or `qca-nss-dp` reload:
+
+```sh
+ethtool -A eth1 rx off     # rx on restores the default
+ethtool -a eth1            # RX: off
+dmesg | grep 'rx pause'    # eth1: rx pause off (flow control 0x0)
+```
+
+The setting survives eth1 going down and up again, including NSS takeover,
+because every open re-applies the stored value. To keep it off across reboots,
+use a hotplug script of its own:
+
+```sh
+cat > /etc/hotplug.d/iface/99-rd03v2-rx-pause <<'EOF'
+# RD03v2: do not honour AN8855 pause frames on the switch conduit
+[ "$ACTION" = ifup ] && ethtool -A eth1 rx off 2>/dev/null
+EOF
+echo /etc/hotplug.d/iface/99-rd03v2-rx-pause >> /etc/sysupgrade.conf
+```
+
+The `sysupgrade.conf` entry only puts the file into a settings backup made on
+the installed system. On this board sysupgrade runs only from the RAM
+initramfs, which has neither the file nor the entry, so a sysupgrade started
+there without `-f` does not keep it (`sysupgrade -n` in the README keeps
+nothing at all). To carry it over, follow `docs/no-uart-reflash.md`: run
+`sysupgrade -b /tmp/config-backup.tar.gz` on the installed system, copy the
+backup off the box, and flash from the initramfs with
+`sysupgrade -f /tmp/config-backup.tar.gz <image>`.
+
+Do not put it in `/etc/rc.local`. This image ships its own `rc.local`: it
+re-arms the U-Boot boot flags and, on `-nss` images, writes the NSS runtime
+knobs (`general/redirect`, `ipv4_accel_mode`, `ipv6_accel_mode`). It is also
+listed in `/lib/upgrade/keep.d/base-files-essential`, so `sysupgrade -b` puts
+it in every backup, edited or not, and `sysupgrade -f` restores the old image's
+copy over the new image's. Only `sysupgrade -u -b` leaves it out, and only
+while it still matches `/rom/etc/rc.local`. An edited `rc.local` is therefore
+restored by every upgrade that restores a backup, and it hides any change a new
+release makes to that file.
+
+That restore applies to an unedited `rc.local` too. After a default to `-nss`
+upgrade with a restored backup, the NSS runtime knobs are not written (their
+effect on acceleration has not been measured; the driver already defaults both
+accel modes to 1). When switching between default and `-nss` images, back up
+with `sysupgrade -u -b` while `rc.local` is unedited, or after the restore run
+`cp /rom/etc/rc.local /etc/rc.local` and reboot.
+
+Nothing ships by default to turn pause off. `ethtool` is in every image: NSS
+builds get it through `qca-nss-ecm` and `build.sh` adds it to the default build.
 
 ## Final installed-image test
 

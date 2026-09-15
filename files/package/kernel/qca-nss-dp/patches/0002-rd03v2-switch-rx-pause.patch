@@ -6,29 +6,112 @@ a 10-second run produced 464 FlowControlDrop increments and 464 TCP retries.
 Temporarily setting only GMAC RX pause increased receiver throughput from
 116 to 768 Mbit/s, with zero retries and zero added switch drops.
 
-Use the existing HAL callback at each successful netdev open, including
-NSS data-plane takeover, scoped to RD03v2 MAC2 without a PHY. Do not enable
-TX pause or alter other boards. Full-image boot and local TCP were validated.
+On the NSS Wi-Fi image, Wi-Fi-limited (~50 Mbit/s) 5 GHz-to-wired TCP
+showed zero AN8855 CPU-port drops with RX pause on (110-188 per 15 s run
+with it off) and about 5x fewer retransmissions. A congested switch port
+can delay traffic to other ports, but that also happens with pause off,
+since the switch's shared buffer fills either way. Pause did not make it
+worse.
+
+RX pause defaults on for RD03v2 MAC2 and is applied at each netdev open,
+including NSS data-plane takeover. `ethtool -A <dev> rx on|off` changes it
+at runtime without a rebuild, and the setting holds across later opens
+until the module is reloaded. Each change logs a read-back of the GMAC
+flow-control register. TX pause is refused; other boards are unaffected.
+
+Applies to every build (default, NSS, NSS Wi-Fi). A plain-NSS emulation
+(NSS Wi-Fi offload off, one Wi-Fi-to-wired path) never triggered pause:
+the switch sent no pause frames in either mode. The default build and a
+real plain-NSS build are pending bench confirmation; see
+docs/nss-wifi-validation.md.
 
 --- a/nss_dp_main.c
 +++ b/nss_dp_main.c
-@@ -482,6 +482,19 @@
- 		phy_start(dp_priv->phydev);
+@@ -483,6 +483,13 @@
  		phy_start_aneg(dp_priv->phydev);
  	}
-+
-+	/*
-+	 * The RD03v2 AN8855 CPU port sends pause frames when its LAN
-+	 * egress queues fill. There is no PHY negotiation on this GMAC;
-+	 * explicitly honor those frames on the switch-facing MAC only.
-+	 * Apply after data-plane/HAL startup, including NSS takeover.
-+	 */
-+	if (of_machine_is_compatible("xiaomi,mi-router-ax3000t-v2") &&
-+	    dp_priv->macid == 2 && !dp_priv->phydev &&
-+	    dp_priv->gmac_hal_ops->rxflowcontrol) {
-+		dp_priv->gmac_hal_ops->rxflowcontrol(dp_priv->gmac_hal_ctx, true);
-+		dp_priv->pause |= FLOW_CTRL_RX;
-+	}
  
++	/*
++	 * No PHY negotiates flow control on the switch conduit. Apply the current
++	 * setting after data-plane/HAL startup, including NSS takeover.
++	 */
++	if (nss_dp_rd03v2_is_switch_conduit(dp_priv))
++		nss_dp_rd03v2_apply_rx_pause(dp_priv);
++
  	return 0;
  }
+ 
+@@ -912,6 +919,13 @@
+ 		goto fail;
+ 	}
+ 
++	/*
++	 * RD03v2: the AN8855 CPU port sends pause frames when its egress queues
++	 * fill; honour them on the switch-facing GMAC unless ethtool turns it off.
++	 */
++	if (of_machine_is_compatible("xiaomi,mi-router-ax3000t-v2") && dp_priv->macid == 2)
++		dp_priv->pause = FLOW_CTRL_RX;
++
+ 	/* Use data plane ops as per the configured SoC */
+ 	dp_priv->data_plane_ops = nss_dp_hal_get_data_plane_ops();
+ 	if (!dp_priv->data_plane_ops) {
+--- a/nss_dp_ethtools.c
++++ b/nss_dp_ethtools.c
+@@ -169,6 +169,15 @@
+ 	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
+ 	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising) = { 0, };
+ 
++	if (nss_dp_rd03v2_is_switch_conduit(dp_priv)) {
++		if (pause->tx_pause)
++			return -EOPNOTSUPP;
++
++		dp_priv->pause = pause->rx_pause ? FLOW_CTRL_RX : 0;
++		nss_dp_rd03v2_apply_rx_pause(dp_priv);
++		return 0;
++	}
++
+ 	/* set flow control settings */
+ 	dp_priv->pause = 0;
+ 	if (pause->rx_pause)
+--- a/include/nss_dp_dev.h
++++ b/include/nss_dp_dev.h
+@@ -28,6 +28,8 @@
+ #include <linux/switch.h>
+ #include <linux/version.h>
+ #include <linux/ethtool.h>
++#include <linux/mii.h>
++#include <linux/of.h>
+ 
+ #include "nss_dp_api_if.h"
+ #include "nss_dp_hal_if.h"
+@@ -382,4 +384,30 @@
+ }
+ #endif
+ 
++/*
++ * RD03v2 switch conduit: the PHY-less GMAC facing the AN8855 CPU port (macid 2).
++ * It honours the switch's pause frames by default; ethtool -A <dev> rx on|off
++ * switches that at runtime. TX pause is not offered.
++ */
++#define NSS_DP_RD03V2_SYN_MAC_FLOW_CONTROL	0x0018	/* SYN_MAC_FLOW_CONTROL */
++
++static inline bool nss_dp_rd03v2_is_switch_conduit(struct nss_dp_dev *dp_priv)
++{
++	return of_machine_is_compatible("xiaomi,mi-router-ax3000t-v2") &&
++	       dp_priv->macid == 2 && !dp_priv->phydev &&
++	       dp_priv->gmac_hal_ctx && dp_priv->gmac_hal_ops &&
++	       dp_priv->gmac_hal_ops->rxflowcontrol;
++}
++
++static inline void nss_dp_rd03v2_apply_rx_pause(struct nss_dp_dev *dp_priv)
++{
++	bool enable = !!(dp_priv->pause & FLOW_CTRL_RX);
++
++	dp_priv->gmac_hal_ops->rxflowcontrol(dp_priv->gmac_hal_ctx, enable);
++	netdev_info(dp_priv->netdev, "rx pause %s (flow control 0x%x)\n",
++		    enable ? "on" : "off",
++		    hal_read_reg(dp_priv->gmac_hal_ctx->mac_base,
++				 NSS_DP_RD03V2_SYN_MAC_FLOW_CONTROL));
++}
++
+ #endif	/* __NSS_DP_DEV_H__ */
