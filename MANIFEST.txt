@@ -116,6 +116,13 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          the data path interrupts off (IPQ5018) or never got its WMI ready
          event (QCN6122 CE interrupts). Skips interrupts already disabled,
          using napi_enabled (AHB) and the pcic EXT/CE_IRQ_ENABLED flags.
+ 3221  package/kernel/mac80211/patches/ath11k/963-wifi-ath11k-keep-sends-blocked-until-recovery-sets-the-rings-up.patch
+         ath11k_core_reconfigure_on_crash() let WMI sends through tens of ms
+         before the recovery set its CE rings up again; a send in that window
+         read a cleared ring's NULL tail pointer with BH off and panicked
+         (hit during double-crash stress). Keeps CRASH_FLUSH set until the CE
+         and DP rings exist, unless the firmware crashed again, and checks
+         the ring in ath11k_ce_send().
   12707  package/kernel/mac80211/Makefile
          Adds -DCONFIG_ATH11K_SMALLBUFFERS to the smallbuffers build variant
          (mirrors the existing ath10k-smallbuffers define).

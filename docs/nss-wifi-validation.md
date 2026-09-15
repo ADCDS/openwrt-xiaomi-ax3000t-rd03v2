@@ -259,7 +259,7 @@ builds get it through `qca-nss-ecm` and `build.sh` adds it to the default build.
 
 ### ath11k crash-recovery fixes in both builds
 
-Seven patches in `files/` reach both builds:
+Eight patches in `files/` reach both builds:
 - `955` removes a one-shot WARN seen when a station is deleted while the
   firmware is dead or wedged; `956` removes the regulatory `-22` line printed
   on recoveries.
@@ -280,6 +280,8 @@ Seven patches in `files/` reach both builds:
 - `962` keeps a recovery that follows a failed one from disabling the
   interrupts a second time (`disable_irq()` nests), which left the data path
   interrupts (IPQ5018) or the CE interrupts (QCN6122) off after it.
+- `963` keeps WMI sends blocked until a crash recovery has set its rings up
+  again; a send in that window read a cleared ring and panicked.
 
 Bench checks for these patches:
 - `955`: the WARN is one-shot, so check for `sta_info.c:1559` only in a boot
