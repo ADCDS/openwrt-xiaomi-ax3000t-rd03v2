@@ -115,14 +115,19 @@ say "6. interpretation"
 cat <<'EOT'
 Compare SUnreclaim BEFORE vs AFTER.
 
-Expect the NET, not the gross. /proc/meminfo is in kB, so work in kB:
-    pool shrink : (8704 - 4096) x 2304 B = 10,368 kB returned
-    extra_pbuf  :               802,816 B =    784 kB spent (host pages)
-    NET                                   =  9,584 kB
-So a full success is SUnreclaim about 9,584 kB lower - NOT 10,368. Expecting the
-gross figure would make a correct result look like it fell ~800 kB short.
+MEASURED on the v1.9 bench (2026-07, freshly booted NSS build):
 
-  ~9,584 kB lower -> the runtime write DOES free memory. Finding #1 ships as an
+    SUnreclaim  44,740 -> 39,528 kB   =  -5,212 kB
+    pbuf_def_total_count 9,984 -> 14,884 (stock's number, no core restart)
+
+That is the number to expect, and it is NOT the old prediction. The estimate
+said 9,584 kB net (10,368 returned at 2,304 B/buffer, less 784 kB for
+extra_pbuf); the hardware says 5,212 kB. Back-solving gives 1,332 B per buffer,
+about kmalloc-1024 + skbuff_head_cache - one slab class below the assumption.
+The 2,304 B figure came from a stock-vs-port SUnreclaim difference that also
+contained ath11k and workload differences, so it was never a clean measurement.
+
+  ~5,200 kB lower -> the runtime write DOES free memory. Finding #1 ships as an
                    rc.local block (build.sh's current block sets only
                    general/redirect and the two accel modes; the n2hcfg writes
                    would be added next to them).

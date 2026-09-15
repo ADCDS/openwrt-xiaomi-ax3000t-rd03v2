@@ -65,6 +65,15 @@ Prebuilt images are on the [Releases](../../releases) page:
 Each file also comes in an `-nss` variant (`…-sysupgrade-nss.bin`), built with the experimental
 QCA NSS hardware offload — see [`docs/nss-offload.md`](docs/nss-offload.md). The two are not
 interchangeable: the NSS kernel differs, so its kmod tarball only matches its own image.
+
+> **Do not restore a config backup across the two flavours.** `/etc/rc.local` is a
+> config file, so `sysupgrade -f <backup>` restores the *old* one over the image's.
+> Going plain → NSS that silently reinstates an `rc.local` with no NSS block, and the
+> box boots with `dev.nss.general.redirect = 0` and the buffer-pool knobs unset —
+> offload effectively off, with nothing in the log to say so. Flash a flavour change
+> **without** `-f`, or afterwards run `cp /rom/etc/rc.local /etc/rc.local` and reboot.
+> Verify with `cat /proc/sys/dev/nss/general/redirect` (want `1`). Found on the bench
+> while testing v1.9's pool change, which lives in that same block.
 The four initramfs artifacts are `…-initramfs-uImage{,-nss}{,-wifi}.itb` and likewise for
 `-initramfs-factory…ubi`; the kmod tarball for a flavour matches **both** of its initramfs
 variants, because they come from one build and differ only in `/etc/rc.local`.

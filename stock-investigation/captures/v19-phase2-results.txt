@@ -109,3 +109,53 @@ Worth carrying into the release notes: restoring a config backup ACROSS build
 variants (plain <-> NSS) silently reverts /etc/rc.local, and with it the NSS
 runtime knobs. This matters directly for finding #1, because if #1 ships as an
 rc.local block it inherits exactly this failure mode.
+
+=== ADDENDUM: routed-path test (follow-up to the bridged caveat above) ===
+
+Built a genuinely routed topology to try to engage ECM: moved lan3 out of
+br-lan into its own single-port bridge br-wired with subnet 192.168.5.0/24, so
+syd (192.168.5.50, wired) -> bench -> tiny (192.168.1.146, 5 GHz) crosses an
+L3 boundary. Verified routed: `ip route get 192.168.1.146` goes via 192.168.5.1,
+RTT rises from 0.5 ms (local) to ~7-8 ms (across the AP).
+
+Two topology mistakes worth recording, both caught by the repo's own docs:
+  1. First attempt made lan3 a STANDALONE DSA port. docs/nss-offload.md is
+     explicit: "tag_8021q ports must be bridged (a single-port bridge is fine);
+     a standalone port egresses untagged on the conduit and fails." Fixed by
+     wrapping lan3 in br-wired.
+  2. The new network needed adding to the lan firewall zone, and syd had to
+     DROP its old 192.168.1.50 address - while it held both, the kernel treated
+     tiny as on-link and never routed at all.
+
+Result, 45-60 s runs over the routed path:
+    450-613 MB per run, 83.7-85.7 Mbit/s
+    n2h_payload_alloc_fails : 5 -> 5   (still frozen, now over ~1.7 GB total)
+    ecm connection_count    : 2-3      (ECM sees the flows)
+    ecm accelerated_count   : 0
+    ipv4_create_requests    : 0
+    ipv4_rx_pkts (common)   : 1,323,559   <- the NSS IS processing packets
+
+ECM tracks the connections but never requests acceleration. That is NOT caused
+by the pool change, and not a defect: this image has no NSS Wi-Fi offload. It
+was built without WIFI_NSS_DONOR (correctly - that integration is experimental
+and opt-in), so /sys/module/ath11k/parameters/nss_offload does not exist and
+Wi-Fi frames traverse the host stack. ECM cannot build an accelerable rule for
+a flow whose egress is a non-NSS Wi-Fi netdev.
+
+docs/nss-offload.md states the topology the fast path actually needs: a
+dual-CPU-port WAN<->LAN flow, LAN on eth1 and WAN on eth0, where "the WAN<->LAN
+NAT flow accelerates end to end (tcp_accelerated_count and
+ipv4_create_requests climb)". A Wi-Fi<->wired flow on a WAN-less bench is
+outside that design, so ipv4_create_requests = 0 is the expected reading.
+
+CONCLUSION for finding #1: the pool question is fully answered for the datapath
+that allocates from the n2h pool. ~1.7 GB of forwarded traffic across bridged
+AND routed topologies left payload_alloc_fails frozen at 5, with no throughput
+regression (83.7-85.7 Mbit/s vs an 82.6 Mbit/s pre-change baseline). Testing
+4096 buffers under an *accelerated* WAN<->LAN flow needs a WAN uplink on the
+bench and remains the one genuinely untested case - the same gap
+V1.9-TUNING.md already lists under "What is still unmeasured".
+
+Bench left in the routed topology (br-wired / 192.168.5.0/24). To restore the
+single-subnet bench: uci delete network.wired, network.brwired, re-add lan3 to
+the br-lan ports list, drop "wired" from firewall zone lan, commit, restart.
