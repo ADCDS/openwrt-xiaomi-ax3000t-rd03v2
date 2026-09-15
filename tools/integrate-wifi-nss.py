@@ -3,24 +3,32 @@
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 DONOR_REV = "92a2d104145c8d265851c4b388a41bd8e9c21cd9"
+# The NSS build defaults to MEDIUM; LOW caps accelerated connections at 512
+# per family (1024 total), which is too few for the gateway this build is for.
+# WIFI_NSS_MEM_PROFILE=LOW keeps the smaller host buffer pool if RAM demands it.
+MEM_PROFILE = os.environ.get("WIFI_NSS_MEM_PROFILE", "MEDIUM").upper()
+if MEM_PROFILE not in ("LOW", "MEDIUM"):
+    raise SystemExit("WIFI_NSS_MEM_PROFILE must be LOW or MEDIUM")
 ENABLED = (
     "ATH11K_NSS_SUPPORT", "PACKAGE_MAC80211_NSS_SUPPORT",
     "NSS_DRV_WIFIOFFLOAD_ENABLE", "NSS_DRV_WIFI_EXT_VDEV_ENABLE",
     "NSS_FIRMWARE_VERSION_12_5", "PACKAGE_kmod-ath11k-smallbuffers",
     "PACKAGE_kmod-qca-nss-drv", "PACKAGE_kmod-qca-nss-ecm",
-    "NSS_MEM_PROFILE_LOW",
+    "NSS_MEM_PROFILE_" + MEM_PROFILE,
 )
 DISABLED = (
     "ATH11K_NSS_MESH_SUPPORT", "PACKAGE_MAC80211_NSS_REDIRECT",
     "NSS_FIRMWARE_VERSION_11_4", "ATH11K_MEM_PROFILE_512M",
     "ATH11K_MEM_PROFILE_256M", "PACKAGE_kmod-ath11k",
-    "NSS_MEM_PROFILE_HIGH", "NSS_MEM_PROFILE_MEDIUM",
+    "NSS_MEM_PROFILE_HIGH",
+    "NSS_MEM_PROFILE_" + ("MEDIUM" if MEM_PROFILE == "LOW" else "LOW"),
 )
 
 
@@ -95,8 +103,10 @@ endif
     # avoid package metadata generating a self-referential virtual dependency.
     ath = replace_once(ath, "+kmod-ath11k +kmod-qrtr-smd", "+kmod-ath11k-smallbuffers +kmod-qrtr-smd")
     ath = replace_once(ath, "+kmod-qrtr-mhi +kmod-ath11k\n", "+kmod-qrtr-mhi +kmod-ath11k-smallbuffers\n")
-    # All anchors validated before writing anything. Keep the device's firmware
-    # memory-mode handling; the donor 256M option currently has no C consumers.
+    # All anchors validated before writing anything. Both donor ath11k memory
+    # profiles stay off: 256M has no C consumers, and 512M would also compile
+    # the donor's rx-header/tx-limit variants, which this port has not tested.
+    # The firmware memory mode still comes from the device tree.
     shutil.copytree(donor / "package/kernel/mac80211/patches/nss", target)
     shutil.copytree(REPO / "experimental/wifi-nss/patch-overrides", target, dirs_exist_ok=True)
     (package / "Makefile").write_text(mk)
@@ -109,10 +119,10 @@ endif
                 for p in sorted(target.rglob("*.patch"))}
     (tree / "wifi-nss-integration.json").write_text(json.dumps({
         "donor_commit": DONOR_REV, "status": "experimental", "patches": manifest,
-        "memory_profile": "NSS LOW, ath11k SMALLBUFFERS, existing firmware memory mode",
+        "memory_profile": f"NSS {MEM_PROFILE}, ath11k SMALLBUFFERS, existing firmware memory mode",
         "validation_reference": "docs/nss-wifi-validation.md",
     }, indent=2) + "\n")
-    print("Integrated experimental NSS Wi-Fi with existing SMALLBUFFERS and NSS LOW.")
+    print(f"Integrated experimental NSS Wi-Fi with existing SMALLBUFFERS and NSS {MEM_PROFILE}.")
 
 
 if __name__ == "__main__":

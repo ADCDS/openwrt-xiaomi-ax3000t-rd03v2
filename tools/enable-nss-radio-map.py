@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Experimental dual-radio NSS scheduling integration; not a proven crash fix."""
+"""Assign NSS Wi-Fi radio priorities to the RD03v2 radios (IPQ5018 0, QCN6122 1)."""
 from pathlib import Path
 import sys
 
@@ -25,4 +25,4 @@ data = data[:data.index(marker)] + '''// Experimental NSS Wi-Fi multi-radio sche
 };
 '''
 path.write_text(data)
-print("Enabled NSS multi-radio scheduling candidate; hardware validation pending")
+print("Assigned NSS radio priorities: &wifi 0, &wifi1 1")

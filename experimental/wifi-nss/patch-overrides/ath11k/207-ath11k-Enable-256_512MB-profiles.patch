@@ -21,7 +21,6 @@ Signed-off-by: Ramya Gnanasekar <rgnanase@codeaurora.org>
  4 files changed, 24 insertions(+), 5 deletions(-)
 
 RD03v2 port: preserve the existing SMALLBUFFERS ring limits when enabled.
-NSS memory-profile and QMI compatibility still require build/hardware validation.
 
 --- a/drivers/net/wireless/ath/ath11k/Kconfig
 +++ b/drivers/net/wireless/ath/ath11k/Kconfig

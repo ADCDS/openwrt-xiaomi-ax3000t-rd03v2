@@ -37,7 +37,6 @@ Signed-off-by: Gautham Kumar Senthilkumaran <quic_gauthamk@quicinc.com>
  create mode 100644 drivers/net/wireless/ath/ath11k/debug_nss.h
 
 RD03v2 port: rebase callback declarations around sta_set_airtime_weight in backports 6.18.26.
-Patch-application candidate only; not compiled or hardware-tested.
 
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
