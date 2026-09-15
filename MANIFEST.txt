@@ -110,6 +110,12 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          (use after free, panic_on_oops -> reboot). Keeps the HAL, blocks
          sends on it until the next restart, skips CE completion on rings
          that are not set up, and clears the freed TX status pointers.
+  4585  package/kernel/mac80211/patches/ath11k/962-wifi-ath11k-dont-nest-the-irq-disable-of-a-failed-recovery.patch
+         disable_irq() nests: a failed crash recovery left the interrupts
+         disabled and the next one disabled them again, so it came up with
+         the data path interrupts off (IPQ5018) or never got its WMI ready
+         event (QCN6122 CE interrupts). Skips interrupts already disabled,
+         using napi_enabled (AHB) and the pcic EXT/CE_IRQ_ENABLED flags.
   12707  package/kernel/mac80211/Makefile
          Adds -DCONFIG_ATH11K_SMALLBUFFERS to the smallbuffers build variant
          (mirrors the existing ath10k-smallbuffers define).
