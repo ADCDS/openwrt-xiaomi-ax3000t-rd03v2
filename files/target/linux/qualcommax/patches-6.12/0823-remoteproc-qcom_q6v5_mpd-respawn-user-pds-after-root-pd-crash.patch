@@ -1,0 +1,722 @@
+From: Adriel Santos <adriel.turox@gmail.com>
+Subject: [PATCH] remoteproc: qcom_q6v5_mpd: respawn the user PDs after a root PD crash
+
+A firmware assert on IPQ5018 raises the root PD's fatal interrupt only.
+The remoteproc core then recovers cd00000.remoteproc alone: rproc_stop()
+with crashed=true, q6_wcss_stop(), rproc_start(). pd-1 and pd-2 are
+separate rprocs, not subdevices of the root, so they keep reading
+RPROC_RUNNING, the root keeps their two references, and nothing ever
+asks the restarted firmware to spawn them again. The WLAN firmware QMI
+servers live in the user PDs, so ath11k never gets FW_INIT_DONE after
+the SERVER_EXIT the glink teardown gave it: CRASH_FLUSH stays set, every
+WMI command fails with -ESHUTDOWN, and both radios stay dead until a
+reboot (3 of 3 asserts on the bench, NSS and default images alike).
+
+0821 does not help any more once the root has recovered: the root reads
+RPROC_RUNNING again, so a later stop of a user PD sends the stop request
+to firmware that never hosted it, times out after 5 s ("pd not stopped",
+-110) and fails. That is what an ath11k hw-restart hit after an assert;
+since ath11k_ahb_power_down() ignores the failure, each attempt also
+leaks a user PD reference, which turned the watchdog's later sysfs
+stop/start into a silent no-op (a separate ath11k bug, not fixed here).
+
+Fix both halves.
+
+Stale user PDs, always on: count root PD boots and record the count each
+user PD was spawned under. A user PD spawned under an earlier boot is
+stale, and wcss_pd_stop() skips the stop handshake for it the way 0821
+skips it for a dead root, then does the SCM teardown and drops the
+reference on the root. This alone should let a stop/start of each user
+PD bring it back after a root crash, provided TZ accepts the internal
+radio shutdown and MSA unlock against the restarted root.
+
+Respawn, controlled by qcom_q6v5_mpd.respawn_userpds (bool, 0644,
+default 1): when the root's stop runs for a crash, do the SCM half of a
+user PD stop (internal radio shutdown for asid 1, MSA unlock) for every
+user PD that is up and mark it torn down, before the root's own
+pas_shutdown - the order of a normal stop. The respawn itself is an
+rproc_subdev registered after the glink and ssr subdevs:
+rproc_start_subdevices() walks the list in registration order, so its
+start runs once glink is up again, and before the core marks the root
+RPROC_RUNNING. It reloads each torn-down PD's segments, relocks its MSA,
+spawns it and powers the internal radio up, which is the cold boot order
+of wcss_pd_load() and wcss_pd_start(). A user PD that fails to respawn
+stays torn down, and its eventual stop then only drops the reference on
+the root instead of handshaking or unlocking again. With respawn off the
+user PDs are left for their owner to restart through the stale path.
+
+A respawn restarts the owner's in-place recovery, and firmware that
+crashes the root again during that recovery would loop every few
+seconds: crash, teardown, respawn, crash. The NSS Wi-Fi build's in-place
+recovery raised a new root fatal (NOC) within 2 s in 3 of 3 bench runs,
+and the remoteproc core has no recovery limit. So the respawn is
+suppressed ("respawn suppressed after repeated root PD crashes") when
+the root crashes within 60 s of the end of its last crash recovery, and
+once qcom_q6v5_mpd.respawn_max_per_hour (uint, 0644, default 6)
+respawns have been done in the current hour. Suppressed user PDs are
+neither torn down nor respawned; they go through the stale path like
+respawn_userpds=0, which ends such a loop with dead radios on a running
+root, the behaviour before this patch.
+
+upd_lock serialises all of this: wcss_pd_start() and wcss_pd_stop() hold
+it across their whole SMP2P and SCM section, and the teardown decides on
+the "up" flag set under it rather than on the unlocked rproc state, so a
+user PD stop that is in flight when the root crashes cannot be unlocked
+twice. It is never held while taking an rproc->lock; the reference on
+the root is dropped after releasing it, since the root's recovery holds
+its rproc->lock while it waits for upd_lock.
+
+Whether the root firmware is alive is decided under upd_lock too, from
+a root_up flag the driver owns: set with the boot count once
+q6_wcss_start() sees the root ready, cleared when q6_wcss_stop() begins,
+and combined with the root's q6.running (cleared by its fatal and
+watchdog interrupts) and RPROC_CRASHED for the time before the stop.
+The root's rproc state cannot be used for this, and 0821's read of it
+on entry to wcss_pd_stop() is dropped: a recovering root reads
+RPROC_OFFLINE until every subdev has started, so a stop that waited out
+a respawn on upd_lock would otherwise skip the handshake and SCM-unlock
+a user PD the firmware had just spawned, and a stop that read
+RPROC_RUNNING before waiting would handshake with firmware that crashed
+meanwhile.
+
+q6_wcss_spawn_pd() now reinitialises spawn_done and start_done before
+requesting a spawn. qcom_q6v5_prepare() is never called for a user PD,
+so a completion banked by an earlier spawn, or an edge replayed after
+qcom_smp2p_clear_last_value(), would let the waits succeed without the
+firmware spawning anything.
+
+A root PD that fails to restart is not recoverable without a reboot: the
+core leaves it offline with the user PDs' references held, rproc_boot()
+only bumps the count and rproc_shutdown() refuses a processor that is
+not running. Say so where it happens (a failed start or stop during
+recovery, a recovery whose subdevices failed to start), refuse to spawn
+a user PD on a root that is not up instead of letting it time out, and
+log the rproc_shutdown() error wcss_pd_stop() used to ignore.
+
+Not run on hardware yet. CONFIG_QCOM_Q6V5_MPD is built in, so testing
+needs a kernel image.
+
+---
+--- a/drivers/remoteproc/qcom_q6v5_mpd.c
++++ b/drivers/remoteproc/qcom_q6v5_mpd.c
+@@ -12,6 +12,7 @@
+ #include <linux/iopoll.h>
+ #include <linux/kernel.h>
+ #include <linux/module.h>
++#include <linux/mutex.h>
+ #include <linux/of_address.h>
+ #include <linux/of_device.h>
+ #include <linux/of_platform.h>
+@@ -44,6 +45,35 @@
+ #define UPD_BOOT_INFO_HEADER_TYPE	0x2
+ #define UPD_BOOT_INFO_SMEM_ID		507
+ 
++/*
++ * A root PD crash takes every user PD down with it, but the remoteproc core
++ * only recovers the root. When set, the user PDs that were up are torn down
++ * together with the root and spawned again once it is back. When clear, they
++ * are left for their owner (ath11k, sysfs) to stop and start; the stop then
++ * skips the handshake the restarted firmware cannot answer.
++ */
++static bool respawn_userpds = true;
++module_param(respawn_userpds, bool, 0644);
++MODULE_PARM_DESC(respawn_userpds,
++		 "Respawn the user PDs after the root PD recovers from a crash (default: 1)");
++
++/*
++ * A respawn restarts the owners' in-place recovery. Firmware that crashes the
++ * root PD again during that recovery would loop: crash, teardown, respawn,
++ * crash, every few seconds, and the remoteproc core has no limit of its own.
++ * So the respawn is suppressed when the root crashes within RESPAWN_HOLDOFF
++ * of its last crash recovery, and once respawn_max_per_hour respawns have
++ * been done within RESPAWN_PERIOD. The user PDs are then left to the stale
++ * path, as with respawn_userpds=0.
++ */
++#define RESPAWN_HOLDOFF		(60 * HZ)
++#define RESPAWN_PERIOD		(3600 * HZ)
++
++static unsigned int respawn_max_per_hour = 6;
++module_param(respawn_max_per_hour, uint, 0644);
++MODULE_PARM_DESC(respawn_max_per_hour,
++		 "Most user PD respawns within an hour before further ones are suppressed (default: 6)");
++
+ enum q6_bootargs_version {
+ 	VERSION1 = 1,
+ 	VERSION2,
+@@ -91,6 +121,39 @@
+ 	 * spawn bit and which therefore runs 1..MAX_UPD, not 0..MAX_UPD-1.
+ 	 */
+ 	struct userpd *upd[MAX_UPD + 1];
++	/*
++	 * Respawns the user PDs a root PD crash took down. Registered after
++	 * the glink and ssr subdevs, so the core starts it once glink is back
++	 * up and before it marks the root RPROC_RUNNING.
++	 */
++	struct rproc_subdev respawn_subdev;
++	/*
++	 * Serialises the user PD SCM and SMP2P sections of wcss_pd_start() and
++	 * wcss_pd_stop() with the root PD's crash teardown and respawn, and
++	 * protects the userpd fields marked (upd_lock). Never held while
++	 * taking an rproc->lock.
++	 */
++	struct mutex upd_lock;
++	/* bumped on every successful root PD start (upd_lock) */
++	unsigned int boot_gen;
++	/*
++	 * The root PD firmware is up: set together with boot_gen once
++	 * q6_wcss_start() sees it ready, cleared when q6_wcss_stop() begins
++	 * (upd_lock). The root's rproc->state cannot stand in for it: the core
++	 * leaves a recovering root RPROC_OFFLINE until every subdev has
++	 * started, which includes the respawn of live user PDs.
++	 */
++	bool root_up;
++	/* a root PD crash recovery is in progress (root rproc->lock) */
++	bool recovering;
++	/* this recovery tore user PDs down for a respawn (root rproc->lock) */
++	bool respawn_armed;
++	/* the last crash recovery ended at recovered_at (root rproc->lock) */
++	bool recovered_once;
++	unsigned long recovered_at;
++	/* respawns done in the period starting at respawn_period_start (same) */
++	unsigned long respawn_period_start;
++	unsigned int respawn_period_cnt;
+ };
+ 
+ struct userpd {
+@@ -98,6 +161,16 @@
+ 	struct device *dev;
+ 	struct qcom_rproc_ssr ssr_subdev;
+ 	struct qcom_q6v5 q6;
++	/* root PD boot_gen this user PD was last spawned under (upd_lock) */
++	unsigned int spawned_gen;
++	/* spawned with its MSA locked, SCM teardown still owed (upd_lock) */
++	bool up;
++	/*
++	 * A root PD crash tore this user PD down underneath the remoteproc
++	 * core, which still sees it running: waiting for the respawn, or for
++	 * the core to stop it (upd_lock).
++	 */
++	bool torn_down;
+ };
+ 
+ struct wcss_data {
+@@ -120,6 +193,38 @@
+ 	return bit / 8;
+ }
+ 
++/*
++ * The root PD did not come back from a crash. The remoteproc core leaves it
++ * offline (or still crashed) with the user PDs' references on it held, so
++ * nothing short of a reboot restarts it: rproc_boot() only bumps the refcount
++ * and rproc_shutdown() refuses a processor that is not running. Any user PD
++ * torn down with it stays torn down.
++ */
++static void q6_wcss_recovery_failed(struct q6_wcss *wcss)
++{
++	wcss->recovering = false;
++	wcss->respawn_armed = false;
++	dev_err(wcss->dev,
++		"root PD did not recover from the crash, the user PDs stay down until reboot\n");
++}
++
++/*
++ * Whether the root PD firmware is gone as far as a user PD is concerned, i.e.
++ * a stop request cannot be answered and a spawn request cannot succeed.
++ * Called with upd_lock held, so root_up cannot change underneath: it is false
++ * from the start of a root stop until the next successful root start, even
++ * while the core still reads the recovering root as RPROC_OFFLINE. Before the
++ * root's stop runs, the root's fatal and watchdog interrupts clear q6.running,
++ * and the crash handler sets RPROC_CRASHED.
++ */
++static bool q6_wcss_root_dead(struct q6_wcss *wcss)
++{
++	lockdep_assert_held(&wcss->upd_lock);
++
++	return !wcss->root_up || !READ_ONCE(wcss->q6.running) ||
++	       READ_ONCE(wcss->q6.rproc->state) == RPROC_CRASHED;
++}
++
+ static int q6_wcss_start(struct rproc *rproc)
+ {
+ 	struct q6_wcss *wcss = rproc->priv;
+@@ -146,10 +251,17 @@
+ 		goto unprepare;
+ 	}
+ 
++	mutex_lock(&wcss->upd_lock);
++	wcss->boot_gen++;
++	wcss->root_up = true;
++	mutex_unlock(&wcss->upd_lock);
++
+ 	return 0;
+ 
+ unprepare:
+ 	qcom_q6v5_unprepare(&wcss->q6);
++	if (wcss->recovering)
++		q6_wcss_recovery_failed(wcss);
+ 	return ret;
+ }
+ 
+@@ -158,6 +270,15 @@
+ 	int ret;
+ 	struct userpd *upd = rproc->priv;
+ 
++	/*
++	 * qcom_q6v5_prepare() is never called for a user PD, so nothing else
++	 * rearms these: a completion left over from an earlier spawn, or an
++	 * edge replayed after qcom_smp2p_clear_last_value(), would let the
++	 * waits below succeed without the firmware having spawned anything.
++	 */
++	reinit_completion(&upd->q6.spawn_done);
++	reinit_completion(&upd->q6.start_done);
++
+ 	ret = qcom_q6v5_request_spawn(&upd->q6);
+ 	if (ret == -ETIMEDOUT) {
+ 		dev_err(upd->dev, "%s spawn timedout\n", rproc->name);
+@@ -182,49 +303,283 @@
+ 	u32 pasid = (upd->pd_asid << 8) | UPD_SWID;
+ 	int ret;
+ 
++	mutex_lock(&wcss->upd_lock);
++
++	/*
++	 * The root crashed after wcss_pd_load() took its reference. A spawn
++	 * could only time out, holding upd_lock for up to 15 s while the root's
++	 * recovery waits for it.
++	 */
++	if (q6_wcss_root_dead(wcss)) {
++		dev_err(upd->dev, "%s: root PD is down, not spawning\n",
++			rproc->name);
++		ret = -ENODEV;
++		goto unlock;
++	}
++
+ 	ret = qcom_scm_msa_lock(pasid);
+ 	if (ret) {
+ 		dev_err(upd->dev, "failed to power up pd\n");
+-		return ret;
++		goto unlock;
+ 	}
+ 
+ 	if (upd->q6.spawn_bit) {
+ 		ret = q6_wcss_spawn_pd(rproc);
+ 		if (ret)
+-			return ret;
++			goto unlock;
+ 	}
+ 
+ 	if (upd->pd_asid == 1) {
+ 		ret = qcom_scm_internal_wifi_powerup(wcss->desc->pasid);
+ 		if (ret) {
+ 			dev_err(upd->dev, "failed to power up internal radio\n");
+-			return ret;
++			goto unlock;
+ 		}
+ 	}
+ 
++	upd->spawned_gen = wcss->boot_gen;
++	upd->torn_down = false;
++	upd->up = true;
++
++unlock:
++	mutex_unlock(&wcss->upd_lock);
+ 	return ret;
+ }
+ 
++/* Called from the root PD's crash stop, with upd_lock held. */
++static bool q6_wcss_respawn_allowed(struct q6_wcss *wcss)
++{
++	unsigned long now = jiffies;
++	unsigned int max = READ_ONCE(respawn_max_per_hour);
++
++	if (!READ_ONCE(respawn_userpds)) {
++		dev_info(wcss->dev,
++			 "user PD respawn disabled, user PDs stay down until restarted\n");
++		return false;
++	}
++
++	if (wcss->recovered_once &&
++	    time_before(now, wcss->recovered_at + RESPAWN_HOLDOFF)) {
++		dev_err(wcss->dev,
++			"root PD crashed %u ms after its last recovery: respawn suppressed after repeated root PD crashes, user PDs stay down until restarted\n",
++			jiffies_to_msecs(now - wcss->recovered_at));
++		return false;
++	}
++
++	if (!wcss->respawn_period_cnt ||
++	    time_after_eq(now, wcss->respawn_period_start + RESPAWN_PERIOD)) {
++		wcss->respawn_period_start = now;
++		wcss->respawn_period_cnt = 0;
++	}
++	if (wcss->respawn_period_cnt >= max) {
++		dev_err(wcss->dev,
++			"%u user PD respawns within the hour: respawn suppressed after repeated root PD crashes, user PDs stay down until restarted\n",
++			wcss->respawn_period_cnt);
++		return false;
++	}
++	wcss->respawn_period_cnt++;
++
++	return true;
++}
++
++/*
++ * Called from the root PD's stop while the remoteproc core recovers it from a
++ * crash. The user PDs died with the root, but the core only knows about the
++ * root: do the SCM half of wcss_pd_stop() for each one that is up, without
++ * the stop handshake nobody can answer, and mark it for respawn. Its rproc
++ * state and its reference on the root are left alone, which keeps the core's
++ * view consistent with the respawn q6_wcss_respawn_start() performs.
++ *
++ * This runs before the root's own pas_shutdown, the same order as a normal
++ * stop of every user PD followed by the root.
++ *
++ * With respawn disabled or suppressed nothing is torn down, and the user PDs
++ * are left for the stale path. Returns whether a respawn is owed.
++ */
++static bool q6_wcss_teardown_userpds(struct q6_wcss *wcss)
++{
++	struct userpd *upd;
++	bool owed = false;
++	u32 pasid;
++	int i, ret;
++
++	mutex_lock(&wcss->upd_lock);
++	for (i = 0; i < ARRAY_SIZE(wcss->upd); i++) {
++		upd = wcss->upd[i];
++		if (!upd || (!upd->up && !upd->torn_down))
++			continue;
++		/* the dying firmware's fatal edges must not start a PD recovery */
++		upd->q6.running = false;
++		owed = true;
++	}
++
++	if (!owed || !q6_wcss_respawn_allowed(wcss)) {
++		mutex_unlock(&wcss->upd_lock);
++		return false;
++	}
++
++	for (i = 0; i < ARRAY_SIZE(wcss->upd); i++) {
++		upd = wcss->upd[i];
++		if (!upd || !upd->up)
++			continue;
++
++		pasid = (upd->pd_asid << 8) | UPD_SWID;
++
++		if (upd->pd_asid == 1) {
++			ret = qcom_scm_internal_wifi_shutdown(wcss->desc->pasid);
++			if (ret)
++				dev_warn(upd->dev,
++					 "failed to power down internal radio: %d\n",
++					 ret);
++		}
++
++		ret = qcom_scm_msa_unlock(pasid);
++		if (ret)
++			dev_warn(upd->dev, "failed to power down pd: %d\n", ret);
++
++		upd->up = false;
++		upd->torn_down = true;
++		dev_info(upd->dev, "%s: torn down with crashed root PD\n",
++			 upd->q6.rproc->name);
++	}
++	mutex_unlock(&wcss->upd_lock);
++
++	return true;
++}
++
++/* The cold boot order: wcss_pd_load(), then the body of wcss_pd_start(). */
++static void q6_wcss_respawn_userpds(struct q6_wcss *wcss)
++{
++	const struct firmware *fw;
++	struct userpd *upd;
++	struct rproc *urproc;
++	u32 pasid;
++	int i, ret;
++
++	mutex_lock(&wcss->upd_lock);
++	for (i = 0; i < ARRAY_SIZE(wcss->upd); i++) {
++		upd = wcss->upd[i];
++		if (!upd || !upd->torn_down)
++			continue;
++
++		urproc = upd->q6.rproc;
++		pasid = (upd->pd_asid << 8) | UPD_SWID;
++
++		/*
++		 * The root died again during its own start. The core ignores
++		 * that crash (it still reads RPROC_OFFLINE), and a spawn could
++		 * only time out.
++		 */
++		if (q6_wcss_root_dead(wcss)) {
++			dev_err(upd->dev,
++				"%s: root PD down again, respawn abandoned\n",
++				urproc->name);
++			continue;
++		}
++
++		ret = request_firmware(&fw, urproc->firmware, upd->dev);
++		if (!ret) {
++			ret = qcom_mdt_load_pd_seg(upd->dev, fw, urproc->firmware,
++						   wcss->desc->pasid, upd->pd_asid,
++						   wcss->mem_region, wcss->mem_phys,
++						   wcss->mem_size, NULL);
++			release_firmware(fw);
++		}
++		if (ret) {
++			dev_err(upd->dev,
++				"%s: reload after root PD recovery failed: %d\n",
++				urproc->name, ret);
++			continue;
++		}
++
++		ret = qcom_scm_msa_lock(pasid);
++		if (ret) {
++			dev_err(upd->dev,
++				"%s: msa lock after root PD recovery failed: %d\n",
++				urproc->name, ret);
++			continue;
++		}
++
++		if (upd->q6.spawn_bit)
++			ret = q6_wcss_spawn_pd(urproc);
++		if (!ret && upd->pd_asid == 1)
++			ret = qcom_scm_internal_wifi_powerup(wcss->desc->pasid);
++		if (ret) {
++			dev_err(upd->dev,
++				"%s: respawn after root PD recovery failed: %d\n",
++				urproc->name, ret);
++			upd->q6.running = false;
++			qcom_scm_msa_unlock(pasid);
++			/* stays torn_down: its stop must not handshake or unlock */
++			continue;
++		}
++
++		upd->spawned_gen = wcss->boot_gen;
++		upd->torn_down = false;
++		upd->up = true;
++		dev_info(upd->dev, "%s: respawned after root PD recovery\n",
++			 urproc->name);
++	}
++	mutex_unlock(&wcss->upd_lock);
++}
++
++static int q6_wcss_respawn_start(struct rproc_subdev *subdev)
++{
++	struct q6_wcss *wcss = container_of(subdev, struct q6_wcss,
++					    respawn_subdev);
++
++	if (wcss->recovering) {
++		wcss->recovering = false;
++		if (wcss->respawn_armed)
++			q6_wcss_respawn_userpds(wcss);
++		wcss->respawn_armed = false;
++		/* the holdoff runs from here, suppressed respawn or not */
++		wcss->recovered_at = jiffies;
++		wcss->recovered_once = true;
++	}
++
++	/* the root itself is up: a user PD that failed to respawn stays down */
++	return 0;
++}
++
+ static int q6_wcss_stop(struct rproc *rproc)
+ {
+ 	struct q6_wcss *wcss = rproc->priv;
+ 	const struct wcss_data *desc = wcss->desc;
++	bool crashed = rproc->state == RPROC_CRASHED;
+ 	int ret;
+ 
++	mutex_lock(&wcss->upd_lock);
++	wcss->root_up = false;
++	mutex_unlock(&wcss->upd_lock);
++
++	if (crashed) {
++		wcss->recovering = true;
++		wcss->respawn_armed = q6_wcss_teardown_userpds(wcss);
++	} else if (wcss->recovering) {
++		/* rproc_start() unwinding a recovery whose subdevices failed */
++		q6_wcss_recovery_failed(wcss);
++	}
++
+ 	ret = qcom_q6v5_request_stop(&wcss->q6, NULL);
+ 	if (ret) {
+ 		dev_err(wcss->dev, "pd not stopped\n");
+-		return ret;
++		goto err;
+ 	}
+ 
+ 	ret = qcom_scm_pas_shutdown(desc->pasid);
+ 	if (ret) {
+ 		dev_err(wcss->dev, "not able to shutdown\n");
+-		return ret;
++		goto err;
+ 	}
+ 	qcom_q6v5_unprepare(&wcss->q6);
+ 
+ 	return 0;
++
++err:
++	if (crashed)
++		q6_wcss_recovery_failed(wcss);
++	return ret;
+ }
+ 
+ /**
+@@ -258,11 +613,43 @@
+ 	struct rproc *rpd_rproc = dev_get_drvdata(upd->dev->parent);
+ 	struct q6_wcss *wcss = rpd_rproc->priv;
+ 	u32 pasid = (upd->pd_asid << 8) | UPD_SWID;
+-	bool rootpd_dead = rpd_rproc->state == RPROC_CRASHED ||
+-			   rpd_rproc->state == RPROC_OFFLINE;
++	bool rootpd_dead, stale;
+ 	int ret;
+ 
+ 	/*
++	 * Everything below is decided under upd_lock. A stop can wait here
++	 * for a whole root crash teardown and respawn, or behind another
++	 * PD's stop handshake while the root crashes, so the root's state
++	 * seen on entry says nothing about the firmware found once the lock
++	 * is held.
++	 */
++	mutex_lock(&wcss->upd_lock);
++
++	/*
++	 * q6_wcss_teardown_userpds() already did the SCM half of this stop
++	 * when the root PD crashed, and no respawn has happened since (or it
++	 * failed), so the running root does not host this PD. Only the
++	 * reference on the root is left to drop.
++	 */
++	if (upd->torn_down) {
++		upd->torn_down = false;
++		upd->q6.running = false;
++		mutex_unlock(&wcss->upd_lock);
++		goto shutdown_root;
++	}
++
++	/*
++	 * The root PD has been restarted since this user PD was spawned and
++	 * nothing spawned it again (respawn_userpds=0): the running firmware
++	 * never hosted it and will never answer a stop request.
++	 */
++	stale = upd->spawned_gen != wcss->boot_gen;
++	if (stale)
++		dev_info(upd->dev,
++			 "%s: root PD restarted since spawn, skipping stop handshake\n",
++			 rproc->name);
++
++	/*
+ 	 * Stopping a user PD is an SMP2P handshake answered by the Q6 firmware.
+ 	 * If the *root* PD has taken a fatal error the firmware is already gone,
+ 	 * so the stop-ack can never arrive: qcom_q6v5_request_stop() only burns
+@@ -272,12 +659,18 @@
+ 	 * fails with -ETIMEDOUT for as long as the box is up -- and the only way
+ 	 * to get the radios back is a reboot. The user PD's firmware is dead
+ 	 * either way, so skip the handshake and tear it down locally.
++	 *
++	 * "Dead" comes from q6_wcss_root_dead(), not from the root's rproc
++	 * state: a recovering root reads RPROC_OFFLINE until its subdevs have
++	 * started, and by then this PD may already be respawned and running.
+ 	 */
+-	if (rproc->state != RPROC_CRASHED && !rootpd_dead && upd->q6.stop_bit) {
++	rootpd_dead = q6_wcss_root_dead(wcss);
++	if (rproc->state != RPROC_CRASHED && !rootpd_dead && !stale &&
++	    upd->q6.stop_bit) {
+ 		ret = qcom_q6v5_request_stop(&upd->q6, NULL);
+ 		if (ret) {
+ 			dev_err(upd->dev, "pd not stopped\n");
+-			return ret;
++			goto unlock;
+ 		}
+ 	}
+ 
+@@ -285,19 +678,34 @@
+ 		ret = qcom_scm_internal_wifi_shutdown(wcss->desc->pasid);
+ 		if (ret) {
+ 			dev_err(upd->dev, "failed to power down internal radio\n");
+-			return ret;
++			goto unlock;
+ 		}
+ 	}
+ 
+ 	ret = qcom_scm_msa_unlock(pasid);
+ 	if (ret) {
+ 		dev_err(upd->dev, "failed to power down pd\n");
+-		return ret;
++		goto unlock;
+ 	}
+ 
+-	rproc_shutdown(rpd_rproc);
++	upd->up = false;
++	mutex_unlock(&wcss->upd_lock);
++
++shutdown_root:
++	/*
++	 * Not taken under upd_lock: the root's recovery holds its rproc->lock
++	 * while it waits for upd_lock.
++	 */
++	ret = rproc_shutdown(rpd_rproc);
++	if (ret)
++		dev_err(upd->dev, "%s: root PD %s not shut down: %d (state %d)\n",
++			rproc->name, rpd_rproc->name, ret, rpd_rproc->state);
+ 
+ 	return 0;
++
++unlock:
++	mutex_unlock(&wcss->upd_lock);
++	return ret;
+ }
+ 
+ static void *q6_wcss_da_to_va(struct rproc *rproc, u64 da, size_t len,
+@@ -532,12 +940,31 @@
+ 	struct userpd *upd = rproc->priv;
+ 	struct rproc *rpd_rproc = dev_get_drvdata(upd->dev->parent);
+ 	struct q6_wcss *wcss = rpd_rproc->priv;
++	bool root_dead;
+ 	int ret;
+ 
+ 	ret = rproc_boot(rpd_rproc);
+ 	if (ret)
+ 		return ret;
+ 
++	/*
++	 * With other user PDs holding it, rproc_boot() only takes a reference,
++	 * so it also "succeeds" on a root that failed to come back from a
++	 * crash and was left RPROC_OFFLINE or RPROC_CRASHED. A spawn on it can
++	 * only time out. The reference just taken cannot be dropped again
++	 * (rproc_shutdown() refuses a processor that is not running), which
++	 * no longer matters by then.
++	 */
++	mutex_lock(&wcss->upd_lock);
++	root_dead = q6_wcss_root_dead(wcss);
++	mutex_unlock(&wcss->upd_lock);
++	if (root_dead) {
++		dev_err(upd->dev,
++			"%s: root PD %s is not up (state %d), a failed recovery needs a reboot\n",
++			rproc->name, rpd_rproc->name, rpd_rproc->state);
++		return -ENODEV;
++	}
++
+ 	return qcom_mdt_load_pd_seg(upd->dev, fw, rproc->firmware,
+ 			     wcss->desc->pasid, upd->pd_asid, wcss->mem_region,
+ 			     wcss->mem_phys, wcss->mem_size,
+@@ -818,6 +1245,7 @@
+ 	wcss->dev = &pdev->dev;
+ 	wcss->desc = of_device_get_match_data(&pdev->dev);
+ 	wcss->firmware = firmware;
++	mutex_init(&wcss->upd_lock);
+ 
+ 	ret = q6_alloc_memory_region(wcss);
+ 	if (ret)
+@@ -840,6 +1268,12 @@
+ 
+ 	qcom_add_glink_subdev(rproc, &wcss->glink_subdev, "q6wcss");
+ 	qcom_add_ssr_subdev(rproc, &wcss->ssr_subdev, "q6wcss");
++	/*
++	 * Must come after glink and ssr: rproc_start_subdevices() walks the
++	 * list in registration order, and the respawned user PDs need glink.
++	 */
++	wcss->respawn_subdev.start = q6_wcss_respawn_start;
++	rproc_add_subdev(rproc, &wcss->respawn_subdev);
+ 
+ 	rproc->auto_boot = false;
+ 	ret = rproc_add(rproc);

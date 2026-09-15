@@ -1,122 +1,589 @@
 #!/bin/sh
-# rd03v2-watchdog: keep the WiFi alive when the Q6 firmware misbehaves.
+# rd03v2-watchdog: a backstop for Q6 WiFi firmware failures that the driver
+# does not recover by itself.
 #
-# The driver recovers a firmware crash by itself in about a second, so this is
-# a backstop for the cases it does not cover: a radio that stops without ever
-# raising a fatal (no crash, nothing in the log, only the survey counter goes
-# flat), and a recovery that failed and left a protection domain down.
+# It raises an incident when, after the boot has settled:
+#   - remoteproc0 (root PD), pd-1 or pd-2 is not "running" (2 samples, ~60 s);
+#   - a radio that was registered when it armed, or that netifd has configured,
+#     has no phy (~60 s), or has lost its interfaces while netifd still wants
+#     it up (~2 min) - not when netifd took it down, left its interfaces out
+#     for their networks being down, or gave up setting it up while it worked;
+#   - the in-use channel's survey active time stops moving (~2 min) while the
+#     radio's stations, if it has any, receive nothing either - how the silent
+#     death shows, which raises no fatal interrupt and logs nothing. This is a
+#     heuristic: ath11k's in-use survey entry can also go stale on a working
+#     radio (see iface_active);
+#   - the kernel logs that it left the user PDs down after a root PD crash
+#     (qcom_q6v5_mpd's respawn rate limit, respawn_max_per_hour): pd-1 and
+#     pd-2 keep reading "running" then, and both radios are dead (next sample).
 #
-# It escalates rather than going straight for the reboot it used to:
-#   1. ath11k reset of the affected radio  (~1 s)
-#   2. stop/start of the affected user PD  (~16 s)
-#   3. reboot                              (~1 m 47 s)
-# Evidence is written before anything is touched, so a fix does not destroy
-# the record of what needed fixing.
+# It then tries, stopping at the first step after which every expected radio
+# is healthy again:
+#   1. ath11k reset (hw-restart) of the affected radio
+#   2. stop/start of the affected user PD
+#   3. ath11k driver reload, both radios
+#   4. reboot
+# With NSS Wi-Fi offload configured (ath11k nss_offload=1 in /etc/modules.d),
+# steps 1 and 2 are skipped: on the bench, in-driver recovery with offload
+# took the root PD down (IPQ5018) or left a zombie radio (QCN6122). Step 3 has
+# only been verified on hardware from a healthy driver, never from a crashed
+# one.
+#
+# What none of the steps can do: restart a user PD whose stop has failed
+# ("pd not stopped", "can't stop rproc"). The remoteproc core keeps its power
+# count raised, so every later rproc_boot() returns without starting firmware.
+# When the kernel log shows such a failure, or a user PD is still up after
+# ath11k has been unloaded, it skips what is left and reboots. This is the
+# state a root-PD assert leaves behind on a kernel without the user-PD respawn
+# (qcom_q6v5_mpd respawn_userpds, see docs/q6-firmware-crash.md): the root PD
+# restarts, the user PDs do not, so expect a reboot there.
+#
+# Stations of a radio that restarted in place are not kicked here: ath11k
+# (patch 960) reports them as lost and hostapd disassociates them, so they
+# rejoin with fresh keys. That needs hostapd's disassoc_low_ack, which is on
+# by default; with it off they stay associated, and a client that enforces
+# replay protection stays deaf (docs/q6-firmware-crash.md).
+#
+# Reboot gaps use no wall clock - the box has no RTC and often no NTP. They are
+# counted in uptime and in reboots: no reboot in the first 10 min of uptime;
+# in a boot that follows a watchdog reboot, none before 1 h of uptime, unless
+# no radio is serving at all, which gets the 10 min for up to 3 reboots in a
+# row. A reboot that has to wait is not forgotten: it happens as soon as it
+# may, unless the radios are healthy again by then.
+#
+# Evidence is written before anything is touched. The commands that can block
+# on a wedged driver (iw, wifi, rmmod, insmod, ubus, remoteproc and debugfs
+# writes) run with a deadline, and interfaces are listed from sysfs rather than
+# through nl80211. The reboot request itself, sync and logger are not bounded.
 #
 # Touch /etc/rd03v2-watchdog.disable to neuter it.
 
 INTERVAL=30
 STATE_BAD_LIMIT=2      # consecutive bad rproc samples before acting (~60s)
+PHY_MISSING_LIMIT=2    # consecutive samples an expected radio has no phy (~60s)
+IFACE_MISSING_LIMIT=4  # ...or no interface while netifd wants it up (~2min)
 FREEZE_LIMIT=4         # consecutive frozen survey samples before acting (~2min)
 MIN_UPTIME=600         # do nothing at all in the first 10 min after boot
-HOLD_SECS=3600         # min gap between watchdog-initiated reboots
-INPLACE_MAX=3          # in-place recovery attempts allowed per INPLACE_WINDOW
+HOLD_SECS=3600         # uptime before a second watchdog reboot in a row
+DEAD_REBOOT_MAX=3      # ...waived this many times in a row when no radio serves
+QUIET_RESET=3600       # incident-free uptime that ends such a run
+INPLACE_MAX=3          # incidents handled in place per INPLACE_WINDOW of uptime
 INPLACE_WINDOW=3600
+ARM_MIN_UPTIME=120     # earliest uptime at which the expected radio set is taken
 SETTLE_ATH=20          # seconds to let an ath11k reset take effect
 SETTLE_PD=35           # seconds to let a user PD restart take effect
+SETTLE_RELOAD=30       # seconds to let the radios settle after a driver reload
+IW_TIMEOUT=10
 EVID_DIR=/overlay/rd03v2-watchdog
 STATE_DIR=/tmp/rd03v2-watchdog
 DISABLE_FILE=/etc/rd03v2-watchdog.disable
+EVID_KEEP=20
 
 log() { logger -t rd03v2-watchdog "$1"; }
 up_secs() { cut -d. -f1 /proc/uptime; }
+
+# bounded SECS CMD... : run CMD with a deadline, without ever blocking on it -
+# a module unload or an nl80211 dump stuck in the kernel ignores signals, and a
+# watchdog waiting on it would never get as far as the reboot. CMD's stdout is
+# passed through once it has finished, so this works inside $(...); stderr is
+# dropped. Returns CMD's status, or 124 on timeout, when the stuck process is
+# left behind and noted in $STATE_DIR/stuck.
+bounded() {
+	bd_secs=$1; shift
+	bd_dir=$(mktemp -d "$STATE_DIR/bounded.XXXXXX") || return 125
+	# The job must not inherit our stdout: inside $(...) a stuck process
+	# holding the pipe open would block the caller just the same.
+	( "$@" > "$bd_dir/out" 2>/dev/null < /dev/null &
+	  echo $! > "$bd_dir/pid"
+	  wait $!
+	  echo $? > "$bd_dir/rc.new" && mv "$bd_dir/rc.new" "$bd_dir/rc" ) \
+		> /dev/null 2>&1 < /dev/null &
+	bd_sub=$!
+	bd_i=0
+	while [ ! -f "$bd_dir/rc" ]; do
+		if [ "$bd_i" -ge "$bd_secs" ]; then
+			bd_pid=$(cat "$bd_dir/pid" 2>/dev/null)
+			# shellcheck disable=SC2086 # bd_pid may be empty
+			kill "$bd_sub" $bd_pid 2>/dev/null
+			[ -n "$bd_pid" ] && echo "$bd_pid $1" >> "$STATE_DIR/stuck"
+			rm -rf "$bd_dir"
+			return 124
+		fi
+		sleep 1; bd_i=$((bd_i + 1))
+	done
+	wait "$bd_sub" 2>/dev/null
+	cat "$bd_dir/out"
+	bd_rc=$(cat "$bd_dir/rc")
+	rm -rf "$bd_dir"
+	return "$bd_rc"
+}
+
+# Is a timed-out NAME (as bounded() noted it) still stuck in the kernel?
+stuck_alive() {
+	[ -f "$STATE_DIR/stuck" ] || return 1
+	sa_hit=1
+	while read -r sa_pid sa_name; do
+		kill -0 "$sa_pid" 2>/dev/null || continue
+		echo "$sa_pid $sa_name"
+		[ "$sa_name" = "$1" ] && sa_hit=0
+	done < "$STATE_DIR/stuck" > "$STATE_DIR/stuck.new"
+	mv "$STATE_DIR/stuck.new" "$STATE_DIR/stuck"
+	return $sa_hit
+}
+
+# nl80211 dumps take the rtnl lock, which an unload stuck in
+# ieee80211_unregister_hw holds. Once one iw is stuck, the next would be too:
+# report a timeout straight away instead of piling up processes.
+iw_bounded() {
+	stuck_alive iw && return 124
+	bounded $IW_TIMEOUT iw "$@"
+}
+
+# write_bounded SECS VALUE FILE: a sysfs/debugfs write with a deadline.
+write_bounded() {
+	# shellcheck disable=SC2016 # expanded by the inner sh
+	bounded "$1" sh -c 'echo "$1" > "$2"' write "$2" "$3"
+}
 
 # --- observation -------------------------------------------------------------
 
 # The root PD plus the two user PDs that carry radios. pd-3 is unused on this
 # board and is offline by design, so it is deliberately not checked.
+RPROCS="/sys/class/remoteproc/remoteproc0 /sys/class/remoteproc/remoteproc1 /sys/class/remoteproc/remoteproc2"
+
 rproc_bad() {
-	for r in /sys/class/remoteproc/remoteproc0 \
-	         /sys/class/remoteproc/remoteproc1 \
-	         /sys/class/remoteproc/remoteproc2; do
+	for r in $RPROCS; do
 		s=$(cat "$r/state" 2>/dev/null)
 		[ "$s" = "running" ] || { echo "$(cat "$r/name" 2>/dev/null)=$s"; return 0; }
 	done
 	return 1
 }
 
-wifi_ifaces() { iw dev 2>/dev/null | awk '$1=="Interface"{print $2}'; }
-
-# Active time of the channel an interface is actually on. Frozen across
-# several samples is the signature of the silent death.
-iface_active() {
-	iw dev "$1" survey dump 2>/dev/null | \
-		awk '/\[in use\]/{f=1} f && /channel active time/{print $4; exit}'
-}
-
-# phy numbering is not stable (it shifts when the driver is reloaded), so map
-# the interface to its ath11k device through sysfs rather than assuming.
-iface_debugfs() {
-	dev=$(readlink -f "/sys/class/net/$1/phy80211/device" 2>/dev/null)
-	[ -n "$dev" ] || return 1
-	dev=$(basename "$dev")
-	for d in /sys/kernel/debug/ath11k/*"$dev"; do
-		[ -d "$d" ] && { echo "$d"; return 0; }
+# WiFi interfaces, from sysfs: listing them through nl80211 needs rtnl.
+wifi_ifaces() {
+	for wi_n in /sys/class/net/*; do
+		[ -e "$wi_n/phy80211" ] && basename "$wi_n"
 	done
-	return 1
+}
+no_wifi_ifaces() { [ -z "$(wifi_ifaces)" ]; }
+
+# The ath11k device behind an interface: c000000.wifi or b00a040.wifi.
+iface_dev() {
+	id_dev=$(readlink -f "/sys/class/net/$1/phy80211/device" 2>/dev/null)
+	[ -n "$id_dev" ] || return 1
+	basename "$id_dev"
 }
 
-# Which user PD backs an interface: pd-1 is the internal 2.4 GHz radio
+# Radios (ath11k devices) with a registered phy, and radios that carry at least
+# one interface. phy numbering shifts across a driver reload; devices do not.
+phy_devs() {
+	for p in /sys/class/ieee80211/*; do
+		[ -e "$p/device" ] && basename "$(readlink -f "$p/device")"
+	done | sort -u
+}
+radio_devs() { for rd_ifc in $(wifi_ifaces); do iface_dev "$rd_ifc"; done | sort -u; }
+dev_ifaces() {
+	for di_ifc in $(wifi_ifaces); do
+		[ "$(iface_dev "$di_ifc")" = "$1" ] && echo "$di_ifc"
+	done
+}
+
+# Which user PD backs a radio: pd-1 is the internal 2.4 GHz radio
 # (c000000.wifi), pd-2 the QCN6122 (b00a040.wifi).
-iface_rproc() {
-	dev=$(readlink -f "/sys/class/net/$1/phy80211/device" 2>/dev/null)
-	case "$(basename "$dev" 2>/dev/null)" in
+dev_rproc() {
+	case "$1" in
 		c000000.wifi) echo /sys/class/remoteproc/remoteproc1 ;;
 		b00a040.wifi) echo /sys/class/remoteproc/remoteproc2 ;;
 		*) return 1 ;;
 	esac
 }
 
-# Interfaces backed by a given remoteproc, so a fault in one radio does not
-# cost the other one a reset. A dead root PD implicates every radio.
-rproc_ifaces() {
+dev_debugfs() {
+	for dd_d in /sys/kernel/debug/ath11k/*"$1"; do
+		[ -d "$dd_d" ] && { echo "$dd_d"; return 0; }
+	done
+	return 1
+}
+
+# Radios behind a remoteproc. A dead root PD implicates every radio.
+rproc_devs() {
 	case "$1" in
-		*remoteproc0*) wifi_ifaces; return 0 ;;
-		*remoteproc1*) want=c000000.wifi ;;
-		*remoteproc2*) want=b00a040.wifi ;;
-		*) return 1 ;;
+		*remoteproc0) { expected phys; phy_devs; } | sort -u ;;
+		*remoteproc1) echo c000000.wifi ;;
+		*remoteproc2) echo b00a040.wifi ;;
 	esac
-	for ifc in $(wifi_ifaces); do
-		dev=$(readlink -f "/sys/class/net/$ifc/phy80211/device" 2>/dev/null)
-		[ "$(basename "$dev" 2>/dev/null)" = "$want" ] && echo "$ifc"
+}
+
+# Active time of the channel ath11k marks "[in use]". Frozen across several
+# samples is how the silent death shows - but it is a heuristic: ath11k marks
+# and refreshes that entry by ar->rx_channel, which it sets only when a channel
+# context is added (not on every channel switch) and does not refresh while
+# scanning, so the entry can also go stale on a working radio. Returns 124 when
+# iw timed out.
+iface_active() {
+	ia_out=$(iw_bounded dev "$1" survey dump) || return $?
+	printf '%s\n' "$ia_out" | \
+		awk '/\[in use\]/{f=1} f && /channel active time/{print $4; exit}'
+}
+
+# Frames received from the interface's stations, summed (empty when it has
+# none). The second opinion on a flat survey: firmware that is gone passes no
+# frames. ath11k fills these from host RX, or from NSS peer stats with offload.
+iface_rx() {
+	ir_out=$(iw_bounded dev "$1" station dump) || return $?
+	printf '%s\n' "$ir_out" | \
+		awk '/^Station /{n++} /rx packets:/{s += $3} END {if (n) printf "%.0f\n", s}'
+}
+
+# Has radio $1's stations' received-frame count (over all its interfaces) gone
+# up since the last sample that asked? Asked once per device per sample: the
+# answer is kept in RX_DONE/RX_UP, which the caller clears for each sample.
+dev_rx_up() {
+	case " $RX_DONE " in
+		*" $1 "*) case " $RX_UP " in *" $1 "*) return 0 ;; esac; return 1 ;;
+	esac
+	RX_DONE="$RX_DONE $1"
+	ru_sum=""
+	for ru_i in $(dev_ifaces "$1"); do
+		ru_v=$(iface_rx "$ru_i") || continue
+		[ -n "$ru_v" ] && ru_sum=$(( ${ru_sum:-0} + ru_v ))
+	done
+	ru_prev=$(cat "$STATE_DIR/rx_$1" 2>/dev/null)
+	echo "$ru_sum" > "$STATE_DIR/rx_$1"
+	[ -n "$ru_sum" ] && [ -n "$ru_prev" ] && [ "$ru_sum" -gt "$ru_prev" ] || return 1
+	RX_UP="$RX_UP $1"
+}
+
+# Over a few seconds: is this interface's radio doing anything? The survey
+# moving, or failing that, its stations' received frames going up.
+iface_moving() {
+	im_a=$(iface_active "$1"); sleep 3; im_b=$(iface_active "$1")
+	[ -n "$im_a" ] && [ -n "$im_b" ] && [ "$im_a" != "$im_b" ] && return 0
+	im_a=$(iface_rx "$1") || return 1
+	[ -n "$im_a" ] || return 1
+	sleep 3; im_b=$(iface_rx "$1") || return 1
+	[ -n "$im_b" ] && [ "$im_b" -gt "$im_a" ]
+}
+
+# jsonfilter selector for the wifi-devices whose path names device $1.
+dev_path_sel() { echo "@[@.config.path~/\\/$(echo "$1" | sed 's/\./\\./g')/]"; }
+
+# Does netifd have a wifi-device for device $1 (enabled or not)? False when that
+# cannot be told.
+radio_configured() {
+	command -v jsonfilter >/dev/null 2>&1 || return 1
+	rc_st=$(bounded 10 ubus call network.wireless status) || return 1
+	[ -n "$(jsonfilter -q -s "$rc_st" -e "$(dev_path_sel "$1").config.path")" ]
+}
+
+# NET... are one wifi-iface's networks. False when netifd leaves that wifi-iface
+# out for its network state, by netifd's own rule (wdev_update_disabled_vifs):
+# at least one of the networks exists and none of those is enabled (ifdown,
+# auto 0). Unknown counts as enabled. Caches the interface dump in RW_IFDUMP.
+net_enabled_any() {
+	[ "$#" -gt 0 ] || return 0
+	if [ -z "$RW_IFDUMP" ]; then
+		RW_IFDUMP=$(bounded 10 ubus call network.interface dump) || RW_IFDUMP=""
+		[ -n "$RW_IFDUMP" ] || RW_IFDUMP="-"
+	fi
+	[ "$RW_IFDUMP" != "-" ] || return 0
+	ne_seen=0
+	for ne_n in "$@"; do
+		case "$ne_n" in *[!A-Za-z0-9_-]*) return 0 ;; esac
+		ne_as=$(jsonfilter -q -s "$RW_IFDUMP" -e "@.interface[@.interface='$ne_n'].autostart")
+		[ "$ne_as" = true ] && return 0
+		[ -n "$ne_as" ] && ne_seen=1
+	done
+	[ "$ne_seen" = 0 ]
+}
+
+# How netifd means the radio on device $1 to be:
+#   0  up, with interfaces;
+#   1  down on purpose: wifi down, disabled in /etc/config/wireless, no enabled
+#      wifi-iface, or every wifi-iface on networks that are down;
+#   2  up, but netifd has given up setting it up (retry_setup_failed) - most
+#      often a configuration it cannot apply, but not necessarily.
+# When several wifi-devices name the device, the most wanted one counts. When
+# it cannot be told - no jsonfilter, no answer from netifd, no wifi-device whose
+# path names the device - it is 0.
+radio_wanted() {
+	command -v jsonfilter >/dev/null 2>&1 || return 0
+	rw_st=$(bounded 10 ubus call network.wireless status) || return 0
+	rw_radios=$(jsonfilter -q -s "$rw_st" -e "$(dev_path_sel "$1")")
+	[ -n "$rw_radios" ] || return 0
+	RW_IFDUMP=""; rw_best=1
+	while read -r rw_r; do
+		[ -n "$rw_r" ] || continue
+		[ "$(jsonfilter -q -s "$rw_r" -e '@.autostart')" = false ] && continue
+		[ "$(jsonfilter -q -s "$rw_r" -e '@.disabled')" = true ] && continue
+		rw_on=0
+		while read -r rw_v; do
+			[ -n "$rw_v" ] || continue
+			# shellcheck disable=SC2046 # one network per word
+			net_enabled_any $(jsonfilter -q -s "$rw_v" -e '@.config.network[*]') && { rw_on=1; break; }
+		done <<-EOF
+		$(jsonfilter -q -s "$rw_r" -e '@.interfaces[*]')
+		EOF
+		[ "$rw_on" = 1 ] || continue
+		if [ "$(jsonfilter -q -s "$rw_r" -e '@.retry_setup_failed')" = true ]; then
+			rw_best=2; continue
+		fi
+		return 0
+	done <<-EOF
+	$rw_radios
+	EOF
+	return $rw_best
+}
+
+# wifi-device sections netifd has stopped on purpose (wifi down radioN), in
+# RL_STOPPED, and all of them in RL_NAMES; taken before a reload so that the
+# reload's `wifi up` leaves those down. Both empty when it cannot be told.
+radios_stopped() {
+	RL_STOPPED=""; RL_NAMES=""
+	command -v jsonfilter >/dev/null 2>&1 || return 1
+	command -v uci >/dev/null 2>&1 || return 1
+	rs_st=$(bounded 10 ubus call network.wireless status) || return 1
+	for rs_n in $(uci -q show wireless | sed -n 's/^wireless\.\([A-Za-z0-9_]*\)=wifi-device$/\1/p'); do
+		RL_NAMES="$RL_NAMES $rs_n"
+		[ "$(jsonfilter -q -s "$rs_st" -e "@[\"$rs_n\"].autostart")" = false ] && RL_STOPPED="$RL_STOPPED $rs_n"
+	done
+	[ -n "$RL_STOPPED" ] || RL_NAMES=""
+	return 0
+}
+
+# `wifi up` for every radio but those in RL_STOPPED.
+wifi_up() {
+	if [ -z "$RL_STOPPED" ]; then
+		bounded 60 wifi up
+		return
+	fi
+	for wu_n in $RL_NAMES; do
+		case " $RL_STOPPED " in *" $wu_n "*) continue ;; esac
+		bounded 60 wifi up "$wu_n"
 	done
 }
 
-healthy() {
-	rproc_bad >/dev/null && return 1
-	for ifc in $(wifi_ifaces); do
-		a=$(iface_active "$ifc"); sleep 3; b=$(iface_active "$ifc")
-		[ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ] || return 1
+# --- the expected radio set --------------------------------------------------
+#
+# Taken once the boot has settled and kept in $STATE_DIR: expected-phys lists
+# the radios that had a registered phy, plus the board's radios that netifd has
+# a wifi-device for (so a radio whose firmware never comes up in this boot still
+# shows as missing); expected-ifaces those that carried interfaces. Both only grow - a
+# radio that turns up later is added - except that a radio netifd no longer
+# wants up leaves expected-ifaces. A radio can therefore not simply vanish from
+# view: a reload that never brings its phy back is an incident, not an empty
+# list that passes every check.
+
+expected() { cat "$STATE_DIR/expected-$1" 2>/dev/null; }
+
+# expect_add KIND DEV...
+expect_add() {
+	ea_kind=$1; shift
+	ea_f="$STATE_DIR/expected-$ea_kind"
+	ea_old=$(expected "$ea_kind")
+	ea_new=$( { [ -n "$ea_old" ] && echo "$ea_old"; for ea_d in "$@"; do echo "$ea_d"; done; } | sort -u)
+	[ "$ea_new" = "$ea_old" ] && return 0
+	if [ -n "$ea_new" ]; then echo "$ea_new" > "$ea_f"; else : > "$ea_f"; fi
+	log "expected radios ($ea_kind): $(echo "$ea_new" | tr '\n' ' ')"
+}
+
+expect_drop() {
+	ed_f="$STATE_DIR/expected-$1"
+	ed_new=$(expected "$1" | grep -vxF "$2")
+	if [ -n "$ed_new" ]; then echo "$ed_new" > "$ed_f"; else : > "$ed_f"; fi
+}
+
+# Wait for the radio set to stop changing (three equal samples, 60 s) and take
+# it, merged with whatever this boot's earlier instance expected.
+arm_expected() {
+	ae_prev=""; ae_same=0; ae_i=0
+	while [ "$ae_i" -lt 20 ]; do
+		ae_cur="$(phy_devs | tr '\n' ' ')/$(radio_devs | tr '\n' ' ')"
+		if [ "$ae_cur" = "$ae_prev" ]; then ae_same=$((ae_same + 1)); else ae_same=0; fi
+		ae_prev=$ae_cur
+		[ "$ae_same" -ge 2 ] && [ "$(up_secs)" -ge $ARM_MIN_UPTIME ] && break
+		sleep 30; ae_i=$((ae_i + 1))
+	done
+	touch "$STATE_DIR/expected-phys" "$STATE_DIR/expected-ifaces"
+	ae_seed=""
+	for ae_d in c000000.wifi b00a040.wifi; do
+		radio_configured "$ae_d" && ae_seed="$ae_seed $ae_d"
+	done
+	# shellcheck disable=SC2046,SC2086 # one device per word
+	expect_add phys $(phy_devs) $ae_seed
+	# shellcheck disable=SC2046 # one device per word
+	expect_add ifaces $(radio_devs)
+}
+
+# devs_present LISTFN DEV... : at least one DEV, and every DEV in LISTFN's output.
+devs_present() {
+	dp_have=$($1); shift
+	[ "$#" -gt 0 ] || return 1
+	for dp_d in "$@"; do
+		echo "$dp_have" | grep -qxF "$dp_d" || return 1
+	done
+	return 0
+}
+# shellcheck disable=SC2046 # one device per word
+phys_back() { devs_present phy_devs $(expected phys); }
+
+# wait_until SECS CMD... : poll CMD until it succeeds or time runs out.
+wait_until() {
+	wu_secs=$1; shift
+	wu_i=0
+	until "$@"; do
+		[ "$wu_i" -ge "$wu_secs" ] && return 1
+		sleep 2; wu_i=$((wu_i + 2))
 	done
 	return 0
 }
 
+# Radios expected to carry interfaces, less those netifd was already failing to
+# set up before the incident (see main).
+ifaces_due() {
+	for id_d in $(expected ifaces); do
+		[ -f "$STATE_DIR/setupfail_$id_d" ] || echo "$id_d"
+	done
+}
+
+# Every PD running, every expected radio registered, every radio that is
+# expected to carry interfaces (and that netifd still wants up) carrying at
+# least one, and each of those interfaces moving. Nothing expected at all is
+# not healthy: there is nothing to judge by.
+healthy() {
+	rproc_bad >/dev/null && return 1
+	[ -n "$(expected phys)" ] || return 1
+	phys_back || return 1
+	for h_d in $(ifaces_due); do
+		h_ifs=$(dev_ifaces "$h_d")
+		if [ -z "$h_ifs" ]; then
+			radio_wanted "$h_d"
+			[ $? = 1 ] || return 1
+			continue
+		fi
+		# The survey is per radio; stations are per interface. One interface
+		# showing life is the radio showing life.
+		h_ok=0
+		for h_ifc in $h_ifs; do
+			iface_moving "$h_ifc" && { h_ok=1; break; }
+		done
+		[ "$h_ok" = 1 ] || return 1
+	done
+	return 0
+}
+
+# True when not one interface passes the health check: its user PD and the
+# root PD running, and its channel active time moving. The box is serving no
+# WiFi at all, which earns a reboot sooner than a fault on one radio.
+radios_all_dead() {
+	[ "$(cat /sys/class/remoteproc/remoteproc0/state 2>/dev/null)" = "running" ] || return 0
+	for rad_ifc in $(wifi_ifaces); do
+		rad_r=$(dev_rproc "$(iface_dev "$rad_ifc")") || continue
+		[ "$(cat "$rad_r/state" 2>/dev/null)" = "running" ] || continue
+		iface_moving "$rad_ifc" && return 1
+	done
+	return 0
+}
+
+# PDs whose last stop, per the kernel log, failed after their last successful
+# stop. A failed stop leaves the PD "running" with its power count raised, so
+# no hw-restart, PD restart or driver reload can start its firmware again.
+pd_stop_failed() {
+	pf_bad=$(dmesg 2>/dev/null | awk '
+		function dev(s, pat,   n, w) { sub(pat, "", s); n = split(s, w, " "); return w[n] }
+		/: pd not stopped/          { bad[dev($0, ": pd not stopped.*")] = 1 }
+		/: can.t stop rproc/        { bad[dev($0, ": can.t stop rproc.*")] = 1 }
+		/: stopped remote processor / {
+			delete bad[dev($0, ": stopped remote processor .*")]; delete bad[$NF]
+		}
+		END { for (k in bad) print k }')
+	[ -n "$pf_bad" ] || return 1
+	pf_out=""
+	for r in $RPROCS; do
+		pf_name=$(cat "$r/name" 2>/dev/null)
+		if echo "$pf_bad" | grep -qxF -e "$(basename "$r")" -e "$pf_name"; then
+			pf_out="$pf_out $pf_name"
+		fi
+	done
+	[ -n "$pf_out" ] || return 1
+	echo "${pf_out# }"
+}
+
+# User PDs not offline (after ath11k has been unloaded, they all should be).
+user_pds_up() {
+	upu_out=""
+	for r in /sys/class/remoteproc/remoteproc1 /sys/class/remoteproc/remoteproc2; do
+		upu_s=$(cat "$r/state" 2>/dev/null)
+		[ "$upu_s" = offline ] || upu_out="$upu_out $(cat "$r/name" 2>/dev/null)=$upu_s"
+	done
+	[ -n "$upu_out" ] || return 1
+	echo "${upu_out# }"
+}
+
+# Kernel module options exactly as kmodloader applies them at boot: "options"
+# lines in /etc/modules.conf, then the module's lines in /etc/modules.d. On the
+# NSS Wi-Fi build that is "nss_offload=1 frame_mode=2" for ath11k; a bare
+# insmod would quietly bring the driver back with offload off.
+mod_params() {
+	{
+		[ -f /etc/modules.conf ] && \
+			awk -v m="$1" '$1=="options" && $2==m {$1=""; $2=""; print}' /etc/modules.conf
+		for mp_f in /etc/modules.d/*; do
+			[ -f "$mp_f" ] && awk -v m="$1" '$1==m {$1=""; print}' "$mp_f"
+		done
+	} | awk '{for (i = 1; i <= NF; i++) o = o (o == "" ? "" : " ") $i} END {print o}'
+}
+
+# NSS Wi-Fi offload as the box is configured to boot, not as the loaded module
+# reports it: once ath11k is unloaded /sys/module/ath11k is gone, and the NSS
+# build would otherwise look like the default one. The last value wins, as it
+# does in the kernel.
+nss_offload_on() {
+	no_v=""
+	for no_w in $(mod_params ath11k); do
+		case "$no_w" in nss_offload=*) no_v=${no_w#nss_offload=} ;; esac
+	done
+	case "$no_v" in 1|Y|y) return 0 ;; esac
+	return 1
+}
+
 # --- evidence ----------------------------------------------------------------
 
+# Incident files are numbered, not dated: with no RTC the clock can run
+# backwards across a reboot, and pruning by date or mtime would delete the
+# newest evidence first.
 dump_evidence() {
-	reason="$1"; stamp="$2"
-	f="$EVID_DIR/incident-$stamp.log"
+	reason="$1"
+	seq=$(( $(cat "$EVID_DIR/seq" 2>/dev/null || echo 0) + 1 ))
+	echo "$seq" > "$EVID_DIR/seq"
+	f="$EVID_DIR/incident-$(printf '%06d' "$seq")-up$(up_secs).log"
 	{
-		echo "=== rd03v2-watchdog incident $stamp ==="
+		echo "=== rd03v2-watchdog incident $seq ==="
 		echo "reason: $reason"
-		date; echo "uptime: $(cat /proc/uptime)"
+		echo "date (not trustworthy, no RTC): $(date)"
+		echo "uptime: $(cat /proc/uptime)"
+		[ -f "$STATE_DIR/watchdog-boot" ] && echo "this boot followed a watchdog reboot: $(cat "$STATE_DIR/watchdog-boot")"
 		echo "--- remoteproc states ---"
 		for r in /sys/class/remoteproc/remoteproc*; do
 			echo "$r $(cat "$r/name" 2>/dev/null) $(cat "$r/state" 2>/dev/null)"
 		done
+		echo "failed PD stops in the kernel log: $(pd_stop_failed || echo none)"
 		echo "--- q6v5 irq counters ---"; grep q6v5 /proc/interrupts
-		echo "--- survey ---"
-		for ifc in $(wifi_ifaces); do echo "$ifc active=$(iface_active "$ifc")"; done
+		echo "--- radios ---"
+		echo "expected phys: $(expected phys | tr '\n' ' ')"
+		echo "expected with interfaces: $(expected ifaces | tr '\n' ' ')"
+		echo "registered phys: $(phy_devs | tr '\n' ' ')"
+		echo "netifd could not set up: $(for sf in "$STATE_DIR"/setupfail_*; do [ -f "$sf" ] && printf '%s ' "${sf##*/setupfail_}"; done)"
+		echo "--- ath11k ---"
+		echo "nss_offload=$(cat /sys/module/ath11k/parameters/nss_offload 2>/dev/null)" \
+		     "boot options: $(mod_params ath11k)"
+		echo "--- survey ([in use] entry vs. the channel the interface is on) ---"
+		for ifc in $(wifi_ifaces); do
+			echo "$ifc ($(iface_dev "$ifc")) active=$(iface_active "$ifc" || echo "iw rc=$?")" \
+			     "station rx=$(iface_rx "$ifc" || echo "iw rc=$?")"
+			iw_bounded dev "$ifc" survey dump | grep -B1 'in use' | grep frequency
+			iw_bounded dev "$ifc" info | grep channel
+		done
 		echo "--- meminfo ---"
 		grep -E "MemAvailable|MemFree|^Slab|SUnreclaim" /proc/meminfo
 		echo "--- dmesg tail ---"; dmesg | tail -200
@@ -125,51 +592,65 @@ dump_evidence() {
 	echo "$f"
 }
 
+prune_evidence() {
+	pe_n=0
+	for pe_f in "$EVID_DIR"/incident-*; do
+		[ -f "$pe_f" ] && pe_n=$((pe_n + 1))
+	done
+	pe_drop=$((pe_n - EVID_KEEP))
+	# Globs expand sorted: the date-named files of earlier versions go first,
+	# then the numbered ones, oldest first.
+	for pe_f in "$EVID_DIR"/incident-2* "$EVID_DIR"/incident-0*; do
+		[ "$pe_drop" -gt 0 ] || break
+		[ -f "$pe_f" ] || continue
+		rm -f "$pe_f"; pe_drop=$((pe_drop - 1))
+	done
+}
+
 # --- recovery ----------------------------------------------------------------
 
-# Rate-limit in-place attempts: a fault that needs constant nursing should get
-# a reboot instead of being papered over every couple of minutes.
+# Rate-limit in-place recovery: a fault that needs constant nursing should get
+# a reboot instead of being papered over every couple of minutes. One entry
+# per incident, however many of the in-place steps it went through. Kept in
+# uptime, in tmpfs: a reboot is the escalation anyway.
 inplace_allowed() {
-	now=$(date +%s)
+	now=$(up_secs)
 	c=0
-	if [ -f "$EVID_DIR/inplace-attempts" ]; then
+	if [ -f "$STATE_DIR/inplace-attempts" ]; then
 		while read -r t; do
 			[ -n "$t" ] && [ $((now - t)) -lt $INPLACE_WINDOW ] && c=$((c + 1))
-		done < "$EVID_DIR/inplace-attempts"
+		done < "$STATE_DIR/inplace-attempts"
 	fi
 	[ "$c" -lt $INPLACE_MAX ]
 }
 
 record_inplace() {
-	now=$(date +%s)
-	{ [ -f "$EVID_DIR/inplace-attempts" ] && cat "$EVID_DIR/inplace-attempts"; echo "$now"; } \
-		| tail -20 > "$EVID_DIR/inplace-attempts.new"
-	mv "$EVID_DIR/inplace-attempts.new" "$EVID_DIR/inplace-attempts"
-	sync
+	{ [ -f "$STATE_DIR/inplace-attempts" ] && tail -n 19 "$STATE_DIR/inplace-attempts"; up_secs; } \
+		> "$STATE_DIR/inplace-attempts.new"
+	mv "$STATE_DIR/inplace-attempts.new" "$STATE_DIR/inplace-attempts"
 }
 
-# Step 1: ath11k's own reset. Rebuilds the driver state and respawns the user
-# PD firmware without touching the root PD. This is what fixes a wedged radio.
-# $1 = interfaces to act on; empty means every radio.
+# Step 1: ath11k's own reset of the affected radios. Rebuilds the driver state
+# and restarts that user PD without touching the root PD - when the PD stop it
+# does succeeds. $1 = ath11k devices.
 try_ath_reset() {
-	targets="$1"
-	[ -n "$targets" ] || targets=$(wifi_ifaces)
 	did=0
-	for ifc in $targets; do
-		d=$(iface_debugfs "$ifc") || continue
-		[ -w "$d/simulate_fw_crash" ] || continue
-		log "in-place: ath11k reset of $ifc ($(basename "$d"))"
-		echo hw-restart > "$d/simulate_fw_crash" 2>/dev/null && did=1
+	for d in $1; do
+		dd=$(dev_debugfs "$d") || continue
+		[ -w "$dd/simulate_fw_crash" ] || continue
+		log "in-place: ath11k reset of $d"
+		write_bounded 10 hw-restart "$dd/simulate_fw_crash" && did=1
 	done
 	[ "$did" = 1 ] || return 1
 	sleep $SETTLE_ATH
 	healthy
 }
 
-# Step 2: stop and start only the user PDs that actually need it - a PD that is
-# already down, or the one behind a frozen radio. Bouncing a healthy radio to
-# fix its neighbour would be its own small outage.
-# $1 = interfaces implicated by a survey freeze (may be empty).
+# Step 2: stop and start only the user PDs that need it - a PD that is already
+# down, or the one behind an affected radio. A PD that does not reach offline
+# is not started again: "start" on a running remoteproc only raises its power
+# count, which would pin it for the rest of the boot.
+# $1 = ath11k devices.
 try_pd_restart() {
 	targets=""
 	for r in /sys/class/remoteproc/remoteproc1 /sys/class/remoteproc/remoteproc2; do
@@ -177,8 +658,8 @@ try_pd_restart() {
 		[ "$(cat "$r/state" 2>/dev/null)" = "running" ] || targets="$targets $r"
 	done
 	if [ -z "$targets" ]; then
-		for ifc in $1; do
-			r=$(iface_rproc "$ifc") && targets="$targets $r"
+		for d in $1; do
+			r=$(dev_rproc "$d") && targets="$targets $r"
 		done
 	fi
 	[ -n "$targets" ] || return 1
@@ -187,41 +668,196 @@ try_pd_restart() {
 	for r in $targets; do
 		log "in-place: restarting $(cat "$r/name" 2>/dev/null)"
 		if [ "$(cat "$r/state" 2>/dev/null)" = "running" ]; then
-			timeout 40 sh -c "echo stop > $r/state" 2>/dev/null
+			write_bounded 40 stop "$r/state"
 			sleep 2
 		fi
-		timeout 60 sh -c "echo start > $r/state" 2>/dev/null && did=1
+		if [ "$(cat "$r/state" 2>/dev/null)" != "offline" ]; then
+			log "in-place: $(cat "$r/name" 2>/dev/null) did not stop ($(cat "$r/state" 2>/dev/null)); not starting it"
+			continue
+		fi
+		write_bounded 60 start "$r/state" && did=1
 	done
 	[ "$did" = 1 ] || return 1
 	sleep $SETTLE_PD
 	healthy
 }
 
-do_reboot() {
-	reason="$1"; evid="$2"
-	if [ "$(up_secs)" -lt $MIN_UPTIME ]; then
-		log "would reboot ($reason) but uptime <${MIN_UPTIME}s, holding"
+# Put ath11k and its holders back if they are not loaded, and ask netifd to
+# bring the radios up. Used when a reload has to be abandoned half-way.
+restore_driver() {
+	if [ ! -d /sys/module/ath11k ]; then
+		# shellcheck disable=SC2046 # options are separate words
+		bounded 90 insmod ath11k $(mod_params ath11k) || log "in-place: insmod ath11k failed ($?)"
+	fi
+	for m in $1; do
+		# shellcheck disable=SC2046 # options are separate words
+		[ -d "/sys/module/$m" ] || bounded 90 insmod "$m" $(mod_params "$m") || log "in-place: insmod $m failed ($?)"
+	done
+	wifi_up
+}
+
+# Step 3: unload and reload the whole driver with the options the box booted
+# with, which stops and starts both user PDs and, on the NSS build, the NSS
+# Wi-Fi state. Costs both radios about a minute. Verified on hardware from a
+# healthy driver only.
+# Returns 0 when every expected radio is healthy again, 2 when a user PD did
+# not stop (ath11k then stays unloaded; the caller decides), 1 otherwise.
+try_driver_reload() {
+	rl_mods=$(ls /sys/module/ath11k/holders 2>/dev/null)
+	rl_loaded=0
+	[ -n "$rl_mods" ] && rl_loaded=1
+	[ -n "$rl_mods" ] || rl_mods=ath11k_ahb
+	RL_MODS=$rl_mods
+	rl_opts=$(mod_params ath11k)
+	log "in-place: reloading ath11k (options: ${rl_opts:-none})"
+
+	# `wifi up` would restart every radio, including one stopped on purpose.
+	radios_stopped && [ -n "$RL_STOPPED" ] && \
+		log "in-place: leaving${RL_STOPPED} down after the reload, as it is now"
+	bounded 30 wifi down
+	wait_until 15 no_wifi_ifaces
+	for m in $rl_mods; do
+		[ -d "/sys/module/$m" ] || continue
+		bounded 60 rmmod "$m" || log "in-place: rmmod $m failed ($?)"
+	done
+	if [ -d /sys/module/ath11k ]; then
+		bounded 60 rmmod ath11k || log "in-place: rmmod ath11k failed ($?)"
+	fi
+	if [ -d /sys/module/ath11k ]; then
+		# Put back what did unload, so the radios end no worse than they began.
+		log "in-place: ath11k would not unload; driver reload abandoned"
+		restore_driver "$rl_mods"
+		return 1
+	fi
+
+	# Unloading ath11k_ahb shuts both user PDs down. One that is still up kept
+	# the power count of a stop that failed, and the probe would not start it.
+	if [ "$rl_loaded" = 1 ] && rl_up=$(user_pds_up); then
+		log "in-place: $rl_up after unloading ath11k; a reload cannot restart it"
+		return 2
+	fi
+
+	# shellcheck disable=SC2086 # options are separate words
+	bounded 90 insmod ath11k $rl_opts
+	rl_rc=$?
+	if [ "$rl_rc" != 0 ]; then
+		log "in-place: insmod ath11k ${rl_opts} failed ($rl_rc)"
+		return 1
+	fi
+	for m in $rl_mods; do
+		# shellcheck disable=SC2046 # options are separate words
+		bounded 90 insmod "$m" $(mod_params "$m") || log "in-place: insmod $m failed ($?)"
+	done
+	wait_until 90 phys_back || log "in-place: not every expected radio re-registered after reload"
+	sleep 10
+	wifi_up
+	rl_due=$(ifaces_due)
+	# shellcheck disable=SC2086 # one device per word
+	[ -z "$rl_due" ] || wait_until 60 devs_present radio_devs $rl_due || \
+		log "in-place: not every radio has its interfaces back"
+	sleep $SETTLE_RELOAD
+
+	# Interface names may have changed (phy numbering shifts on a reload);
+	# healthy() goes by radio. Give a slow radio a couple more chances.
+	for rl_try in 1 2 3; do
+		healthy && return 0
+		[ "$rl_try" = 3 ] || sleep 10
+	done
+	return 1
+}
+
+# Sets HOLD to why a reboot must wait (empty when it may go ahead) and
+# RH_DEAD=1 when it may go ahead only because no radio is serving.
+reboot_hold() {
+	HOLD=""; RH_DEAD=0
+	rh_up=$(up_secs)
+	if [ "$rh_up" -lt $MIN_UPTIME ]; then
+		HOLD="uptime is under ${MIN_UPTIME}s"
 		return
 	fi
-	marker="$EVID_DIR/last-reboot"
-	now=$(date +%s)
-	if [ -f "$marker" ]; then
-		last=$(cat "$marker" 2>/dev/null)
-		if [ -n "$last" ] && [ $((now - last)) -ge 0 ] && [ $((now - last)) -lt $HOLD_SECS ]; then
-			log "would reboot ($reason) but last watchdog reboot $((now - last))s ago, holding"
-			return
+	# Radios dead at the time counts toward the run whatever caused the boot.
+	rh_dead=0
+	radios_all_dead && rh_dead=1
+	rh_run=$(cat "$EVID_DIR/dead-reboots" 2>/dev/null); rh_run=${rh_run:-0}
+	if [ ! -f "$STATE_DIR/watchdog-boot" ]; then
+		RH_DEAD=$rh_dead
+		return
+	fi
+	if [ "$rh_dead" = 1 ] && [ "$rh_run" -lt $DEAD_REBOOT_MAX ]; then
+		RH_DEAD=1
+		return
+	fi
+	[ "$rh_up" -ge $HOLD_SECS ] && { RH_DEAD=$rh_dead; return; }
+	if [ "$rh_dead" = 1 ]; then
+		HOLD="$rh_run no-radio reboots in a row already, and this boot is under ${HOLD_SECS}s of uptime"
+	else
+		HOLD="this boot follows a watchdog reboot and is under ${HOLD_SECS}s of uptime"
+	fi
+}
+
+# Reboot now. reboot_hold must have run just before (for RH_DEAD).
+do_reboot() {
+	reason="$1"; evid="$2"
+	if [ -f "$STATE_DIR/reboot-issued" ]; then
+		log "the last reboot request did not take effect; forcing ($reason)"
+		sync; reboot -f
+		return
+	fi
+	if [ "$RH_DEAD" = 1 ]; then
+		dr_run=$(( $(cat "$EVID_DIR/dead-reboots" 2>/dev/null || echo 0) + 1 ))
+		echo "$dr_run" > "$EVID_DIR/dead-reboots"
+		if [ "$dr_run" -le $DEAD_REBOOT_MAX ]; then
+			reason="$reason, no radio serving ($dr_run/$DEAD_REBOOT_MAX)"
+		else
+			reason="$reason, no radio serving ($dr_run in a row)"
 		fi
 	fi
-	echo "$now" > "$marker"; sync
+	echo "$reason" > "$EVID_DIR/rebooted"
+	[ -n "$evid" ] && echo "rebooting: $reason" >> "$evid"
+	sync
 	log "REBOOTING: $reason (evidence: $evid)"
+	touch "$STATE_DIR/reboot-issued"
 	sleep 2
 	reboot
+	# reboot only asks init; give it time before main() tries again.
+	sleep 180
+}
+
+# In-place recovery has failed: reboot, or when the reboot has to wait, leave a
+# note for main() to reboot as soon as it may. $3 = "unloaded" when ath11k was
+# left unloaded; it is put back while the reboot waits.
+give_up() {
+	gu_reason="$1"; gu_evid="$2"
+	echo "in-place recovery failed: $gu_reason" >> "$gu_evid"; sync
+	reboot_hold
+	if [ -z "$HOLD" ]; then
+		do_reboot "$gu_reason" "$gu_evid"
+		return
+	fi
+	[ "$3" = unloaded ] && restore_driver "$RL_MODS"
+	echo "$gu_reason" > "$STATE_DIR/reboot-pending"
+	echo "$gu_evid" >> "$STATE_DIR/reboot-pending"
+	echo "$HOLD" > "$STATE_DIR/hold-reason"
+	log "would reboot ($gu_reason) but $HOLD; holding, and rebooting once that clears"
+}
+
+# Stop escalating in place once a PD stop has failed: nothing short of a
+# reboot restarts that PD. $1 = reason, $2 = evidence, $3 = what was just done.
+pd_stuck() {
+	ps_pds=$(pd_stop_failed) || return 1
+	log "in-place: stop of $ps_pds failed${3:+ during $3}; skipping to reboot"
+	give_up "$1 (PD stop failed: $ps_pds)" "$2"
+	return 0
+}
+
+recovered() {
+	log "RECOVERED in place via $1: $2"
+	echo "recovered: $1" >> "$3"; sync
 }
 
 handle() {
 	reason="$1"; affected="$2"
-	stamp=$(date +%Y%m%d-%H%M%S)
-	evid=$(dump_evidence "$reason" "$stamp")
+	evid=$(dump_evidence "$reason")
 	log "detected: $reason (evidence: $evid)"
 
 	if [ "$(up_secs)" -lt $MIN_UPTIME ]; then
@@ -230,88 +866,255 @@ handle() {
 	fi
 
 	if ! inplace_allowed; then
-		log "in-place recovery used $INPLACE_MAX times in the last hour; rebooting instead"
-		do_reboot "$reason (in-place budget exhausted)" "$evid"
+		log "in-place recovery used $INPLACE_MAX times in the last ${INPLACE_WINDOW}s of uptime; rebooting instead"
+		give_up "$reason (in-place budget exhausted)" "$evid"
 		return
 	fi
 
 	record_inplace
-	if try_ath_reset "$affected"; then
-		log "RECOVERED in place via ath11k reset: $reason"
-		echo "recovered: ath11k reset" >> "$evid"; sync
-		return
+	pd_stuck "$reason" "$evid" && return
+	[ -n "$affected" ] || affected=$( { expected phys; phy_devs; } | sort -u)
+	# Each radio once: two interfaces on a radio, or pd-1 behind remoteproc0's
+	# list, must not reset it or restart its PD twice in a row.
+	affected=$(for a in $affected; do echo "$a"; done | sort -u | tr '\n' ' ')
+	if nss_offload_on; then
+		log "in-place: NSS Wi-Fi offload is configured; skipping ath11k reset and PD restart"
+	elif [ -z "$(ls /sys/module/ath11k/holders 2>/dev/null)" ]; then
+		# No driver to reset, and a PD started behind its back only adds to
+		# the power count its probe will take.
+		log "in-place: ath11k is not loaded; skipping ath11k reset and PD restart"
+	else
+		if try_ath_reset "$affected"; then
+			recovered "ath11k reset" "$reason" "$evid"; return
+		fi
+		pd_stuck "$reason" "$evid" "the ath11k reset" && return
+		if try_pd_restart "$affected"; then
+			recovered "user PD restart" "$reason" "$evid"; return
+		fi
+		pd_stuck "$reason" "$evid" "the PD restart" && return
 	fi
-	if try_pd_restart "$affected"; then
-		log "RECOVERED in place via user PD restart: $reason"
-		echo "recovered: user PD restart" >> "$evid"; sync
-		return
-	fi
+	try_driver_reload
+	case $? in
+		0) recovered "driver reload" "$reason" "$evid" ;;
+		2) give_up "$reason (user PD did not stop on unload)" "$evid" unloaded ;;
+		*) give_up "$reason (in-place recovery failed)" "$evid" ;;
+	esac
+}
 
-	echo "in-place recovery failed; rebooting" >> "$evid"; sync
-	do_reboot "$reason (in-place recovery failed)" "$evid"
+# A reboot is waiting (see give_up). Reboot once it may, unless the radios
+# have come back in the meantime.
+pending_reboot() {
+	if healthy; then
+		log "radios healthy again; dropping the held reboot ($(head -1 "$STATE_DIR/reboot-pending"))"
+		rm -f "$STATE_DIR/reboot-pending" "$STATE_DIR/hold-reason"
+		return
+	fi
+	reboot_hold
+	if [ -n "$HOLD" ]; then
+		if [ "$HOLD" != "$(cat "$STATE_DIR/hold-reason" 2>/dev/null)" ]; then
+			echo "$HOLD" > "$STATE_DIR/hold-reason"
+			log "reboot still held: $HOLD"
+		fi
+		return
+	fi
+	do_reboot "$(head -1 "$STATE_DIR/reboot-pending")" "$(sed -n 2p "$STATE_DIR/reboot-pending")"
+}
+
+# --- suppressed user PD respawn ------------------------------------------------
+
+# How often qcom_q6v5_mpd has logged that it did not respawn the user PDs
+# after a root PD crash. rproc_bad cannot see that: the user PDs are left as
+# they were and keep reading "running".
+suppressions() {
+	dmesg 2>/dev/null | grep -c "respawn suppressed after repeated root PD crashes"
+}
+
+# Take the suppression count as it is now, without acting on it.
+suppressions_baseline() {
+	suppressions > "$STATE_DIR/suppressed"
+}
+
+# Has the kernel suppressed a user PD respawn since the last sample? A count
+# that went down is the kernel log wrapping: taken as the new baseline.
+respawn_suppressed() {
+	rs_now=$(suppressions)
+	rs_old=$(cat "$STATE_DIR/suppressed" 2>/dev/null)
+	echo "$rs_now" > "$STATE_DIR/suppressed"
+	[ -n "$rs_old" ] && [ "$rs_now" -gt "$rs_old" ]
 }
 
 # --- main --------------------------------------------------------------------
 
+# count_sample FILE BAD : bump or clear a consecutive-sample counter; prints it.
+count_sample() {
+	if [ "$2" = 1 ]; then
+		cs_c=$(( $(cat "$1" 2>/dev/null || echo 0) + 1 ))
+	else
+		cs_c=0
+	fi
+	echo "$cs_c" > "$1"
+	echo "$cs_c"
+}
+
+after_incident() {
+	badc=0
+	rm -f "$STATE_DIR"/frz_* "$STATE_DIR"/surv_* "$STATE_DIR"/miss_* "$STATE_DIR"/rx_* "$STATE_DIR"/flat_*
+	sleep 120
+	quiet_since=$(up_secs)
+}
+
 main() {
+	mkdir -p "$STATE_DIR" "$EVID_DIR"
+	# A reboot this watchdog asked for leaves a marker; the boot that finds it
+	# is a watchdog boot. Taken before anything else, even when disabled, so a
+	# later boot is never mistaken for one.
+	if [ -f "$EVID_DIR/rebooted" ]; then
+		mv "$EVID_DIR/rebooted" "$STATE_DIR/watchdog-boot"; sync
+	fi
+	# Wall-clock state from earlier versions.
+	rm -f "$EVID_DIR/last-reboot" "$EVID_DIR/inplace-attempts"
+
 	if [ -f "$DISABLE_FILE" ]; then
 		log "disabled by $DISABLE_FILE, idling"
 		while :; do sleep 3600; done
 	fi
-	mkdir -p "$STATE_DIR" "$EVID_DIR"
-	ls -t "$EVID_DIR"/incident-* 2>/dev/null | tail -n +21 | while read -r old; do rm -f "$old"; done
+	prune_evidence
 
-	# Let the radios come up before arming (max ~5 min).
+	# Let the radios come up before arming (max ~5 min for the PDs, then up to
+	# ~10 min for the radio set to settle).
 	i=0
 	while [ $i -lt 10 ]; do
 		rproc_bad >/dev/null || break
 		sleep 30; i=$((i + 1))
 	done
-	log "armed (interval=${INTERVAL}s, rproc_limit=$STATE_BAD_LIMIT, freeze_limit=$FREEZE_LIMIT, in-place first)"
+	arm_expected
+	suppressions_baseline
+	if [ -z "$(expected phys)" ]; then
+		log "no radio registered after boot and none configured; watching remoteproc state only"
+	elif [ -z "$(phy_devs)" ]; then
+		log "no radio registered after boot, though netifd has radios configured; treating them as missing"
+	fi
+	log "armed (interval=${INTERVAL}s, rproc_limit=$STATE_BAD_LIMIT, freeze_limit=$FREEZE_LIMIT, radios: $(expected phys | tr '\n' ' '), in-place first)"
 
 	badc=0
+	quiet_since=$(up_secs)
 	while :; do
 		sleep $INTERVAL
+
+		# An hour without incidents ends a run of no-radio reboots.
+		if [ -f "$EVID_DIR/dead-reboots" ] && [ $(($(up_secs) - quiet_since)) -ge $QUIET_RESET ]; then
+			log "no incidents for ${QUIET_RESET}s; clearing the no-radio reboot count"
+			rm -f "$EVID_DIR/dead-reboots"; sync
+		fi
+
+		if [ -f "$STATE_DIR/reboot-pending" ]; then
+			pending_reboot
+			continue
+		fi
+
+		if respawn_suppressed; then
+			handle "user PD respawn suppressed after repeated root PD crashes" ""
+			after_incident
+			continue
+		fi
+
+		# A radio that turned up after arming is expected from now on.
+		# shellcheck disable=SC2046 # one device per word
+		expect_add phys $(phy_devs)
+		# shellcheck disable=SC2046 # one device per word
+		expect_add ifaces $(radio_devs)
 
 		bad=$(rproc_bad)
 		if [ -n "$bad" ]; then badc=$((badc + 1)); else badc=0; fi
 		if [ $badc -ge $STATE_BAD_LIMIT ]; then
-			bad_ifcs=""
-			for r in /sys/class/remoteproc/remoteproc0 \
-			         /sys/class/remoteproc/remoteproc1 \
-			         /sys/class/remoteproc/remoteproc2; do
+			bad_devs=""
+			for r in $RPROCS; do
 				[ "$(cat "$r/state" 2>/dev/null)" = "running" ] && continue
-				bad_ifcs="$bad_ifcs $(rproc_ifaces "$r")"
+				bad_devs="$bad_devs $(rproc_devs "$r" | tr '\n' ' ')"
 			done
-			handle "remoteproc not running: $bad" "$bad_ifcs"
-			badc=0
-			rm -f "$STATE_DIR"/frz_* "$STATE_DIR"/surv_*
-			sleep 120
+			handle "remoteproc not running: $bad" "$bad_devs"
+			after_incident
 			continue
 		fi
 
-		frozen=""; frozen_ifcs=""
+		missing=""; missing_devs=""
+		have_phys=$(phy_devs)
+		for d in $(expected phys); do
+			mb=1
+			echo "$have_phys" | grep -qxF "$d" && mb=0
+			[ "$(count_sample "$STATE_DIR/miss_phy_$d" $mb)" -ge $PHY_MISSING_LIMIT ] || continue
+			missing="$missing $d(no phy)"; missing_devs="$missing_devs $d"
+		done
+		for d in $(expected ifaces); do
+			mb=0
+			if [ -n "$(dev_ifaces "$d")" ]; then
+				rm -f "$STATE_DIR/setupfail_$d"
+			else
+				radio_wanted "$d"
+				case $? in
+				0) mb=1 ;;
+				2)
+					# netifd gave up on it. With its survey still moving
+					# at the last sample, that is a configuration it cannot
+					# apply (channel, HE, key, country), not a lost radio;
+					# a lost phy or a stopped PD is caught above anyway.
+					if [ -f "$STATE_DIR/flat_$d" ]; then
+						mb=1
+					elif [ ! -f "$STATE_DIR/setupfail_$d" ]; then
+						touch "$STATE_DIR/setupfail_$d"
+						log "$d: netifd gave up setting it up (retry_setup_failed) while the radio was working; taking that for a configuration problem and not acting on it"
+					fi ;;
+				*)
+					log "$d was taken down on purpose; no longer expecting interfaces on it"
+					rm -f "$STATE_DIR/setupfail_$d"
+					expect_drop ifaces "$d" ;;
+				esac
+			fi
+			[ "$(count_sample "$STATE_DIR/miss_if_$d" $mb)" -ge $IFACE_MISSING_LIMIT ] || continue
+			case " $missing_devs " in *" $d "*) continue ;; esac
+			missing="$missing $d(no interface)"; missing_devs="$missing_devs $d"
+		done
+		if [ -n "$missing" ]; then
+			handle "radio missing:$missing" "$missing_devs"
+			after_incident
+			continue
+		fi
+
+		frozen=""; frozen_devs=""; RX_DONE=""; RX_UP=""
 		for ifc in $(wifi_ifaces); do
-			val=$(iface_active "$ifc")
+			val=$(iface_active "$ifc") || { [ $? = 124 ] && val="iw-timeout"; }
 			[ -n "$val" ] || continue
 			pf="$STATE_DIR/surv_$ifc"; cf="$STATE_DIR/frz_$ifc"
+			d=$(iface_dev "$ifc")
 			prev=$(cat "$pf" 2>/dev/null)
 			if [ -n "$prev" ] && [ "$val" = "$prev" ]; then
-				c=$(( $(cat "$cf" 2>/dev/null || echo 0) + 1 ))
-				echo "$c" > "$cf"
-				if [ "$c" -ge $FREEZE_LIMIT ]; then
-					frozen="$frozen $ifc(active=$val)"
-					frozen_ifcs="$frozen_ifcs $ifc"
+				# A flat survey is not enough on its own (see iface_active):
+				# the radio's stations still receiving frames overrule it.
+				if dev_rx_up "$d"; then
+					[ "$(cat "$cf" 2>/dev/null)" = rx ] || \
+						log "$ifc: survey active time stuck at $val, but $d's stations are passing frames; not counting that as a freeze"
+					echo rx > "$cf"
+					rm -f "$STATE_DIR/flat_$d"
+				else
+					c=$(cat "$cf" 2>/dev/null)
+					case "$c" in ''|*[!0-9]*) c=0 ;; esac
+					c=$((c + 1))
+					echo "$c" > "$cf"
+					touch "$STATE_DIR/flat_$d"
+					if [ "$c" -ge $FREEZE_LIMIT ]; then
+						frozen="$frozen $ifc(active=$val)"
+						frozen_devs="$frozen_devs $d"
+					fi
 				fi
 			else
 				echo 0 > "$cf"
+				rm -f "$STATE_DIR/rx_$d" "$STATE_DIR/flat_$d"
 			fi
 			echo "$val" > "$pf"
 		done
 		if [ -n "$frozen" ]; then
-			handle "survey freeze:$frozen" "$frozen_ifcs"
-			rm -f "$STATE_DIR"/frz_* "$STATE_DIR"/surv_*
-			sleep 120
+			handle "survey freeze:$frozen" "$frozen_devs"
+			after_incident
 		fi
 	done
 }

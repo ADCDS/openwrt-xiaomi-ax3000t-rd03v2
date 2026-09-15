@@ -30,6 +30,15 @@ package/
          nss-dp: don't fail probe when fixed-link registration fails
          (swphy can't emulate >1G speeds; needed for the 2.5G-capable
          fixed-link uplink to the AN8855 switch).
+   4155  package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch
+         nss-dp: honour the AN8855's pause frames on the PHY-less switch
+         conduit (RD03v2 MAC2 only; RX pause on by default, TX refused).
+         All builds. Without it the AN8855 CPU port drops bursts from the
+         GMAC (measured with NSS Wi-Fi forwarding and on the default build;
+         a plain-NSS emulation over one Wi-Fi path never triggered pause). A
+         real plain-NSS build is pending bench confirmation.
+         Opt out without a rebuild with `ethtool -A eth1 rx off` (see
+         docs/nss-wifi-validation.md to keep it across reboots).
     960  package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx
          Adds xiaomi,mi-router-ax3000t-v2 to the uboot-envtools device list
          (env in 0:APPSBLENV @ 0x0, size 0x10000, sector 0x20000). Without it
@@ -58,10 +67,70 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          24-cycle soak. Skip the wake CE only when
          hw_params.supports_suspend. Verified: 6 crash cycles after, zero
          warnings.
+  1973  package/kernel/mac80211/patches/ath11k/955-wifi-ath11k-never-fail-a-sta_state-down-transition.patch
+         Report success for sta_state down transitions (mac80211 tears the
+         station down anyway). Removes the one-shot WARN at sta_info.c:1559
+         seen when a station is deleted while the firmware is dead or
+         wedged. Verified: 0 such WARNs over 12 recoveries.
+  1415  package/kernel/mac80211/patches/ath11k/956-wifi-ath11k-quiet-regulatory-skip-during-recovery.patch
+         Drop the "failed to process regulatory info -22" warning printed on
+         recoveries for the deliberately skipped default rules
+         (ATH11K_FLAG_RECOVERY set). Verified: 0 over 12 recoveries.
+  6808  package/kernel/mac80211/patches/ath11k/957-wifi-ath11k-ahb-dont-boot-on-top-of-a-kept-power-reference.patch
+         A failed rproc_shutdown() keeps the user PD power reference, and
+         rproc_boot() on top of it only raises the count and returns 0
+         without booting. power_up() now drops any reference the user PD
+         already holds (kept by this device on hw-restart, by an earlier
+         instance before a reload or re-probe, or taken through sysfs) and
+         fails with -EBUSY and an error when it cannot. This turns a silent
+         hang into an error; it does not bring back a user PD whose stop
+         keeps failing (reload and stop/start still fail then). Its error
+         path has not been forced on the bench.
    1791  package/kernel/mac80211/patches/ath11k/951-wifi-ath11k-introduct-CONFIG_ATH11K_SMALLBUFFERS.patch
          Ziyang Huang's patch (OpenWrt PR #21495, authorship preserved):
          gates ath11k's DP ring-buffer sizes behind CONFIG_ATH11K_SMALLBUFFERS
          so they shrink on low-RAM devices. Halves the ath11k footprint.
+  1243  package/kernel/mac80211/patches/ath11k/958-wifi-ath11k-free-the-rx-monitor-dst-and-desc-rings.patch
+         ath11k_dp_rx_pdev_srng_free() never freed rxdma_mon_dst_ring and
+         rxdma_mon_desc_ring, and every crash recovery allocates them again:
+         each per-radio restart leaked one 12288 and one 40960 byte DMA
+         vmalloc area (104 KiB per root-PD assert). Upstream bug. Verified
+         on the default build: remap total unchanged over 3 hw-restarts and
+         3 asserts, clients recovered, no WARN.
+  2068  package/kernel/mac80211/patches/ath11k/959-wifi-ath11k-dont-free-a-registered-hw-when-restart-fails.patch
+         When the firmware crashed again during crash recovery, the failed
+         ath11k_core_start()/qmi_firmware_ready() unwind freed the still
+         registered ieee80211_hw and cleared pdev->ar; the next restart
+         oopsed in ath11k_dp_rx_pdev_free() (panic_on_oops -> reboot, or a
+         hung unload). Skip ath11k_mac_destroy() while REGISTERED. Verified:
+         forced double crash -> failed reconfigure -> hw-restart, no oops.
+  5439  package/kernel/mac80211/patches/ath11k/960-wifi-ath11k-disconnect-stations-after-a-firmware-restart.patch
+         After a firmware restart the firmware restarts CCMP transmit packet
+         numbers at 0 and ignores the key install counter, so a client that
+         checks replays in firmware (BCM43455) stays associated and deaf.
+         Reports the AP's stations with a hardware pairwise key as lost
+         (hostapd disassoc_low_ack, on by default, disassociates them) and
+         reconnects station interfaces; not in raw or software-crypto mode.
+         Verified on both builds.
+  3162  package/kernel/mac80211/patches/ath11k/961-wifi-ath11k-keep-the-hal-when-crash-recovery-fails.patch
+         A failed crash recovery freed the HAL that the next restart reuses:
+         restarting pd-1 after a double crash oopsed in ath11k_core_restart
+         (use after free, panic_on_oops -> reboot). Keeps the HAL, blocks
+         sends on it until the next restart, skips CE completion on rings
+         that are not set up, and clears the freed TX status pointers.
+  4585  package/kernel/mac80211/patches/ath11k/962-wifi-ath11k-dont-nest-the-irq-disable-of-a-failed-recovery.patch
+         disable_irq() nests: a failed crash recovery left the interrupts
+         disabled and the next one disabled them again, so it came up with
+         the data path interrupts off (IPQ5018) or never got its WMI ready
+         event (QCN6122 CE interrupts). Skips interrupts already disabled,
+         using napi_enabled (AHB) and the pcic EXT/CE_IRQ_ENABLED flags.
+ 3221  package/kernel/mac80211/patches/ath11k/963-wifi-ath11k-keep-sends-blocked-until-recovery-sets-the-rings-up.patch
+         ath11k_core_reconfigure_on_crash() let WMI sends through tens of ms
+         before the recovery set its CE rings up again; a send in that window
+         read a cleared ring's NULL tail pointer with BH off and panicked
+         (hit during double-crash stress). Keeps CRASH_FLUSH set until the CE
+         and DP rings exist, unless the firmware crashed again, and checks
+         the ring in ath11k_ce_send().
   12707  package/kernel/mac80211/Makefile
          Adds -DCONFIG_ATH11K_SMALLBUFFERS to the smallbuffers build variant
          (mirrors the existing ath10k-smallbuffers define).
@@ -113,19 +182,34 @@ target/linux/qualcommax/ipq50xx/base-files/
    4034  target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
          Caldata extraction from 0:ART — 2.4 GHz @ 0x1000,
          5 GHz (QCN6122) @ 0x26800, 0x20000 each.
- 10266  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
+ 41551  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
          Issue #15. Backstop for the WiFi failures the driver does not
          recover by itself: any of remoteproc0/pd-1/pd-2 not "running"
-         for 2 samples, or the in-use channel's survey active time frozen
-         for 4 (the silent death, which raises no fatal IRQ). Escalates
-         rather than rebooting first - ath11k reset of the affected radio
-         (~1s), then that user PD stopped and started (~16s), and only
-         then a reboot. Evidence is written before anything is touched.
-         At most 3 in-place attempts per hour, 10-minute minimum uptime
-         and a 1-hour hold between reboots. Touch
-         /etc/rd03v2-watchdog.disable to neuter it. See
-         docs/q6-firmware-crash.md.
-   259  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog
+         for 2 samples; a radio registered at arm time, or configured in
+         netifd, without its phy, or losing its interfaces while netifd
+         still wants it up (not when it was taken down, its networks are
+         down, or netifd gave up setting it up while it worked); or the
+         in-use channel's survey active time frozen for 4 samples with no
+         station frames received either (a heuristic for the silent
+         death, and the only sign of a root-PD assert, after which the
+         user PDs are not respawned); or the kernel logging that it
+         suppressed a user PD respawn after repeated root PD crashes.
+         Escalates - ath11k reset of the
+         affected radio, that user PD stopped and started, a full ath11k
+         rmmod/insmod with the boot options, radios stopped by hand left
+         down - and reboots; it skips to the
+         reboot once a user-PD stop has failed (kernel log, or PDs still up
+         after the unload), since nothing in place can restart that PD.
+         With NSS Wi-Fi offload configured in /etc/modules.d the first two
+         steps are skipped. iw/wifi/rmmod/insmod/ubus run with deadlines.
+         Evidence is written before anything is touched. At most 3
+         in-place incidents per hour of uptime; reboot gaps counted in
+         uptime and reboots, never the wall clock (no RTC): 10-minute
+         minimum uptime, 1 hour after a watchdog reboot - 10 minutes, up to
+         3 in a row, when no radio is serving - and a held reboot happens
+         once allowed. Touch /etc/rd03v2-watchdog.disable to neuter it.
+         See docs/q6-firmware-crash.md.
+   243  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog
          procd service for the above (START=99, respawns).
    5705  target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
          sysupgrade/NAND-install + U-Boot boot-flags: initramfs prepare,
@@ -177,6 +261,34 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
          inherited the previous failure (and leaked an IRQ enable, the
          "Unbalanced enable for IRQ" warning). Also takes the start
          timeout from 5 s to the vendor's 10 s.
+  24838  target/linux/qualcommax/patches-6.12/0823-remoteproc-qcom_q6v5_mpd-respawn-user-pds-after-root-pd-crash.patch
+         Issue #15. A root PD assert recovers only the root; the user PDs
+         (and the wlfw QMI servers in them) were never spawned again, so
+         both radios stayed dead. Stale user PDs (spawned under an earlier
+         root boot) now skip the stop handshake, and, unless
+         qcom_q6v5_mpd.respawn_userpds=0, the user PDs are torn down with
+         the crashed root and respawned from an rproc subdev that starts
+         after glink. Respawn is suppressed when the root crashes again
+         within 60 s of its last recovery or after respawn_max_per_hour
+         (default 6) respawns, so a firmware that crashes during the
+         owner's recovery cannot loop. Whether the root is alive is
+         decided under upd_lock from driver state, not from the root's
+         rproc state. A failed root restart is logged. Verified: root-PD
+         asserts recovered in place on both builds, the 7th within an hour
+         suppressed as designed.
+  4720  target/linux/qualcommax/patches-6.12/0824-remoteproc-qcom_q6v5_mpd-tear-down-user-pds-even-when-respawn-is-suppressed.patch
+         0823 tore the user PDs down with a crashed root only when a
+         respawn was allowed. Now they are always torn down (internal radio
+         shutdown, MSA unlock) and the rate limit gates only the respawn;
+         a PD left down is cold booted by its owner's stop/start.
+ 12824  target/linux/qualcommax/patches-6.12/0825-remoteproc-qcom_q6v5_mpd-unwind-a-failed-user-pd-start.patch
+         A failed user PD load or start leaked the reference wcss_pd_load()
+         took on the root, so the root never shut down afterwards (a driver
+         reload no longer cold booted it). Drop it on failure, and stop a
+         root whose firmware died unhandled without the 5 s handshake. A PD
+         whose spawn or power-up failed is stopped by a direct handshake
+         and unlocked if it answers; otherwise its MSA region stays locked
+         (the PD is not loaded again) until the root firmware is gone.
   4043  target/linux/qualcommax/patches-6.12/0918-soc-qcom-smp2p-clear-cached-inbound-values-on-restart.patch
          Issue #1, the actual fix for a dead radio. smp2p only raises an
          interrupt for bits that CHANGED, but its SMEM items outlive the
@@ -212,6 +324,8 @@ Experimental; see docs/nss-offload.md. Layered on top of files/:
                                 files/ is the single source for anything both builds
                                 share - see "The two builds" below.
           patches-6.12/06xx,0819,0981  ECM/clients/skb_recycler + NSS reserved-memory.
+                                 0981 drops the port's second SKB_HEAD_ALIGN() so RX
+                                 heads fit skb_data_cache instead of kmalloc-4k.
           patches-6.12/999-2758  tag_8021q core: the NSS driver expressed as a delta on
                                  999-2757 (was a full forked copy of an8855.c until v1.6).
           patches-6.12/999-2759  tag_8021q bridge-leave (issue #1/#2).
@@ -263,6 +377,19 @@ NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
   tools/enable-nss-radio-map.py assigns the two RD03v2 radio priorities.
   tools/track-nss-memory-profile.py tracks NSS memory choices in rebuild dependencies.
   tools/check-wifi-nss-port.sh audits the full backports patch sequence.
-  experimental/wifi-nss/patch-overrides/ retains donor authorship and fixes QCN6122 BAR/windows.
+  experimental/wifi-nss/patch-overrides/ retains donor authorship, fixes QCN6122 BAR/windows and
+    orders the NSS teardown after 953's crash-path interrupt quiesce (999-998).
+    999-996 stops sta_state returning with conf_mutex held (NSS patch 357).
+    999-999-rd03v2-nss-recovery-1 clears stale LMAC ring pointers on in-place
+    recovery (hardware A/B confirmed), nss-recovery-2 deletes the NSS peers and
+    releases the VAP/ext-VAP nodes in unload order; together they make
+    in-place crash recovery work with offload on.
+    999-999-rd03v2-nss-vlan-eapol-to-pae-group delivers EAPOL to hostapd on
+    VLAN-aware bridges; 999-999-rd03v2-reo-update-queue-noncoherent-free frees
+    queued REO update descriptors the way they were allocated.
   nss/feed-patches/qca-nss-ecm/0028-ecm-nss-dsa-bridged-tags.patch tags bridged ported flows.
-  files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch enables RD03v2 MAC2 RX pause.
+  nss/feed-patches/qca-nss-ecm/0029-ecm-nss-vlan-aware-bridge-wifi.patch fixes rule VLAN tags for
+    Wi-Fi flows over a VLAN-aware DSA bridge (bridged and routed).
+  The switch-conduit RX-pause patch is not part of this integration:
+    files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch applies to
+    every build (ethtool -A eth1 rx on|off at runtime).

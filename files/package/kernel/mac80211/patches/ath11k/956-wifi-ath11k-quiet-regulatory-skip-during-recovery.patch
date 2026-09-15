@@ -1,0 +1,33 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: don't warn about regulatory rules skipped during recovery
+
+During firmware recovery ath11k_reg_handle_chan_list() intentionally
+ignores the default regulatory rules the firmware sends after WMI init
+("Avoid default reg rule updates sent during FW recovery") by returning
+-EINVAL through its retfail label. The caller then logs
+
+  ath11k c000000.wifi: failed to process regulatory info -22
+
+on every successful recovery (seen on both IPQ5018 and QCN6122, with
+and without NSS offload). The genuine failure paths in
+ath11k_reg_handle_chan_list() already log themselves (the "Failed to
+set the requested Country" warning, WARN_ON() in fallback), so drop
+the redundant warning while ATH11K_FLAG_RECOVERY is set.
+---
+--- a/drivers/net/wireless/ath/ath11k/wmi.c
++++ b/drivers/net/wireless/ath/ath11k/wmi.c
+@@ -7240,7 +7240,13 @@
+ 
+ 	ret = ath11k_reg_handle_chan_list(ab, reg_info, IEEE80211_REG_UNSET_AP);
+ 	if (ret) {
+-		ath11k_warn(ab, "failed to process regulatory info %d\n", ret);
++		/* During recovery ath11k_reg_handle_chan_list() deliberately
++		 * rejects the firmware's default rules with -EINVAL when a
++		 * default regd already exists; its real failure paths log
++		 * on their own.
++		 */
++		if (!test_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags))
++			ath11k_warn(ab, "failed to process regulatory info %d\n", ret);
+ 		goto mem_free;
+ 	}
+ 

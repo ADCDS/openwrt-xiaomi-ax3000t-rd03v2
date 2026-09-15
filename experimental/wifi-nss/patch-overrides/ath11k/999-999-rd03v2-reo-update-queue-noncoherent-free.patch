@@ -1,0 +1,47 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] ath11k: free queued REO update descriptors with dma_free_noncoherent
+
+Donor patch 373 (retry mechanism for update_rx_queue) was forward-ported onto
+a tree that allocates rx_tid queue descriptors with dma_alloc_noncoherent(),
+but its new list cleanup still frees them with dma_unmap_single() + kfree().
+After a firmware crash every station removal leaves entries on the list, and
+rmmod then hits WARNING mm/slub.c:4765 free_large_kmalloc from
+ath11k_dp_reo_cmd_list_cleanup. Free them the way the other paths do.
+
+373 also no longer clears the peer's rx_tid after copying it into the queue
+element, so a second cleanup of the same peer (recovery peer_cleanup_all, or
+the quick-kickout handler) would queue and free the same buffer again. Clear
+it once the queued copy owns the descriptor.
+
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c
+@@ -767,9 +767,9 @@
+ 		list_del(&cmd_queue->list);
+ 		rx_tid = &cmd_queue->data;
+ 		if (rx_tid->vaddr_unaligned) {
+-			dma_unmap_single(ab->dev, rx_tid->paddr,
+-					 rx_tid->size, DMA_BIDIRECTIONAL);
+-			kfree(rx_tid->vaddr_unaligned);
++			dma_free_noncoherent(ab->dev, rx_tid->unaligned_size,
++					     rx_tid->vaddr_unaligned,
++					     rx_tid->paddr_unaligned, DMA_BIDIRECTIONAL);
+ 			rx_tid->vaddr_unaligned = NULL;
+ 		}
+ 		kfree(cmd_queue);
+@@ -972,6 +972,16 @@
+ 	elem->tid = tid;
+ 	memcpy(&elem->data, rx_tid, sizeof(*rx_tid));
+ 
++	/* The queued copy now owns the REO qdesc; forget it on the peer so a
++	 * second cleanup of the same peer cannot queue and free it again.
++	 */
++	rx_tid->active = false;
++	rx_tid->vaddr_unaligned = NULL;
++	rx_tid->paddr = 0;
++	rx_tid->paddr_unaligned = 0;
++	rx_tid->size = 0;
++	rx_tid->unaligned_size = 0;
++
+ 	spin_lock_bh(&dp->reo_cmd_update_queue_lock);
+ 	list_add_tail(&elem->list, &dp->reo_cmd_update_rx_queue_list);
+ 

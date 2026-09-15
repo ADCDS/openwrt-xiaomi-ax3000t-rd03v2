@@ -57,17 +57,56 @@ named `kernel`, same layout the working system boots from.
    `.1.1`), SSH in (root, no password) the moment dropbear answers, stop
    dnsmasq and move the IP off `.1.1`.
 4. **Flash from the initramfs** (the sanctioned path — `rootfs_type` is now
-   `tmpfs`): re-upload the sysupgrade image + config backup, `sysupgrade -T`,
+   `tmpfs`): free memory first (see the RAM gotcha below), re-upload the
+   sysupgrade image + config backup, `sysupgrade -T`,
    then `sysupgrade -f /tmp/config-backup.tar.gz /tmp/new.bin`. It reformats
    both UBIs, writes kernel+rootfs, restores the config, and reboots into the
    final system.
 
 ## Gotchas that bit (learn from them)
 
-- **`nohup … &` over dropbear does not survive the session** — the child is
-  killed before it execs. Use `start-stop-daemon -S -b -x <script>` for
+- **A plain `cmd &` over dropbear does not reliably survive the session** —
+  the child can die with the session before it gets going, and the image's
+  BusyBox has no `nohup` to fall back on. `setsid` is the replacement: detach
   anything that must outlive the SSH connection (the ubiformat script, the
-  reboot, sysupgrade itself).
+  reboot, sysupgrade itself) into its own session with every stdio stream
+  closed:
+
+  ```sh
+  setsid sh -c '/tmp/do-flash.sh' >/dev/null 2>&1 </dev/null &
+  ```
+
+  `start-stop-daemon -S -b -x <script>` usually works too, with the caveat
+  below. But on 2026-09-14 it returned with a freshly written, uniquely named
+  reboot script and the box never rebooted, while `setsid` worked every time
+  that day. Use `setsid`, and confirm the effect (uptime, `/tmp/pivot.log`)
+  rather than trusting the exit status.
+- **Pass `start-stop-daemon -x` a script path, never the interpreter.** This
+  BusyBox (1.38, without the "fancy" option) treats a process as already
+  running when `readlink /proc/PID/exe` or its argv[0] equals the `-x` path.
+  Every running `#!/bin/sh` script — `rd03v2-watchdog`, `nsswifi-guard` on a
+  bench box, any other long-running shell script — has argv[0] `/bin/sh`, so
+  `start-stop-daemon -S -b -x /bin/sh -- -c "sleep 2; reboot"` prints
+  `/bin/sh is already running` and starts nothing; the reboot you are waiting
+  for never comes. Your SSH shell is not the culprit (dropbear starts it as
+  `ash`/`-ash`, which never matches), so the same command may work on a box
+  where no such script happens to be running and fail on the next one. Always
+  put the command in a uniquely named script such as `/tmp/do-reboot.sh`,
+  `chmod +x` it, and pass that path to `-x`.
+- **The RAM installer is short on memory.** The NSS initramfs came up with only
+  ~10 MB `MemAvailable` (its rootfs is ~32 MB of shmem, `min_free_kbytes` is
+  16 MB) — not enough to receive a ~15 MB sysupgrade image. Before uploading:
+
+  ```sh
+  for s in rd03v2-watchdog odhcpd sysntpd uhttpd; do /etc/init.d/$s stop; done
+  sync; echo 3 > /proc/sys/vm/drop_caches
+  echo 4096 > /proc/sys/vm/min_free_kbytes   # installer only, it reboots anyway
+  grep MemAvailable /proc/meminfo            # ~30 MB; do not upload below that
+  ```
+
+  Stream the upload and compare checksums before `sysupgrade -T`:
+  `cat new.bin | ssh root@192.168.1.1 "cat > /tmp/new.bin"`, then
+  `sha256sum` on both ends.
 - **BusyBox `ip addr add` can fail silently** — always `&&`-chain and print
   `ip addr show` in the same session to confirm. If the box ends up with no
   IPv4 at all, it is still reachable over its IPv6 link-local
@@ -80,6 +119,51 @@ named `kernel`, same layout the working system boots from.
   `ubi_kernel`, or power loss during step 4 after the prepare wipes both
   UBIs). Both leave the box UART-recoverable per `docs/`/README — same worst
   case as any flash, so run the writes detached and leave the power alone.
+
+## Over the air (the `-wifi` installer)
+
+The whole procedure also works with no cable at all: pivot into the `-wifi`
+initramfs and do step 4 over its `OpenWrt-RD03v2-Installer` network. Extra
+rules for that:
+
+- **Do not take `lan` down on a box you reach only over its Wi-Fi.** The AP
+  VAPs are members of `br-lan`. On the cable-less bench box, `ifdown lan` took
+  them down with the bridge, nothing brought them back, and the box stayed
+  unreachable until a power cycle. (`/etc/init.d/network restart` was not
+  tested that way; treat it, and anything else that drops `br-lan`, as the
+  same risk.) If you must, arm a detached, timed rollback first, so the
+  interface comes back even after your session dies:
+
+  ```sh
+  setsid sh -c 'sleep 60; ifup lan' >/dev/null 2>&1 </dev/null &
+  ```
+- **Default → NSS: pivot through the NSS installer.** When the running system
+  is the default (non-NSS) build and the target is an `-nss` build, write
+  `…-initramfs-factory-nss-wifi.ubi`, not the default `-wifi` one. Otherwise
+  the last warm handover before the final boot is non-NSS → NSS, the chain
+  that can wedge the NSS core and the switch (next section). Check the
+  installer's NSS core before `sysupgrade`:
+
+  ```sh
+  grep rx_buffers_status_sync /sys/kernel/debug/qca-nss-drv/stats/drv  # run twice, must keep increasing
+  dmesg | grep -i timeout                                             # no nss_* timeout errors
+  ```
+
+  If the counter does not rise or `nss_*` timeouts show up, do **not** run
+  `sysupgrade` from that installer. Cold power-cycle the box (unplug it for
+  ~10 s): `ubi_kernel` still holds the installer, so it boots straight back
+  into it, this time from a hardware reset. `/tmp` is gone, so free memory and
+  re-upload the image (see the RAM gotcha above), then repeat the check before
+  flashing.
+- **Several boxes on `192.168.1.1`.** Every installer has the same SSID and
+  address. Pin the client to the right box's BSSID (NetworkManager:
+  `nmcli con modify <con> 802-11-wireless.bssid <box AP MAC>`). If the Linux
+  client has another NIC in `192.168.1.0/24`, bind the socket to the Wi-Fi
+  device — `ssh -o BindInterface=` alone does not override routing:
+
+  ```sh
+  ssh -o 'ProxyCommand=socat - TCP:192.168.1.1:22,so-bindtodevice=<wlan-if>' root@192.168.1.1
+  ```
 
 ## Dead switch after the pivot? Cold power-cycle before assuming a bad flash
 

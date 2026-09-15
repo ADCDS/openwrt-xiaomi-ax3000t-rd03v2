@@ -1,0 +1,119 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: don't nest the IRQ disable of a failed recovery
+
+The firmware crash path disables the data path and CE interrupts at the
+start of ath11k_core_reconfigure_on_crash() and enables them again in
+ath11k_core_qmi_firmware_ready() and ath11k_core_start(). disable_irq()
+nests, though: an IRQ disabled twice needs two enable_irq() calls, and
+the recovery makes one. When a recovery fails, its interrupts stay
+disabled (never enabled, or disabled again by ath11k_hif_stop() in the
+unwind), the next recovery disables them a second time, and then:
+
+- on AHB (IPQ5018), __ath11k_ahb_ext_irq_disable() nests: the recovery
+  succeeds with every data path interrupt still off;
+
+- on the pcic ops (QCN6122, and PCI chips on the reset path),
+  __ath11k_pcic_ext_irq_disable() nests the same way, and the CE
+  interrupts nest between ath11k_pci_disable_ce_irqs_except_wake_irq()
+  and ath11k_pcic_ce_irqs_disable() on one side and the single
+  ath11k_pcic_ce_irqs_enable() on the other, so the recovery never gets
+  its WMI ready event ("failed to start core: -110").
+
+On an IPQ5018/QCN6122 AX3000T both radios stayed down this way when the
+firmware crashed again during recovery and the user PDs were restarted
+afterwards.
+
+Leave interrupts that are already disabled alone. On AHB napi_enabled
+tracks the ext IRQ state: the IRQs are requested with IRQ_NOAUTOEN and
+napi_enabled clear, ath11k_ahb_ext_irq_enable() sets it and the disable
+clears it. The pcic ops already keep ATH11K_FLAG_EXT_IRQ_ENABLED and
+ATH11K_FLAG_CE_IRQ_ENABLED; use them, and keep the CE flag in the
+_except_wake_irq() variants too when the chip cannot suspend, where
+they cover every CE. A chip that can suspend spares its wake CE there,
+so its CE handling is unchanged.
+
+--- a/drivers/net/wireless/ath/ath11k/ahb.c
++++ b/drivers/net/wireless/ath/ath11k/ahb.c
+@@ -244,13 +244,17 @@
+ 	for (i = 0; i < ATH11K_EXT_IRQ_GRP_NUM_MAX; i++) {
+ 		struct ath11k_ext_irq_grp *irq_grp = &ab->ext_irq_grp[i];
+ 
++		/* Already disabled. disable_irq() nests, and the single
++		 * ath11k_ahb_ext_irq_enable() would leave the group off.
++		 */
++		if (!irq_grp->napi_enabled)
++			continue;
++
+ 		ath11k_ahb_ext_grp_disable(irq_grp);
+ 
+-		if (irq_grp->napi_enabled) {
+-			napi_synchronize(&irq_grp->napi);
+-			napi_disable(&irq_grp->napi);
+-			irq_grp->napi_enabled = false;
+-		}
++		napi_synchronize(&irq_grp->napi);
++		napi_disable(&irq_grp->napi);
++		irq_grp->napi_enabled = false;
+ 	}
+ }
+ 
+--- a/drivers/net/wireless/ath/ath11k/pcic.c
++++ b/drivers/net/wireless/ath/ath11k/pcic.c
+@@ -389,7 +389,12 @@
+ {
+ 	int i;
+ 
+-	clear_bit(ATH11K_FLAG_CE_IRQ_ENABLED, &ab->dev_flags);
++	/* already disabled: disable_irq() nests, a single enable would not
++	 * undo two (see ath11k_pci_disable_ce_irqs_except_wake_irq())
++	 */
++	if (!test_and_clear_bit(ATH11K_FLAG_CE_IRQ_ENABLED, &ab->dev_flags) &&
++	    !ab->hw_params.supports_suspend)
++		return;
+ 
+ 	for (i = 0; i < ab->hw_params.ce_count; i++) {
+ 		if (ath11k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR)
+@@ -460,7 +465,11 @@
+ {
+ 	int i;
+ 
+-	clear_bit(ATH11K_FLAG_EXT_IRQ_ENABLED, &ab->dev_flags);
++	/* already disabled: disable_irq() nests, and the single
++	 * ath11k_pcic_ext_irq_enable() would leave the groups off
++	 */
++	if (!test_and_clear_bit(ATH11K_FLAG_EXT_IRQ_ENABLED, &ab->dev_flags))
++		return;
+ 
+ 	for (i = 0; i < ATH11K_EXT_IRQ_GRP_NUM_MAX; i++) {
+ 		struct ath11k_ext_irq_grp *irq_grp = &ab->ext_irq_grp[i];
+@@ -843,6 +852,11 @@
+ {
+ 	int i;
+ 
++	/* no wake CE to spare: this is ath11k_pcic_ce_irqs_enable(), flag included */
++	if (!ab->hw_params.supports_suspend &&
++	    test_and_set_bit(ATH11K_FLAG_CE_IRQ_ENABLED, &ab->dev_flags))
++		return;
++
+ 	for (i = 0; i < ab->hw_params.ce_count; i++) {
+ 		if (ath11k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR)
+ 			continue;
+@@ -861,6 +875,18 @@
+ 	int irq_idx;
+ 	struct ath11k_ce_pipe *ce_pipe;
+ 
++	/*
++	 * A chip that cannot suspend has no wake CE to spare, so this disables
++	 * every CE, as ath11k_pcic_ce_irqs_disable() does: keep that function's
++	 * flag, and leave CEs that are already disabled alone. A crash recovery
++	 * that fails before ath11k_pcic_start(), or in ath11k_pcic_stop(),
++	 * leaves them disabled, and the next recovery would otherwise disable
++	 * them again and never get its WMI ready event.
++	 */
++	if (!ab->hw_params.supports_suspend &&
++	    !test_and_clear_bit(ATH11K_FLAG_CE_IRQ_ENABLED, &ab->dev_flags))
++		return;
++
+ 	for (i = 0; i < ab->hw_params.ce_count; i++) {
+ 		ce_pipe = &ab->ce.ce_pipe[i];
+ 		irq_idx = ATH11K_PCI_IRQ_CE0_OFFSET + i;

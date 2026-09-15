@@ -1,0 +1,53 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] ath11k: tear NSS offload down after the crash-path IRQ quiesce
+
+The NSS series inserts ath11k_nss_teardown() at the top of
+ath11k_core_reconfigure_on_crash(). With this repository's 953 patch the
+same function now disables the host datapath/CE interrupts on the firmware
+crash path, and the donor hunk (applied with fuzz 2) lands before that, so
+the offload was released while ring and CE handlers could still run -
+the failure class 953 exists to prevent. Move the teardown after the quiesce.
+
+ath11k_nss_tx_desc_mem_free() keyed its loop on tx_desc_paddr[] but only
+cleared the virtual address, so a teardown after a failed re-setup (for
+example an allocation failure during crash recovery) would free the pages of
+the previous setup a second time. Clear the physical address and size too.
+
+--- a/drivers/net/wireless/ath/ath11k/core.c
++++ b/drivers/net/wireless/ath/ath11k/core.c
+@@ -2415,9 +2415,6 @@
+ 
+ 	mutex_lock(&ab->core_lock);
+ 
+-	ath11k_nss_teardown(ab);
+-	ab->nss.enabled = false;
+-
+ 	ath11k_thermal_unregister(ab);
+ 
+ 	/*
+@@ -2429,6 +2426,14 @@
+ 		ath11k_hif_ce_irq_disable(ab);
+ 	}
+ 
++	/*
++	 * Tear the NSS offload down only once the host datapath interrupts are
++	 * quiesced (above), so no ring/CE handler can run against state the
++	 * teardown is releasing.
++	 */
++	ath11k_nss_teardown(ab);
++	ab->nss.enabled = false;
++
+ 	ath11k_dp_pdev_free(ab);
+ 	ath11k_spectral_deinit(ab);
+ 	ath11k_ce_cleanup_pipes(ab);
+--- a/drivers/net/wireless/ath/ath11k/nss.c
++++ b/drivers/net/wireless/ath/ath11k/nss.c
+@@ -4183,6 +4183,8 @@
+ 				  ab->nss.tx_desc_vaddr[i],
+ 				  ab->nss.tx_desc_paddr[i]);
+ 		ab->nss.tx_desc_vaddr[i] = NULL;
++		ab->nss.tx_desc_paddr[i] = 0;
++		ab->nss.tx_desc_size[i] = 0;
+ 	}
+ 
+ 	ath11k_dbg(ab, ATH11K_DBG_NSS, "allocated tx desc mem freed\n");
