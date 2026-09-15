@@ -15,23 +15,43 @@ DONOR_REV = "92a2d104145c8d265851c4b388a41bd8e9c21cd9"
 # for the gateway this build is for" — but the live stock investigation
 # contradicts the premise: stock RD03v2 (ROM 2.0.28) runs
 # qca_nss_drv.max_ipv4_conn=512 / max_ipv6_conn=512, exactly the LOW numbers, on
-# a consumer gateway. See stock-investigation/notes/FINDINGS.md (phase 4).
+# a consumer gateway. The numbers are in
+# stock-investigation/captures/phase3-wifi.txt (module-parameters section),
+# tabulated in notes/FINDINGS.md phase 4.
 #
 # That does not make LOW automatically right for us — a PPPoE gateway with many
 # clients is not stock's bench case, and 512 is a hard cap on *accelerated*
-# flows, with the rest falling back to the slow path. MEDIUM's 2048/2048 stays.
+# flows, with the rest falling back to the slow path. MEDIUM's 2048/2048 stays
+# (nss_hlos_if.h: LOW 512, MEDIUM 2048, neither 4096).
 #
 # The reason to keep MEDIUM is the connection table, NOT the buffer pool. The
-# profile ties the two together at build time, and MEDIUM's host-side pool is
-# expensive: n2h_empty_pool_buf_core0=8704 buffers x CONFIG_SKB_RECYCLE_SIZE
-# (2304 B) sit in Linux slab permanently as pure SUnreclaim. Stock asks Linux
-# for half as many (4096) and compensates inside the NSS with
-# extra_pbuf_core0=802816, paid out of the 8 MiB nss@40000000 carve-out that is
-# no-map reserved on our board whether we use it or not.
+# profile ties the two together at build time, and the non-LOW default pool is
+# expensive: 8704 buffers observed on our build (LOW is the only profile that
+# clamps it, to NSS_LOW_MEM_EMPTY_POOL_BUF_SZ=4096) x CONFIG_SKB_RECYCLE_SIZE
+# (2304 B), sitting in Linux slab permanently as pure SUnreclaim.
 #
-# So the two are decoupled deliberately: keep MEDIUM's connection table here,
-# and take LOW's host buffer pool at runtime via the n2hcfg sysctls (see the
-# rc.local block build.sh prepends, and notes/V1.9-TUNING.md finding #1).
+# Stock asks Linux for half as many (4096) and sets extra_pbuf_core0=802816.
+# Do NOT read that as moving the buffering into the nss@40000000 carve-out: in
+# nss-drv the extra pbuf pages are kzalloc(GFP_ATOMIC) + dma_map_single from
+# HOST memory ("Add extra NSS bufs from host memory", nss_n2h.c; nss_core.h
+# calls the accounting field "size of bufs allocated from host"). It is ~784 KiB
+# of additional Linux memory, not a relocation out of Linux. Two further traps:
+# the knob is write-once per boot (the handler returns -EPERM once
+# buf_sz_allocated is set, so it is NOT runtime-reversible), and its allocation
+# loop carries a BUG_ON if the very first atomic page fails — which interacts
+# badly with any proposal to shrink vm.min_free_kbytes on the same box.
+#
+# The intended direction is to decouple the two: keep MEDIUM's connection table
+# here and take LOW's smaller host pool at runtime via the n2hcfg sysctls.
+# Nothing in the driver binds table size to pool size, so the mechanism is
+# sound — the profile macro's only consumers are the connection counts and
+# LOW's pool clamp. But this is UNVERIFIED on hardware: writing
+# n2h_empty_pool_buf_core0 is not proof the memory comes back, and if SUnreclaim
+# does not drop then the pool is sized at init and the choice reverts to a
+# build-time MEDIUM-vs-LOW decision made right here. Run
+# stock-investigation/scripts/v19-nss-pool-experiment.sh before relying on it;
+# see notes/V1.9-TUNING.md finding #1. There is no n2hcfg write in build.sh's
+# rc.local block today — it sets only general/redirect and the two accel modes.
 #
 # Note for anyone tempted to copy stock's /etc/sysctl.d/qca-nss-drv.conf: its
 # dev.nss.ipv4cfg.ipv4_conn=4096 line is dead. That sysctl does not exist at
