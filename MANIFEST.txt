@@ -193,7 +193,7 @@ target/linux/qualcommax/ipq50xx/base-files/
          Worth ~5 MB of unreclaimable slab, measured boot-to-boot.
          Deliberately NOT in rc.local, which sysupgrade preserves: an
          upgrading user would keep their old copy and silently never run
-         it. Skips the extra_pbuf write below 20 MB MemAvailable - its
+         it. Skips the extra_pbuf write below 20 MB MemFree - its
          allocator is GFP_ATOMIC with a BUG_ON, and this board panics and
          reboots on oops.
    4034  target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata

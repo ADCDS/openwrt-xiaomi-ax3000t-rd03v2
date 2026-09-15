@@ -31,29 +31,43 @@ N2H=/proc/sys/dev/nss/n2hcfg
 # into a 3-second reboot - and because this runs at boot, into a reboot LOOP.
 #
 # GFP_ATOMIC cannot reclaim, so the only defence is not to ask when memory is
-# short. Skip the extra_pbuf write below this much MemAvailable (kB). The pool
-# shrink is the part that actually saves memory and is not affected.
-EXTRA_PBUF_MIN_AVAIL_KB=${EXTRA_PBUF_MIN_AVAIL_KB:-20480}
+# short. The right signal is MemFree, NOT MemAvailable: MemAvailable counts
+# reclaimable page cache and slab, which an atomic allocation can never use.
+# 196 pages is 784 kB, so this threshold is ~25x the request - deliberately
+# generous, because the downside of skipping is 0.8 MB of descriptors and the
+# downside of guessing wrong is a reboot loop. The pool shrink below is the
+# half that actually saves memory and is never gated.
+EXTRA_PBUF_MIN_FREE_KB=${EXTRA_PBUF_MIN_FREE_KB:-20480}
 
 boot() {
 	start "$@"
 }
 
 start() {
+	# On a plain (non-NSS) build this tree never exists. Also covers the case
+	# where qca-nss-drv has not finished loading: better to do nothing than
+	# to write into a half-initialised driver.
 	[ -d "$N2H" ] || return 0
 
 	# extra_pbuf_core0 first: it is write-once per boot (the handler returns
 	# -EPERM once buf_sz_allocated is set), so it gets its chance before
 	# anything else can fail. Despite the name it is NOT the nss@40000000
 	# carve-out: those pages are host memory (~784 kB).
-	local avail
-	avail=$(sed -n 's/^MemAvailable:[[:space:]]*\([0-9]\+\).*/\1/p' /proc/meminfo)
-	if [ -n "$avail" ] && [ "$avail" -ge "$EXTRA_PBUF_MIN_AVAIL_KB" ]; then
-		echo 802816 > "$N2H/extra_pbuf_core0" 2>/dev/null
-	else
-		logger -t nss-bufpool \
-			"skipping extra_pbuf_core0: MemAvailable ${avail:-?} kB < ${EXTRA_PBUF_MIN_AVAIL_KB} kB"
-	fi
+	local free
+	free=$(sed -n 's/^MemFree:[[:space:]]*\([0-9]\{1,\}\).*/\1/p' /proc/meminfo)
+	case "$free" in
+	''|*[!0-9]*)
+		logger -t nss-bufpool "skipping extra_pbuf_core0: cannot read MemFree"
+		;;
+	*)
+		if [ "$free" -ge "$EXTRA_PBUF_MIN_FREE_KB" ]; then
+			echo 802816 > "$N2H/extra_pbuf_core0" 2>/dev/null
+		else
+			logger -t nss-bufpool \
+				"skipping extra_pbuf_core0: MemFree ${free} kB < ${EXTRA_PBUF_MIN_FREE_KB} kB"
+		fi
+		;;
+	esac
 
 	echo 4096 > "$N2H/n2h_empty_pool_buf_core0" 2>/dev/null
 
