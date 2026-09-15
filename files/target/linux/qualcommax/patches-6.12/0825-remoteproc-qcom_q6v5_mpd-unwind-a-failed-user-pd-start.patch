@@ -1,0 +1,407 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] remoteproc: qcom_q6v5_mpd: unwind a failed user PD start
+
+wcss_pd_load() takes a reference on the root PD with rproc_boot(), which
+wcss_pd_stop() drops again. The remoteproc core calls the stop op only
+for a processor that started, so when the load or wcss_pd_start() fails
+the reference leaks. The root then never shuts down: a driver reload
+that stops both user PDs leaves it running instead of cold booting it,
+and each further failed start leaks another reference.
+
+A user PD start can fail like this after root PD crashes, e.g. when the
+rd03v2 watchdog restarts a PD whose root crashed again during recovery.
+
+Drop the reference whenever the load or the start fails, and clear
+q6.running when the spawn or the internal radio power-up fails.
+
+The MSA region such a start locked cannot simply be unlocked: the spawn
+may have reached the firmware, and a PD the core never marked running
+gets no stop handshake from qcom_q6v5_request_stop(). Do the handshake
+directly and unlock once the PD acknowledges. If it does not, track the
+region as still locked, refuse to load that PD again while the same root
+firmware runs (the load writes into it), and unlock it once that firmware
+is gone: in the crash teardown, or in the root's stop after the stop
+handshake and before pas_shutdown, the order a normal stop uses. A failed
+respawn after a root crash, which unlocked right away, now does the same.
+A region whose unlock fails also stays tracked, up to the root's
+pas_shutdown. Spawns re-arm stop_done, so a stop-ack that comes after
+the handshake gave up cannot complete a later stop's wait.
+
+Dropping the last reference stops the root, which is only useful if the
+stop works on a root whose firmware already died without the core
+handling the crash (still pending, or raised while the core read the
+root as offline during its start): the root still reads RPROC_RUNNING,
+so qcom_q6v5_request_stop() waits out its 5 s timeout and the failed
+stop keeps the reference. Skip the handshake for such a root and go
+straight to pas_shutdown; the crash handler then finds it offline.
+
+--- a/drivers/remoteproc/qcom_q6v5_mpd.c
++++ b/drivers/remoteproc/qcom_q6v5_mpd.c
+@@ -165,6 +165,12 @@
+ 	/* spawned with its MSA locked, SCM teardown still owed (upd_lock) */
+ 	bool up;
+ 	/*
++	 * Its MSA region is locked. Without up: by a start or respawn that
++	 * failed and whose PD did not acknowledge a stop, or whose unlock
++	 * failed; released once the root firmware is gone (upd_lock).
++	 */
++	bool msa_locked;
++	/*
+ 	 * A root PD crash tore this user PD down underneath the remoteproc
+ 	 * core, which still sees it running: waiting for the respawn, or for
+ 	 * the core to stop it (upd_lock).
+@@ -277,6 +283,8 @@
+ 	 */
+ 	reinit_completion(&upd->q6.spawn_done);
+ 	reinit_completion(&upd->q6.start_done);
++	/* a stop-ack that came late for q6_wcss_stop_failed_pd() */
++	reinit_completion(&upd->q6.stop_done);
+ 
+ 	ret = qcom_q6v5_request_spawn(&upd->q6);
+ 	if (ret == -ETIMEDOUT) {
+@@ -294,6 +302,134 @@
+ 	return ret;
+ }
+ 
++/*
++ * Drop the reference wcss_pd_load() took on the root PD when the user PD does
++ * not come up: the remoteproc core calls wcss_pd_stop() only for a user PD
++ * that started. Not called under upd_lock, see wcss_pd_stop().
++ *
++ * The drop is refused, and the reference kept, while the root is not running:
++ * for good after a failed recovery (see q6_wcss_recovery_failed()), and also
++ * in the moment between the core marking a crashed root and recovering it,
++ * after which the root never shuts down once its last user PD stops. It is
++ * also kept when rproc_shutdown() is interrupted by a signal.
++ */
++static void wcss_pd_put_root(struct rproc *rproc, struct rproc *rpd_rproc)
++{
++	struct userpd *upd = rproc->priv;
++	int ret;
++
++	ret = rproc_shutdown(rpd_rproc);
++	if (ret)
++		dev_err(upd->dev, "%s: root PD %s not shut down: %d (state %d)\n",
++			rproc->name, rpd_rproc->name, ret, rpd_rproc->state);
++}
++
++/*
++ * Unlock the MSA regions that failed starts or respawns left locked. Only once
++ * the root firmware is gone - stopped, or crashed - since such a PD may have
++ * been spawned. Called with upd_lock held, before the root's pas_shutdown, the
++ * order a normal stop uses.
++ */
++static void q6_wcss_release_stale_msa(struct q6_wcss *wcss)
++{
++	struct userpd *upd;
++	u32 pasid;
++	int i, ret;
++
++	lockdep_assert_held(&wcss->upd_lock);
++
++	for (i = 0; i < ARRAY_SIZE(wcss->upd); i++) {
++		upd = wcss->upd[i];
++		if (!upd || upd->up || !upd->msa_locked)
++			continue;
++
++		pasid = (upd->pd_asid << 8) | UPD_SWID;
++		ret = qcom_scm_msa_unlock(pasid);
++		if (ret) {
++			dev_warn(upd->dev, "%s: failed to unlock the MSA region a failed start left locked: %d\n",
++				 upd->q6.rproc->name, ret);
++			continue;
++		}
++		dev_info(upd->dev, "%s: unlocked the MSA region a failed start left locked\n",
++			 upd->q6.rproc->name);
++		upd->msa_locked = false;
++	}
++}
++
++/*
++ * The stop handshake for a PD whose spawn or power-up just failed. The core
++ * never marked it running, so qcom_q6v5_request_stop() would skip it. Returns
++ * 0 once the PD acknowledged. Called with upd_lock held.
++ */
++static int q6_wcss_stop_failed_pd(struct q6_wcss *wcss, struct userpd *upd)
++{
++	struct qcom_q6v5 *q6 = &upd->q6;
++	unsigned long left;
++
++	lockdep_assert_held(&wcss->upd_lock);
++
++	if (!q6->stop_bit || q6_wcss_root_dead(wcss))
++		return -ENODEV;
++
++	reinit_completion(&q6->stop_done);
++	qcom_smem_state_update_bits(q6->state, BIT(q6->stop_bit),
++				    BIT(q6->stop_bit));
++	left = wait_for_completion_timeout(&q6->stop_done, 5 * HZ);
++	qcom_smem_state_update_bits(q6->state, BIT(q6->stop_bit), 0);
++
++	return left ? 0 : -ETIMEDOUT;
++}
++
++/*
++ * After a failed spawn or power-up: stop the PD and unlock its MSA region if
++ * it acknowledges, or leave the region locked for q6_wcss_release_stale_msa()
++ * if it does not, since unlocking memory a live PD uses is not safe.
++ */
++static void q6_wcss_unwind_failed_pd(struct q6_wcss *wcss, struct userpd *upd,
++				     u32 pasid)
++{
++	int ret;
++
++	/* its fatal edges must not start a recovery of an offline PD */
++	upd->q6.running = false;
++
++	ret = q6_wcss_stop_failed_pd(wcss, upd);
++	if (!ret)
++		ret = qcom_scm_msa_unlock(pasid);
++	if (ret) {
++		dev_warn(upd->dev,
++			 "%s: MSA region stays locked after the failed start (%d), until the root PD restarts\n",
++			 upd->q6.rproc->name, ret);
++		return;
++	}
++
++	upd->msa_locked = false;
++}
++
++/*
++ * After the root's pas_shutdown: an MSA region that still failed to unlock
++ * in q6_wcss_release_stale_msa() is taken to be released with the root, or
++ * the PD could never be loaded again.
++ */
++static void q6_wcss_forget_stale_msa(struct q6_wcss *wcss)
++{
++	struct userpd *upd;
++	int i;
++
++	mutex_lock(&wcss->upd_lock);
++	for (i = 0; i < ARRAY_SIZE(wcss->upd); i++) {
++		upd = wcss->upd[i];
++		if (!upd || upd->up || !upd->msa_locked)
++			continue;
++
++		dev_warn(upd->dev,
++			 "%s: MSA region never unlocked, assuming the root PD shutdown released it\n",
++			 upd->q6.rproc->name);
++		upd->msa_locked = false;
++	}
++	mutex_unlock(&wcss->upd_lock);
++}
++
+ static int wcss_pd_start(struct rproc *rproc)
+ {
+ 	struct userpd *upd = rproc->priv;
+@@ -321,27 +457,34 @@
+ 		dev_err(upd->dev, "failed to power up pd\n");
+ 		goto unlock;
+ 	}
++	upd->msa_locked = true;
+ 
+ 	if (upd->q6.spawn_bit) {
+ 		ret = q6_wcss_spawn_pd(rproc);
+ 		if (ret)
+-			goto unlock;
++			goto not_running;
+ 	}
+ 
+ 	if (upd->pd_asid == 1) {
+ 		ret = qcom_scm_internal_wifi_powerup(wcss->desc->pasid);
+ 		if (ret) {
+ 			dev_err(upd->dev, "failed to power up internal radio\n");
+-			goto unlock;
++			goto not_running;
+ 		}
+ 	}
+ 
+ 	upd->spawned_gen = wcss->boot_gen;
+ 	upd->torn_down = false;
+ 	upd->up = true;
++	mutex_unlock(&wcss->upd_lock);
+ 
++	return 0;
++
++not_running:
++	q6_wcss_unwind_failed_pd(wcss, upd, pasid);
+ unlock:
+ 	mutex_unlock(&wcss->upd_lock);
++	wcss_pd_put_root(rproc, rpd_rproc);
+ 	return ret;
+ }
+ 
+@@ -416,11 +559,8 @@
+ 		owed = true;
+ 	}
+ 
+-	if (!owed) {
+-		mutex_unlock(&wcss->upd_lock);
+-		return false;
+-	}
+-	owed = q6_wcss_respawn_allowed(wcss);
++	if (owed)
++		owed = q6_wcss_respawn_allowed(wcss);
+ 
+ 	for (i = 0; i < ARRAY_SIZE(wcss->upd); i++) {
+ 		upd = wcss->upd[i];
+@@ -440,12 +580,15 @@
+ 		ret = qcom_scm_msa_unlock(pasid);
+ 		if (ret)
+ 			dev_warn(upd->dev, "failed to power down pd: %d\n", ret);
++		else
++			upd->msa_locked = false;
+ 
+ 		upd->up = false;
+ 		upd->torn_down = true;
+ 		dev_info(upd->dev, "%s: torn down with crashed root PD\n",
+ 			 upd->q6.rproc->name);
+ 	}
++	q6_wcss_release_stale_msa(wcss);
+ 	mutex_unlock(&wcss->upd_lock);
+ 
+ 	return owed;
+@@ -503,6 +646,7 @@
+ 				urproc->name, ret);
+ 			continue;
+ 		}
++		upd->msa_locked = true;
+ 
+ 		if (upd->q6.spawn_bit)
+ 			ret = q6_wcss_spawn_pd(urproc);
+@@ -512,8 +656,7 @@
+ 			dev_err(upd->dev,
+ 				"%s: respawn after root PD recovery failed: %d\n",
+ 				urproc->name, ret);
+-			upd->q6.running = false;
+-			qcom_scm_msa_unlock(pasid);
++			q6_wcss_unwind_failed_pd(wcss, upd, pasid);
+ 			/* stays torn_down: its stop must not handshake or unlock */
+ 			continue;
+ 		}
+@@ -551,9 +694,11 @@
+ 	struct q6_wcss *wcss = rproc->priv;
+ 	const struct wcss_data *desc = wcss->desc;
+ 	bool crashed = rproc->state == RPROC_CRASHED;
++	bool dead;
+ 	int ret;
+ 
+ 	mutex_lock(&wcss->upd_lock);
++	dead = !crashed && q6_wcss_root_dead(wcss);
+ 	wcss->root_up = false;
+ 	mutex_unlock(&wcss->upd_lock);
+ 
+@@ -565,10 +710,29 @@
+ 		q6_wcss_recovery_failed(wcss);
+ 	}
+ 
+-	ret = qcom_q6v5_request_stop(&wcss->q6, NULL);
+-	if (ret) {
+-		dev_err(wcss->dev, "pd not stopped\n");
+-		goto err;
++	/*
++	 * A root that died without the core handling the crash (it is still
++	 * pending, or came while the core read the root as offline during its
++	 * start) still reads RPROC_RUNNING, so qcom_q6v5_request_stop() would
++	 * wait out its timeout, and the failed stop would keep the last power
++	 * reference. The crash handler finds the root offline afterwards and
++	 * leaves it alone.
++	 */
++	if (dead) {
++		dev_warn(wcss->dev, "root PD firmware is dead, skipping stop handshake\n");
++		wcss->q6.running = false;
++	} else {
++		ret = qcom_q6v5_request_stop(&wcss->q6, NULL);
++		if (ret) {
++			dev_err(wcss->dev, "pd not stopped\n");
++			goto err;
++		}
++	}
++
++	if (!crashed) {
++		mutex_lock(&wcss->upd_lock);
++		q6_wcss_release_stale_msa(wcss);
++		mutex_unlock(&wcss->upd_lock);
+ 	}
+ 
+ 	ret = qcom_scm_pas_shutdown(desc->pasid);
+@@ -577,6 +741,7 @@
+ 		goto err;
+ 	}
+ 	qcom_q6v5_unprepare(&wcss->q6);
++	q6_wcss_forget_stale_msa(wcss);
+ 
+ 	return 0;
+ 
+@@ -694,6 +859,7 @@
+ 	}
+ 
+ 	upd->up = false;
++	upd->msa_locked = false;
+ 	mutex_unlock(&wcss->upd_lock);
+ 
+ shutdown_root:
+@@ -945,7 +1111,7 @@
+ 	struct userpd *upd = rproc->priv;
+ 	struct rproc *rpd_rproc = dev_get_drvdata(upd->dev->parent);
+ 	struct q6_wcss *wcss = rpd_rproc->priv;
+-	bool root_dead;
++	bool root_dead, msa_locked;
+ 	int ret;
+ 
+ 	ret = rproc_boot(rpd_rproc);
+@@ -955,25 +1121,43 @@
+ 	/*
+ 	 * With other user PDs holding it, rproc_boot() only takes a reference,
+ 	 * so it also "succeeds" on a root that failed to come back from a
+-	 * crash and was left RPROC_OFFLINE or RPROC_CRASHED. A spawn on it can
+-	 * only time out. The reference just taken cannot be dropped again
+-	 * (rproc_shutdown() refuses a processor that is not running), which
+-	 * no longer matters by then.
++	 * crash and was left RPROC_OFFLINE or RPROC_CRASHED, or whose stop
++	 * failed. A spawn on it can only time out.
+ 	 */
+ 	mutex_lock(&wcss->upd_lock);
+ 	root_dead = q6_wcss_root_dead(wcss);
++	msa_locked = upd->msa_locked;
+ 	mutex_unlock(&wcss->upd_lock);
+ 	if (root_dead) {
+-		dev_err(upd->dev,
+-			"%s: root PD %s is not up (state %d), a failed recovery needs a reboot\n",
++		dev_err(upd->dev, "%s: root PD %s is not up (state %d)\n",
+ 			rproc->name, rpd_rproc->name, rpd_rproc->state);
+-		return -ENODEV;
++		ret = -ENODEV;
++		goto put_root;
+ 	}
+ 
+-	return qcom_mdt_load_pd_seg(upd->dev, fw, rproc->firmware,
+-			     wcss->desc->pasid, upd->pd_asid, wcss->mem_region,
+-			     wcss->mem_phys, wcss->mem_size,
+-			     NULL);
++	/*
++	 * A failed start left the region locked on this root firmware, which
++	 * may run the PD: loading into it is not safe until the root restarts.
++	 */
++	if (msa_locked) {
++		dev_err(upd->dev,
++			"%s: MSA region still locked by a failed start, the root PD %s must restart first\n",
++			rproc->name, rpd_rproc->name);
++		ret = -EBUSY;
++		goto put_root;
++	}
++
++	ret = qcom_mdt_load_pd_seg(upd->dev, fw, rproc->firmware,
++				   wcss->desc->pasid, upd->pd_asid,
++				   wcss->mem_region, wcss->mem_phys,
++				   wcss->mem_size, NULL);
++	if (!ret)
++		return 0;
++
++put_root:
++	/* the core does not call wcss_pd_stop() when the load fails either */
++	wcss_pd_put_root(rproc, rpd_rproc);
++	return ret;
+ }
+ 
+ static unsigned long q6_wcss_panic(struct rproc *rproc)

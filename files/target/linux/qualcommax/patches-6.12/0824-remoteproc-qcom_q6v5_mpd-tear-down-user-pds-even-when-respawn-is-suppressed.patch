@@ -1,0 +1,107 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] remoteproc: qcom_q6v5_mpd: tear down the user PDs even when respawn is suppressed
+
+0823 does the SCM half of a user PD stop (internal radio shutdown for
+asid 1, MSA unlock) for every up user PD when the root PD crashes, but
+only when a respawn is allowed. With respawn_userpds=0, or when the rate
+limit suppresses the respawn (a crash within 60 s of the last recovery,
+or respawn_max_per_hour reached), it returned before the teardown: the
+root then went through pas_shutdown and a fresh load with the internal
+radio still powered and both user PD MSA regions still locked, an order
+the vendor stack never uses. The owner's later stop then did that SCM
+half against the new root firmware instance, through the stale-generation
+path.
+
+On the bench that path completed for both user PDs after a suppressed
+respawn. The board reset seen when pd-1 was restarted that way was an
+ath11k oops in the restart work (its failed crash recovery had freed the
+HAL, see ath11k patch 961), not these SCM calls. Still, the root's
+restart should not depend on user PD state that the firmware instance
+which granted it no longer knows about.
+
+Always tear the up user PDs down with the crashed root and let the rate
+limit gate only the respawn. A PD that is not respawned stays torn_down,
+so its owner's later stop takes the existing torn_down path (no stop
+handshake, no second unlock) and its start is a cold boot.
+
+The stale-generation check in wcss_pd_stop() is then only a guard, so
+update the comments that still send suppressed PDs down that path.
+
+--- a/drivers/remoteproc/qcom_q6v5_mpd.c
++++ b/drivers/remoteproc/qcom_q6v5_mpd.c
+@@ -47,10 +47,9 @@
+ 
+ /*
+  * A root PD crash takes every user PD down with it, but the remoteproc core
+- * only recovers the root. When set, the user PDs that were up are torn down
+- * together with the root and spawned again once it is back. When clear, they
+- * are left for their owner (ath11k, sysfs) to stop and start; the stop then
+- * skips the handshake the restarted firmware cannot answer.
++ * only recovers the root. The user PDs that were up are torn down together
++ * with the root. When set, they are spawned again once it is back. When clear,
++ * they stay down until their owner (ath11k, sysfs) stops and starts them.
+  */
+ static bool respawn_userpds = true;
+ module_param(respawn_userpds, bool, 0644);
+@@ -63,8 +62,8 @@
+  * crash, every few seconds, and the remoteproc core has no limit of its own.
+  * So the respawn is suppressed when the root crashes within RESPAWN_HOLDOFF
+  * of its last crash recovery, and once respawn_max_per_hour respawns have
+- * been done within RESPAWN_PERIOD. The user PDs are then left to the stale
+- * path, as with respawn_userpds=0.
++ * been done within RESPAWN_PERIOD. The user PDs then stay down, as with
++ * respawn_userpds=0.
+  */
+ #define RESPAWN_HOLDOFF		(60 * HZ)
+ #define RESPAWN_PERIOD		(3600 * HZ)
+@@ -393,8 +392,12 @@
+  * This runs before the root's own pas_shutdown, the same order as a normal
+  * stop of every user PD followed by the root.
+  *
+- * With respawn disabled or suppressed nothing is torn down, and the user PDs
+- * are left for the stale path. Returns whether a respawn is owed.
++ * The teardown happens whether or not a respawn is allowed: with respawn
++ * disabled or suppressed the PDs simply stay torn down, and their owner's
++ * later stop/start takes the torn_down path. Leaving them up instead let the
++ * root restart with the internal radio still powered and the MSA regions
++ * still locked, an order the vendor stack never uses.
++ * Returns whether a respawn is owed.
+  */
+ static bool q6_wcss_teardown_userpds(struct q6_wcss *wcss)
+ {
+@@ -413,10 +416,11 @@
+ 		owed = true;
+ 	}
+ 
+-	if (!owed || !q6_wcss_respawn_allowed(wcss)) {
++	if (!owed) {
+ 		mutex_unlock(&wcss->upd_lock);
+ 		return false;
+ 	}
++	owed = q6_wcss_respawn_allowed(wcss);
+ 
+ 	for (i = 0; i < ARRAY_SIZE(wcss->upd); i++) {
+ 		upd = wcss->upd[i];
+@@ -444,7 +448,7 @@
+ 	}
+ 	mutex_unlock(&wcss->upd_lock);
+ 
+-	return true;
++	return owed;
+ }
+ 
+ /* The cold boot order: wcss_pd_load(), then the body of wcss_pd_start(). */
+@@ -639,9 +643,10 @@
+ 	}
+ 
+ 	/*
+-	 * The root PD has been restarted since this user PD was spawned and
+-	 * nothing spawned it again (respawn_userpds=0): the running firmware
+-	 * never hosted it and will never answer a stop request.
++	 * The root PD has been restarted since this user PD was spawned, yet
++	 * it was not torn down with it. The root's crash stop tears every up
++	 * user PD down, so this is only a guard: the running firmware never
++	 * hosted this PD and will never answer a stop request.
+ 	 */
+ 	stale = upd->spawned_gen != wcss->boot_gen;
+ 	if (stale)
