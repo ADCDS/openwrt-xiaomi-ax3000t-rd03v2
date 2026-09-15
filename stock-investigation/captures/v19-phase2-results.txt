@@ -296,3 +296,66 @@ Still genuinely untested: an accelerated WAN<->LAN NAT flow at a few hundred
 Mbit/s, which needs a WAN uplink the bench does not have. Until then the honest
 position is that 4096 matches what stock ships and shows no ill effect at the
 loads reachable here.
+
+=== ADDENDUM 6: extra_pbuf_core0 DROPPED, and why that is strictly better ===
+
+Third review of finding #1 found my bench evidence for the extra_pbuf write was
+a FALSE POSITIVE, and it was right:
+
+  - The S96/S95 symlink was created at 12:11:38; the box booted at 11:47:33. The
+    script had never run at boot at all - every test was hand-invoked.
+  - dmesg contained exactly ONE "Additional pbufs of size 802816" line, at
+    t=28.3s. That is rc.local's doing, not the init script's.
+  - The bench's /etc/rc.local was a STALE OVERLAY COPY still carrying the
+    pre-rework pool writes - the very shadowing the rework exists to prevent.
+  - Because extra_pbuf is write-once (-EPERM), every later run of my script was
+    a no-op that merely READ BACK 802816 and logged it as if it had worked.
+
+Two further defects it found:
+  - START=95 TIED with /etc/init.d/done (also 95), and procd walks /etc/rc.d in
+    glob order, so S95done -> rc.local ran FIRST. On a v1.8 user's box the old
+    unguarded rc.local write would pre-empt the guarded one every boot.
+  - kzalloc(PAGE_SIZE) is NOT order-0: /sys/kernel/slab/kmalloc-4k/order = 3.
+    Slab refill needs 8 contiguous pages, so the real failure mode is
+    FRAGMENTATION, which neither MemFree nor MemAvailable can see. The guard was
+    close to decorative - 20 MB sits only 4 MB above the 16 MB min watermark.
+
+RESOLUTION: drop the extra_pbuf_core0 write entirely. Measured on a clean boot
+with rc.local's stale copy removed and the script at START=96:
+
+  boot, 8704 pool, no knobs        : SUnreclaim 44,576 kB
+  boot, pool=4096 + extra_pbuf     : SUnreclaim 38,992 kB   (net -5,584 kB)
+  boot, pool=4096 only (shipped)   : SUnreclaim 38,204 kB   (net -6,372 kB)
+
+Dropping it does not cost memory - it SAVES a further 788 kB, which is precisely
+the ~784 kB those kzalloc'd host pages occupied. So the simpler change is both
+larger and safer:
+
+  - the pool write allocates nothing; grep of nss_n2h_set_empty_buf_pool() for
+    kzalloc/kmalloc/BUG_ON/GFP_ATOMIC returns ZERO hits. The entire panic class
+    is gone, not mitigated.
+  - no write-once knob, so the change is fully reversible at runtime.
+  - no memory pre-check needed, so no false sense of safety from a signal that
+    cannot see fragmentation.
+
+What is given up: the NSS descriptor pool stays at 9,984 instead of stock's
+14,884. The load runs measured peak in-flight of 2 buffers, so those 4,900 extra
+descriptors are not reachable at any load this bench can produce. If an
+accelerated WAN<->LAN flow ever shows descriptor starvation, extra_pbuf can be
+revisited - as a deliberate, separately tested decision, not as a freebie
+bundled with a memory saving.
+
+Clean-boot verification of the shipped script (uptime 85 s, rc.local with 0
+extra_pbuf references):
+    logread: "nss-bufpool: pool 8704 -> 4096"      <- ran AT BOOT
+    dmesg "Additional pbufs" count: 0              <- we allocate nothing
+    pool=4096  extra_pbuf=0  pbuf_def_total=9984
+    SUnreclaim 38,204 kB   MemFree 46,728 kB   MemAvailable 42,676 kB
+
+Reporting is now honest about what each invocation did, which the previous
+version was not:
+    first run     : "pool 8704 -> 4096"
+    re-run        : "pool already 4096, nothing to do"
+    after stop    : "pool restored to 8704"
+    stale rc.local: "note: extra_pbuf_core0=802816 was set by something else
+                     (stale /etc/rc.local?); this build does not set it"

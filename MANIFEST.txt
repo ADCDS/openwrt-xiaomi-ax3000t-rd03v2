@@ -187,15 +187,17 @@ target/linux/qualcommax/ipq50xx/base-files/
          NOTE: rc.local is in /lib/upgrade/keep.d/base-files-essential, so
          a PLAIN sysupgrade restores the running copy over the image's and
          those knobs can go stale across an upgrade. See README.
-   3047  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-bufpool
-         v1.9. Sets the NSS host buffer pool to stock's 4096 with
-         extra_pbuf_core0=802816 (START=95, after qca-nss-drv at 94).
-         Worth ~5 MB of unreclaimable slab, measured boot-to-boot.
-         Deliberately NOT in rc.local, which sysupgrade preserves: an
-         upgrading user would keep their old copy and silently never run
-         it. Skips the extra_pbuf write below 20 MB MemFree - its
-         allocator is GFP_ATOMIC with a BUG_ON, and this board panics and
-         reboots on oops.
+   4088  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-bufpool
+         v1.9. Sets the NSS host buffer pool to stock's 4096 instead of
+         the profile default 8704 (START=96, after qca-nss-drv at 94 and
+         after done/rc.local at 95). Worth ~6.4 MB of unreclaimable slab,
+         measured boot-to-boot. Deliberately NOT in rc.local, which
+         sysupgrade preserves: an upgrading user would keep their old copy
+         and silently never run it. Deliberately does NOT set stock's
+         extra_pbuf_core0: that COSTS ~784 kB of host memory and its
+         kzalloc(GFP_ATOMIC) path has a BUG_ON, which on this board
+         (panic_on_oops=1, kernel.panic=3) would be a boot reboot-loop.
+         The pool write allocates nothing and has no such path.
    4034  target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
          Caldata extraction from 0:ART — 2.4 GHz @ 0x1000,
          5 GHz (QCN6122) @ 0x26800, 0x20000 each.
