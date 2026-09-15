@@ -309,6 +309,8 @@ Experimental; see docs/nss-offload.md. Layered on top of files/:
                                 files/ is the single source for anything both builds
                                 share - see "The two builds" below.
           patches-6.12/06xx,0819,0981  ECM/clients/skb_recycler + NSS reserved-memory.
+                                 0981 drops the port's second SKB_HEAD_ALIGN() so RX
+                                 heads fit skb_data_cache instead of kmalloc-4k.
           patches-6.12/999-2758  tag_8021q core: the NSS driver expressed as a delta on
                                  999-2757 (was a full forked copy of an8855.c until v1.6).
           patches-6.12/999-2759  tag_8021q bridge-leave (issue #1/#2).
