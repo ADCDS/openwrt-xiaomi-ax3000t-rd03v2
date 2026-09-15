@@ -4,13 +4,18 @@
 #
 # Those buffers are empty skbs the host hands to the NSS. They sit in Linux slab
 # permanently as SUnreclaim, so halving the count is a straight return of
-# unreclaimable memory. Measured boot-to-boot on the bench (same image, idle,
-# differing only in whether this ran): SUnreclaim 44,576 -> 38,992 kB,
-# MemAvailable 37,088 -> 40,016 kB.
+# unreclaimable memory. Measured on matched idle boots of the same image,
+# differing only in whether this script ran: SUnreclaim 44,576 kB without it,
+# 38,204 / 38,144 kB with it over two boots - about 6.3 MB back, with
+# MemAvailable 37,088 -> ~42,800 kB. (Idle SUnreclaim drifts ~1 MB once clients
+# associate, so compare at idle.)
 #
 # WHAT THIS DELIBERATELY DOES NOT DO
-# Stock also sets extra_pbuf_core0=802816, which grows the NSS descriptor pool
-# from 9,984 to 14,884. We do not, and the reason is worth keeping:
+# Stock also sets extra_pbuf_core0=802816, which would grow the NSS descriptor
+# pool from 9,984 to 14,884. We do not. Note this is NOT a regression against
+# anything shipped: v1.8 ran pool=8704 with extra_pbuf=0, i.e. the same 9,984
+# descriptors this build has. The only change a user sees is 4,608 fewer host
+# skbs. The reasons not to take that knob:
 #   - It COSTS host memory rather than saving it. Despite the name it is not the
 #     nss@40000000 carve-out; nss_n2h_buf_pool_cfg() does
 #     kzalloc(PAGE_SIZE, GFP_ATOMIC) + dma_map_single per page, 802816 B = 196
@@ -25,7 +30,8 @@
 #     MemFree and MemAvailable cannot see.
 #   - It is write-once per boot (-EPERM once buf_sz_allocated is set), so it
 #     cannot be undone without a module reload.
-# Trading a reboot-loop tail risk for 0.8 MB of descriptors is a bad deal. The
+# Trading a reboot-loop tail risk for 4,900 extra descriptors - which cost
+# ~784 kB of host memory to obtain - is a bad deal. The
 # pool write below allocates nothing and has no BUG_ON path, so it carries none
 # of that risk while delivering the memory. See
 # stock-investigation/notes/V1.9-TUNING.md finding #1.
@@ -83,7 +89,7 @@ start() {
 	case "$extra" in
 	''|0)	;;
 	*)	logger -t nss-bufpool \
-			"note: extra_pbuf_core0=$extra was set by something else (stale /etc/rc.local?); this build does not set it - see README"
+			"note: extra_pbuf_core0=$extra was set by something else (stale /etc/rc.local?); this build does not set it - see docs/nss-offload.md"
 		;;
 	esac
 }
