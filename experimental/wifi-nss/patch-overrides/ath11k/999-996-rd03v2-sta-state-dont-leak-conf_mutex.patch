@@ -1,0 +1,35 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: nss: don't return with conf_mutex held in sta_state
+
+357-ath11k-fix-clear-peer-keys-during-disassoc.patch moved
+ath11k_clear_peer_keys() into the AUTH -> ASSOC branch of
+ath11k_mac_op_sta_state() with an early "return ret" - while
+ar->conf_mutex is held.
+
+ath11k_clear_peer_keys() returns -ENOENT when the peer is missing. That
+is reachable in ieee80211_reconfig_stations(), which replays NOTEXIST ->
+NONE -> AUTH -> ASSOC with WARN_ON() and carries on after a failure: if
+the peer create failed during a hw restart on a wedged radio, AUTH ->
+ASSOC returns with conf_mutex locked and the next call on that radio
+(ASSOC -> AUTHORIZED in the same loop) deadlocks the restart worker with
+the wiphy lock held.
+
+Keep the warning and the error code, but leave through the common
+unlock.
+---
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -10452,11 +10452,9 @@
+ 		 * IEEE80211_STA_AUTHORIZED to IEEE80211_STA_ASSOC)
+ 		 */
+ 		ret = ath11k_clear_peer_keys(arvif, sta->addr);
+-		if (ret) {
++		if (ret)
+ 			ath11k_warn(ar->ab, "failed to clear all peer keys for vdev %i: %d\n",
+-					arvif->vdev_id, ret);
+-			return ret;
+-		}
++				    arvif->vdev_id, ret);
+ 	} else if (old_state == IEEE80211_STA_ASSOC &&
+ 		   new_state == IEEE80211_STA_AUTHORIZED) {
+ 		spin_lock_bh(&ar->ab->base_lock);

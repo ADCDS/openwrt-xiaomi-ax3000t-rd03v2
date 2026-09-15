@@ -6,6 +6,7 @@ See [build instructions, fixes and hardware validation](../../docs/nss-wifi-vali
 `92a2d104145c8d265851c4b388a41bd8e9c21cd9` and adds the RD03v2 QCN6122
 register-address fix and the crash-recovery ordering fix (`999-998`). The
 original donor authorship headers are retained.
+`999-996` fixes a `conf_mutex` leak in the donor's `sta_state` change.
 The `999-999-rd03v2-nss-recovery-*` patches make in-place crash recovery work
 with offload on.
 `999-999-rd03v2-nss-vlan-eapol-to-pae-group` delivers EAPOL on VLAN-aware
