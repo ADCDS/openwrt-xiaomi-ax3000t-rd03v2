@@ -442,6 +442,16 @@ See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 
 **Memory (256 MB, and the smallbuffers fix).** After the SoC reserves ~66 MB for the WiFi co-processor and bootloader, Linux sees **175 MB** (`MemTotal: 175760 kB`) — and by default the two ath11k radios hold ~85–90 MB of *unswappable* kernel memory (DMA ring buffers + firmware host memory). That left only ~15 MB free, and under load the kernel OOM-killer would shoot `hostapd`/`netifd`, dropping WiFi. The fix is **`kmod-ath11k-smallbuffers`** — Ziyang Huang's [PR #21495](https://github.com/openwrt/openwrt/pull/21495), which shrinks ath11k's DP ring buffers (TX-completion 32768→2048, RX-DMA 4096→1024, monitor rings down to 128–512), mirroring the long-standing `ath10k-smallbuffers`. It cuts the ath11k footprint from ~85 MB to **~38 MB** (PR #21495's figures; the before-state was not re-measured on this board). Measured here on a v1.7 NSS build serving as an AP with both radios up and 6 clients: **~45 MB `MemFree`, ~33 MB `MemAvailable`** after a week of uptime — most of the ~65 MB Slab is unreclaimable, so `MemAvailable` is the honest figure. Not roomy, but stable. Tested: a 70 MB memory-pressure spike (far beyond any real load) produces **zero OOM kills** with both radios up — on real RAM alone, no swap needed. Trade-off: smaller buffers mean less headroom at extreme throughput, and monitor-mode capture is degraded. The first one does bite occasionally — the same AP logged one burst of ten `ath11k: failed to transmit frame -28` (ENOSPC on the shrunken TX ring) over that week, with no user-visible effect. It remains the right trade for a low-RAM device, but it is a real cost, not a free win.
 
+**v1.9 adds ~6 MB back.** Live inspection of a stock RD03v2 (ROM 2.0.28) showed stock hands the NSS
+only 4096 host-side buffers where the NSS memory profile defaults to 8704. Those are empty skbs pinned
+in Linux slab as `SUnreclaim`, so halving them is a straight return: measured boot-to-boot on the bench,
+same image, idle, `SUnreclaim` **44,576 → 38,144 kB** and `MemAvailable` **37,088 → 42,820 kB**. It ships
+as `/etc/init.d/nss-bufpool` (NSS builds only in effect — on a plain build the sysctl tree does not exist
+and the script is a no-op). See [`stock-investigation/`](stock-investigation/) for the full comparison, and
+note what v1.9 deliberately does **not** take from stock: `extra_pbuf_core0`, which *costs* ~784 kB of host
+memory and whose allocator can `BUG_ON` at boot on a fragmented buddy list — a reboot loop on a board with
+`panic_on_oops=1`. The ~66 MB of carve-outs, by contrast, are not the problem: stock reserves 65 MB.
+
 ---
 
 ## Known limitations
