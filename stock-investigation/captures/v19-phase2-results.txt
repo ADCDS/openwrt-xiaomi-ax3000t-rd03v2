@@ -159,3 +159,42 @@ V1.9-TUNING.md already lists under "What is still unmeasured".
 Bench left in the routed topology (br-wired / 192.168.5.0/24). To restore the
 single-subnet bench: uci delete network.wired, network.brwired, re-add lan3 to
 the br-lan ports list, drop "wired" from firewall zone lan, commit, restart.
+
+=== ADDENDUM 2: causality control (does the write CAUSE the drop?) ===
+
+The Phase 2 measurement was taken on a box up ~1 minute, so "a freshly booted
+box sheds ~5 MB on its own" is a live alternative explanation. Tested it by
+driving the knob in both directions on one boot:
+
+  T1  8704 -> 4096 : SUnreclaim 44,740 -> 39,528  =  -5,212 kB  (fresh boot, idle)
+  T2  4096 -> 8704 : SUnreclaim 42,136 -> 46,452  =  +4,316 kB  (reverse)
+  T3  8704 -> 4096 : SUnreclaim 46,476 -> 43,056  =  -3,420 kB  (re-apply)
+
+Every transition moves in the direction the pool size predicts, and each
+completes within the first 10 s sample. Boot settling cannot produce T2, which
+is an INCREASE, and cannot explain T3, taken on a box up 55 minutes. The effect
+is causal, immediate, and reversible for this knob.
+
+(Only n2h_empty_pool_buf_core0 was toggled. extra_pbuf_core0 stayed at 802816
+throughout - it is write-once per boot, so it could not have been re-driven
+even if wanted, and it is therefore NOT part of what T2/T3 measure.)
+
+Per-buffer cost implied by each transition:
+  T1  1,158 B    T2  959 B    T3  760 B
+
+T1 is the cleanest measurement: idle box, nothing associated yet. T2 and T3 ran
+with Wi-Fi clients attached and background traffic flowing, which perturbs slab
+in both directions, and their spread shows why a single measurement should not
+be quoted to four significant figures. The honest statement is:
+
+  - the pool knob demonstrably frees unreclaimable slab, roughly 3.4-5.2 MB for
+    this 4608-buffer delta;
+  - the per-buffer cost is somewhere around 760-1,332 B, comfortably BELOW the
+    2,304 B the old estimate assumed and consistent with a kmalloc-1024-class
+    payload;
+  - "~5 MB" is the right order of magnitude to quote for the change, and the
+    conservative end of the range is ~3.4 MB.
+
+The earlier text saying "1,332 B per buffer" derived from T1 alone plus the
+extra_pbuf cost; it is the top of the range, not a precise constant. Adjusted
+wording accordingly.
