@@ -334,6 +334,7 @@ NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
   tools/check-wifi-nss-port.sh audits the full backports patch sequence.
   experimental/wifi-nss/patch-overrides/ retains donor authorship, fixes QCN6122 BAR/windows and
     orders the NSS teardown after 953's crash-path interrupt quiesce (999-998).
+    999-996 stops sta_state returning with conf_mutex held (NSS patch 357).
     999-999-rd03v2-nss-recovery-1 clears stale LMAC ring pointers on in-place
     recovery (hardware A/B confirmed), nss-recovery-2 deletes the NSS peers and
     releases the VAP/ext-VAP nodes in unload order; together they make

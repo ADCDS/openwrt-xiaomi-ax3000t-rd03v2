@@ -30,7 +30,8 @@ rebase surrounding contexts; original patch authorship is retained. Two RD03v2
 patches follow the series: `999-998` moves the NSS teardown in firmware-crash
 recovery after the interrupt quiesce added by `953` (the donor hunk lands before
 it) and clears freed tx-descriptor addresses so a failed re-setup cannot free
-them twice; `999-999` is the QCN6122 register fix below. The other
+them twice; `999-999` is the QCN6122 register fix below. `999-996` keeps
+`sta_state` from returning with `conf_mutex` held, and the other
 `999-999-rd03v2-*` patches are described under "Crash recovery with offload on"
 and "ECM VLAN tags for Wi-Fi over a VLAN-aware bridge". The donor
 series itself is fetched from the pinned source, not re-attributed here.
