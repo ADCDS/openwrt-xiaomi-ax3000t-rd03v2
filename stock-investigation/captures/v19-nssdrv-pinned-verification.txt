@@ -56,3 +56,43 @@ All five load-bearing facts hold at d5ee67b, verbatim:
 So a successful run of scripts/v19-nss-pool-experiment.sh should show SUnreclaim
 about 9.4 MB lower, not 10.1 MB. Expecting the gross figure would make a correct
 result look like a shortfall.
+
+=== Closed at build level (residual risk from review round 3) ===
+
+The reviews could only check the driver claims against a clone. The NSS build
+has now run, so the same greps were repeated against the source tarball the
+build actually downloaded and compiled:
+
+    openwrt/dl/qca-nss-drv-12.5.2024.11.13~d5ee67b.tar.zst
+    -> produced kmod-qca-nss-drv-6.12.94.12.5.2024.11.13~d5ee67b-r17.apk
+
+Same revision, same line numbers, verbatim:
+    nss_n2h.c:1216  int num_pages = ALIGN(buf_pool_size, PAGE_SIZE)/PAGE_SIZE;
+    nss_n2h.c:1233  void *kern_addr = kzalloc(PAGE_SIZE, GFP_ATOMIC);
+    nss_n2h.c:1235  BUG_ON(!page_count);
+    nss_n2h.c:1344  * Add extra NSS bufs from host memory
+    nss_core.h:494  uint32_t buf_sz_allocated; /* size of bufs allocated from host */
+    nss_hlos_if.h   LOW 512 / MEDIUM 2048 / else 4096
+
+So the provenance, write-once, BUG_ON, byte-unit and profile-constant claims are
+now verified against the exact code running on the flashed box, not a
+neighbouring revision.
+
+=== Finding #3 verified in the shipped DTB ===
+
+The real build artifact, decompiled:
+    build_dir/target-aarch64_cortex-a53_musl/linux-qualcommax_ipq50xx/
+        image-ipq5018-mi-router-ax3000t-v2.dtb
+
+    memory@40000000    reg = <0x00 0x40000000 0x00 0x800000>   (NSS, 8 MiB)
+    tz_apps@4a400000   reg = <0x00 0x4a400000 0x00 0x400000>
+    bootloader@4a800000
+    sbl@4aa00000
+    smem@4ab00000
+    tz@4ac00000
+    wcss@4b000000      reg = <0x00 0x4b000000 0x00 0x3000000>   (Q6, 48 MiB)
+
+    grep -c q6_mem_regions -> 0
+
+Matches the offline prediction exactly: the duplicate node is gone, the Q6
+carve-out keeps base and size, and the NSS region is untouched.
