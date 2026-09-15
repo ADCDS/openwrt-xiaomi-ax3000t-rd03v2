@@ -182,19 +182,34 @@ target/linux/qualcommax/ipq50xx/base-files/
    4034  target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
          Caldata extraction from 0:ART — 2.4 GHz @ 0x1000,
          5 GHz (QCN6122) @ 0x26800, 0x20000 each.
- 10266  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
+ 41551  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
          Issue #15. Backstop for the WiFi failures the driver does not
          recover by itself: any of remoteproc0/pd-1/pd-2 not "running"
-         for 2 samples, or the in-use channel's survey active time frozen
-         for 4 (the silent death, which raises no fatal IRQ). Escalates
-         rather than rebooting first - ath11k reset of the affected radio
-         (~1s), then that user PD stopped and started (~16s), and only
-         then a reboot. Evidence is written before anything is touched.
-         At most 3 in-place attempts per hour, 10-minute minimum uptime
-         and a 1-hour hold between reboots. Touch
-         /etc/rd03v2-watchdog.disable to neuter it. See
-         docs/q6-firmware-crash.md.
-   259  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog
+         for 2 samples; a radio registered at arm time, or configured in
+         netifd, without its phy, or losing its interfaces while netifd
+         still wants it up (not when it was taken down, its networks are
+         down, or netifd gave up setting it up while it worked); or the
+         in-use channel's survey active time frozen for 4 samples with no
+         station frames received either (a heuristic for the silent
+         death, and the only sign of a root-PD assert, after which the
+         user PDs are not respawned); or the kernel logging that it
+         suppressed a user PD respawn after repeated root PD crashes.
+         Escalates - ath11k reset of the
+         affected radio, that user PD stopped and started, a full ath11k
+         rmmod/insmod with the boot options, radios stopped by hand left
+         down - and reboots; it skips to the
+         reboot once a user-PD stop has failed (kernel log, or PDs still up
+         after the unload), since nothing in place can restart that PD.
+         With NSS Wi-Fi offload configured in /etc/modules.d the first two
+         steps are skipped. iw/wifi/rmmod/insmod/ubus run with deadlines.
+         Evidence is written before anything is touched. At most 3
+         in-place incidents per hour of uptime; reboot gaps counted in
+         uptime and reboots, never the wall clock (no RTC): 10-minute
+         minimum uptime, 1 hour after a watchdog reboot - 10 minutes, up to
+         3 in a row, when no radio is serving - and a held reboot happens
+         once allowed. Touch /etc/rd03v2-watchdog.disable to neuter it.
+         See docs/q6-firmware-crash.md.
+   243  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog
          procd service for the above (START=99, respawns).
    5705  target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
          sysupgrade/NAND-install + U-Boot boot-flags: initramfs prepare,
