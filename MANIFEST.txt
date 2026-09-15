@@ -67,6 +67,25 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          24-cycle soak. Skip the wake CE only when
          hw_params.supports_suspend. Verified: 6 crash cycles after, zero
          warnings.
+  1973  package/kernel/mac80211/patches/ath11k/955-wifi-ath11k-never-fail-a-sta_state-down-transition.patch
+         Report success for sta_state down transitions (mac80211 tears the
+         station down anyway). Removes the one-shot WARN at sta_info.c:1559
+         seen when a station is deleted while the firmware is dead or
+         wedged. Verified: 0 such WARNs over 12 recoveries.
+  1415  package/kernel/mac80211/patches/ath11k/956-wifi-ath11k-quiet-regulatory-skip-during-recovery.patch
+         Drop the "failed to process regulatory info -22" warning printed on
+         recoveries for the deliberately skipped default rules
+         (ATH11K_FLAG_RECOVERY set). Verified: 0 over 12 recoveries.
+  6808  package/kernel/mac80211/patches/ath11k/957-wifi-ath11k-ahb-dont-boot-on-top-of-a-kept-power-reference.patch
+         A failed rproc_shutdown() keeps the user PD power reference, and
+         rproc_boot() on top of it only raises the count and returns 0
+         without booting. power_up() now drops any reference the user PD
+         already holds (kept by this device on hw-restart, by an earlier
+         instance before a reload or re-probe, or taken through sysfs) and
+         fails with -EBUSY and an error when it cannot. This turns a silent
+         hang into an error; it does not bring back a user PD whose stop
+         keeps failing (reload and stop/start still fail then). Its error
+         path has not been forced on the bench.
    1791  package/kernel/mac80211/patches/ath11k/951-wifi-ath11k-introduct-CONFIG_ATH11K_SMALLBUFFERS.patch
          Ziyang Huang's patch (OpenWrt PR #21495, authorship preserved):
          gates ath11k's DP ring-buffer sizes behind CONFIG_ATH11K_SMALLBUFFERS
