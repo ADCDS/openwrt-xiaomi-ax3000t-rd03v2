@@ -75,6 +75,58 @@ but completed with the IPv4 ECM frontend stopped. Afterwards, wired-to-Wi-Fi
 TCP reached 838.89 Mbit/s in an intermediate run with NSS packet/hash-hit
 counters increasing. IPv6 was compiled but was not runtime-tested.
 
+### ECM VLAN tags for Wi-Fi over a VLAN-aware bridge
+
+With `vlan_filtering=1` on br-lan, accelerated flows between a Wi-Fi VAP and
+anything else stalled once ECM pushed the rule, and passed with the IPv4 ECM
+frontend stopped. The AN8855 CPU port is a tagged member of every bridge VLAN,
+but the rules did not say so:
+
+- Bridged DSA port <-> VAP: the 0027 helper declines VLAN-aware bridges, and the
+  NSS frontend never reads ECM's bridge VLAN filter data, so the rule had no VLAN.
+  The NSS forwarded the switch's tagged frames to the VAP with a 4-byte-shifted
+  Ethernet header. A BCM43455 and an RT3070 client received 0 of about 9000 UDP
+  frames. A QCA9377 client received them only because its shifted destination
+  address happened to be multicast.
+- Routed VAP <-> WAN over br-lan.N: the stock VLAN branch put the br-lan.N VID
+  on the Wi-Fi side, which never carries it.
+
+Patch 0029 takes the port's bridge VLAN from `ci->vlan_filter` for a tag_8021q
+DSA port on a VLAN-aware bridge. It uses that VLAN only when the flow and return
+directions recorded the same VID for the port, and refuses acceleration
+otherwise. It also drops the tag on a side whose innermost interface is an
+untagged, non-DSA bridge member. The bench layout was VLAN 1
+untagged on lan2-4, VLAN 20 tagged on lan3, and the `rd03v2-iot` SSID on
+VLAN 20. With that layout, every flow below was accelerated (`accel_mode=2`):
+
+| Path | tiny BCM43455 5 GHz | syd RT3070 2.4 GHz | hal QCA9377 5 GHz |
+| --- | ---: | ---: | ---: |
+| Bridged UDP wired -> Wi-Fi, 500 pps | 3818/3818 | 3607/3824 | 3829/3829 (VLAN 20) |
+| Bridged TCP up / down | 84.9 / 86.8 Mbit/s | 8.6 / 8.9 Mbit/s | 70.0 / 223 Mbit/s |
+| Routed TCP to WAN, up / down | 85.2 / 86.9 Mbit/s | 8.5 / 9.4 Mbit/s | 70.6 / 201 Mbit/s |
+
+On the wire, Wi-Fi -> wired frames left VLAN 1 untagged and VLAN 20 tagged.
+Without VLAN filtering, results were unchanged: UDP 3822/3822, 3671/3827 and
+3811/3811, with TCP accelerated. The kernel logged no WARN.
+
+After the direction-consistency check was added, the same image was re-run in
+all three layouts. Every flow was again accelerated with full 5 GHz UDP
+delivery:
+
+- bridged VLAN: TCP down tiny 87.1, hal 250 Mbit/s;
+- routed WAN: tiny 86.7, hal 240 Mbit/s;
+- no VLAN filtering: tiny 87.0, hal 246 Mbit/s.
+
+The kernel logged no `vlan_filter_add_fail` and no WARN.
+
+Still not accelerated (these stay on the slow path and are delivered):
+
+- non-ported and multicast rules (not changed);
+- routed flows between two VLANs of the same bridge, refused by
+  `ecm_db_connection_add_vlan_filter()`;
+- bridged flows to a host that uses one MAC on several VLANs of the bridge
+  (`v4_ported_vlan_filter_add_fail`).
+
 ### Receive pause on the switch-facing GMAC (all builds)
 
 The PHY-less MAC2 starts with RX flow control disabled although the AN8855 CPU
@@ -237,6 +289,6 @@ configuration passed the integration checker. The cleaned build wrapper itself
 has not undergone another full image rebuild.
 
 Not covered: WAN/NAT, runtime IPv6 acceleration, long-duration or many-client
-load, guest isolation, VLAN-aware bridges, mesh and recovery under NSS Wi-Fi
-load. The original stock/NSS-without-Wi-Fi whole-router hang is not proven to
+load, guest isolation, mesh and recovery under NSS Wi-Fi load (VLAN-aware
+bridges: see patch 0029 above). The original stock/NSS-without-Wi-Fi whole-router hang is not proven to
 have the same cause as the QCN6122 NSS peer-join crash diagnosed here.

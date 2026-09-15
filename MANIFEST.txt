@@ -275,6 +275,8 @@ NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
   experimental/wifi-nss/patch-overrides/ retains donor authorship, fixes QCN6122 BAR/windows and
     orders the NSS teardown after 953's crash-path interrupt quiesce (999-998).
   nss/feed-patches/qca-nss-ecm/0028-ecm-nss-dsa-bridged-tags.patch tags bridged ported flows.
+  nss/feed-patches/qca-nss-ecm/0029-ecm-nss-vlan-aware-bridge-wifi.patch fixes rule VLAN tags for
+    Wi-Fi flows over a VLAN-aware DSA bridge (bridged and routed).
   The switch-conduit RX-pause patch is not part of this integration:
     files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch applies to
     every build (ethtool -A eth1 rx on|off at runtime).
