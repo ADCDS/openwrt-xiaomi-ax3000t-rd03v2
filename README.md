@@ -66,14 +66,27 @@ Each file also comes in an `-nss` variant (`…-sysupgrade-nss.bin`), built with
 QCA NSS hardware offload — see [`docs/nss-offload.md`](docs/nss-offload.md). The two are not
 interchangeable: the NSS kernel differs, so its kmod tarball only matches its own image.
 
-> **Do not restore a config backup across the two flavours.** `/etc/rc.local` is a
-> config file, so `sysupgrade -f <backup>` restores the *old* one over the image's.
-> Going plain → NSS that silently reinstates an `rc.local` with no NSS block, and the
-> box boots with `dev.nss.general.redirect = 0` and the buffer-pool knobs unset —
-> offload effectively off, with nothing in the log to say so. Flash a flavour change
-> **without** `-f`, or afterwards run `cp /rom/etc/rc.local /etc/rc.local` and reboot.
-> Verify with `cat /proc/sys/dev/nss/general/redirect` (want `1`). Found on the bench
-> while testing v1.9's pool change, which lives in that same block.
+> **`/etc/rc.local` survives every upgrade, so its NSS knobs can go stale.**
+> `rc.local` is listed in `/lib/upgrade/keep.d/base-files-essential`, and
+> `sysupgrade` saves config by default (`SAVE_CONFIG=1`) — so a **plain
+> `sysupgrade <image>`, with no flags at all**, tars your running `rc.local` and
+> restores it over the new image's copy in the overlay, where it shadows `/rom`.
+> `-f` is not required and `-n` (which discards all config) is the only flag that
+> avoids it.
+>
+> The NSS build puts `general/redirect` and the `ipv{4,6}_accel_mode` writes in
+> that file, so upgrading an NSS box — even NSS → NSS — keeps whatever `rc.local`
+> you already had. If the new release changed that block, you do not get the
+> change, and nothing logs it. After any NSS upgrade:
+>
+> ```sh
+> cmp -s /etc/rc.local /rom/etc/rc.local || cp /rom/etc/rc.local /etc/rc.local
+> reboot            # then: cat /proc/sys/dev/nss/general/redirect  -> 1
+> ```
+>
+> This is exactly why v1.9's buffer-pool knobs are **not** in `rc.local` but in
+> `/etc/init.d/nss-bufpool`, which is not in any keep list and therefore always
+> comes from the image.
 The four initramfs artifacts are `…-initramfs-uImage{,-nss}{,-wifi}.itb` and likewise for
 `-initramfs-factory…ubi`; the kmod tarball for a flavour matches **both** of its initramfs
 variants, because they come from one build and differ only in `/etc/rc.local`.

@@ -139,26 +139,6 @@ if [ "$WITH_NSS" = "1" ]; then
 echo 1 > /proc/sys/dev/nss/general/redirect 2>/dev/null\
 echo 1 > /proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode 2>/dev/null\
 echo 1 > /proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode 2>/dev/null\
-\
-# Host-side NSS buffer pool, matching stock RD03v2 (ROM 2.0.28). The non-LOW\
-# profile default is 8704 empty skbs handed to the NSS; they live in Linux slab\
-# permanently as SUnreclaim. Stock runs 4096 and buys the descriptors back with\
-# extra_pbuf_core0. Boot-to-boot A/B on the bench, same image, idle, differing\
-# only in whether this block ran: SUnreclaim 44,576 -> 38,992 kB, a net -5,584 kB\
-# after extra_pbuf'"'"'s own cost, with MemAvailable 37,088 -> 40,016 kB. The NSS\
-# descriptor pool reaches 14,884, stock'"'"'s exact number, with no core restart.\
-# Driving the pool knob both ways mid-boot moves SUnreclaim -5.2 / +4.3 / -3.4 MB,\
-# so the effect is causal and reversible. 1.7 GB of forwarded traffic left\
-# n2h_payload_alloc_fails unmoved, so 4096 is enough for this datapath.\
-#\
-# extra_pbuf_core0 goes FIRST because it is write-once per boot: the handler\
-# returns -EPERM once buf_sz_allocated is set. It is not the nss@40000000\
-# carve-out either - those pages are kzalloc(GFP_ATOMIC)+dma_map_single from\
-# host memory (~784 kB), which is part of why the net is a few MB and not the\
-# ~10 MB an earlier estimate predicted (the rest was a wrong per-buffer size).\
-# See stock-investigation/notes/V1.9-TUNING.md finding #1.\
-echo 802816 > /proc/sys/dev/nss/n2hcfg/extra_pbuf_core0 2>/dev/null\
-echo 4096   > /proc/sys/dev/nss/n2hcfg/n2h_empty_pool_buf_core0 2>/dev/null\
 ' "$RCL"
 fi
 

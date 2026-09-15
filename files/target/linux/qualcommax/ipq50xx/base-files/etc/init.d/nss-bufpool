@@ -1,0 +1,68 @@
+#!/bin/sh /etc/rc.common
+# Host-side NSS buffer pool, matching stock RD03v2 (ROM 2.0.28).
+#
+# The non-LOW NSS memory profile hands the NSS 8704 empty skbs; they sit in
+# Linux slab permanently as SUnreclaim. Stock runs 4096 and buys the descriptor
+# count back with extra_pbuf_core0. Measured boot-to-boot on the bench, same
+# image, idle, differing only in whether this ran:
+#
+#     SUnreclaim    44,576 -> 38,992 kB   (net -5.5 MB, extra_pbuf's cost included)
+#     MemAvailable  37,088 -> 40,016 kB
+#     n2h_pbuf_def_total_count reaches 14,884 - stock's exact number
+#
+# WHY THIS IS AN INIT SCRIPT AND NOT rc.local:
+# /etc/rc.local is listed in /lib/upgrade/keep.d/base-files-essential, so a
+# PLAIN `sysupgrade <image>` (SAVE_CONFIG=1 is the default) tars the running
+# copy and restores it over the new image's. An upgrading user would keep their
+# old rc.local and never run this block - a silent no-op, with no log line to
+# say so. /etc/init.d is not in any keep list, so the image's copy always wins.
+# /etc/sysctl.d is not preserved either, but the sysctl service runs at START=11
+# and qca-nss-drv only at START=94, so the knobs would not exist yet.
+START=95
+
+# After qca-nss-drv (94), so /proc/sys/dev/nss/n2hcfg exists.
+
+N2H=/proc/sys/dev/nss/n2hcfg
+
+# extra_pbuf_core0's allocator is kzalloc(PAGE_SIZE, GFP_ATOMIC) in a loop, with
+# BUG_ON(!page_count) if the FIRST page of a message fails. page_count restarts
+# every message and 802816 B = 196 pages = 7 messages, so there are 7 chances to
+# hit it. This box runs panic_on_oops=1 and kernel.panic=3, which turns that BUG
+# into a 3-second reboot - and because this runs at boot, into a reboot LOOP.
+#
+# GFP_ATOMIC cannot reclaim, so the only defence is not to ask when memory is
+# short. Skip the extra_pbuf write below this much MemAvailable (kB). The pool
+# shrink is the part that actually saves memory and is not affected.
+EXTRA_PBUF_MIN_AVAIL_KB=${EXTRA_PBUF_MIN_AVAIL_KB:-20480}
+
+boot() {
+	start "$@"
+}
+
+start() {
+	[ -d "$N2H" ] || return 0
+
+	# extra_pbuf_core0 first: it is write-once per boot (the handler returns
+	# -EPERM once buf_sz_allocated is set), so it gets its chance before
+	# anything else can fail. Despite the name it is NOT the nss@40000000
+	# carve-out: those pages are host memory (~784 kB).
+	local avail
+	avail=$(sed -n 's/^MemAvailable:[[:space:]]*\([0-9]\+\).*/\1/p' /proc/meminfo)
+	if [ -n "$avail" ] && [ "$avail" -ge "$EXTRA_PBUF_MIN_AVAIL_KB" ]; then
+		echo 802816 > "$N2H/extra_pbuf_core0" 2>/dev/null
+	else
+		logger -t nss-bufpool \
+			"skipping extra_pbuf_core0: MemAvailable ${avail:-?} kB < ${EXTRA_PBUF_MIN_AVAIL_KB} kB"
+	fi
+
+	echo 4096 > "$N2H/n2h_empty_pool_buf_core0" 2>/dev/null
+
+	logger -t nss-bufpool "pool=$(cat "$N2H/n2h_empty_pool_buf_core0" 2>/dev/null) extra_pbuf=$(cat "$N2H/extra_pbuf_core0" 2>/dev/null)"
+}
+
+stop() {
+	# Only the pool size can be put back; extra_pbuf_core0 is write-once and
+	# its pages are held until the module is reloaded.
+	[ -d "$N2H" ] || return 0
+	echo 8704 > "$N2H/n2h_empty_pool_buf_core0" 2>/dev/null
+}
