@@ -359,3 +359,36 @@ version was not:
     after stop    : "pool restored to 8704"
     stale rc.local: "note: extra_pbuf_core0=802816 was set by something else
                      (stale /etc/rc.local?); this build does not set it"
+
+=== ADDENDUM 7: the shipped squashfs verified, not just the source ===
+
+Every earlier check looked at the source tree or a hand-installed copy. This one
+opens the actual image:
+
+    unsquashfs build_dir/.../linux-qualcommax_ipq50xx/root.squashfs \
+        etc/init.d/nss-bufpool etc/rc.d
+
+    etc/init.d/nss-bufpool   START=96   4088 bytes
+    etc/rc.d/S96nss-bufpool -> ../init.d/nss-bufpool
+    grep -c "echo 802816"  ->  0
+
+So the shipped rootfs carries the right script, OpenWrt's init-enable loop
+created the S96 symlink without any help, the START=96 tie-break with
+/etc/init.d/done (START=95) is in the image, and the extra_pbuf write is
+genuinely absent rather than just absent from the source.
+
+A build-mechanics trap worth recording, because it produced a wrong image once:
+hot-syncing a rootfs file into a running build is NOT enough. The first image
+from this tree shipped the stale START=95 script, because
+build_dir/.../root.orig-qualcommax and root-qualcommax had already been
+assembled and are treated as caches. `make package/base-files/compile` rebuilt
+the package correctly (its .pkgdir copy showed START=96) while the staged rootfs
+kept the old file. Removing both cache dirs and re-running `make package/install`
+followed by `make target/install` regenerated them properly; removing them and
+running only `target/install` fails outright, because the initramfs step needs
+root-qualcommax to exist.
+
+Lesson for the release build: do not trust an incremental image after changing a
+base-files file. Either rebuild from scratch or clear
+build_dir/target-*/root*-<target> and re-run package/install first, then verify
+the artifact itself with unsquashfs rather than the tree.
