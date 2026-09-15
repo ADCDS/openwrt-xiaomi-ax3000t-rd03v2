@@ -44,3 +44,27 @@ Interface counters across a separate 5 s run, proving the traffic is FORWARDED
 
 This engages ECM on an NSS build, which the existing phase-8 captures could not:
 those ran wifi-to-router (terminated). This is the load generator for finding #1.
+
+=== Restored after the v1.9 routed test (2026-07) ===
+
+The routed segment (lan3 in its own br-wired / 192.168.5.0/24) was built only to
+engage ECM for finding #1's load test. It has been undone:
+
+  - lan3 is back in br-lan's port list (lan2 lan3 lan4)
+  - network.wired and network.brwired deleted; "wired" removed from firewall
+    zone lan
+  - syd's 192.168.5.50/24 removed from the wired interface
+
+The bench is once again a single 192.168.1.0/24 segment with syd wired on
+192.168.1.50 (static, outside the DHCP pool) and tiny on 5 GHz. scripts/bsh
+therefore works with its defaults again; the routed runs needed
+BENCH_HOST=192.168.5.1 BENCH_ADDR=192.168.5.50/24 overrides.
+
+Verified after the restore that the v1.9 change is unaffected by a network
+restart: pool=4096, extra_pbuf=0, SUnreclaim 38,252 kB.
+
+Worth keeping for anyone repeating the routed test: making lan3 a STANDALONE DSA
+port does not work (tag_8021q needs bridged ports - a single-port bridge is
+fine), the new network must be added to a firewall zone, and the driving host
+must DROP its address on the old subnet or the kernel treats the peer as on-link
+and never routes.
