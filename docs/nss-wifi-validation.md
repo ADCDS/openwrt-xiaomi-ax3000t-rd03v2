@@ -20,7 +20,9 @@ The donor must be clean. Without `WIFI_NSS_DONOR`, ath11k NSS remains disabled.
 `PREPARE_ONLY=1` stops after configuration. The integration retains SMALLBUFFERS,
 selects NSS firmware 12.5 and the MEDIUM NSS memory profile (the existing NSS
 build's; `WIFI_NSS_MEM_PROFILE=LOW` selects LOW, which caps accelerated
-connections at 512 per IP family), and assigns radio
+connections at 512 per IP family — note stock RD03v2 runs exactly that 512, so
+the cap alone is not the argument for MEDIUM; see the rationale in
+`tools/integrate-wifi-nss.py`), and assigns radio
 priorities 0/1 to the board's `wifi`/`wifi1` labels. It tracks memory-profile
 configuration changes in the NSS driver's package stamp. Mesh and generic
 mac80211 redirect remain disabled. The existing firmware memory mode is retained.

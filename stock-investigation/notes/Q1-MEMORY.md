@@ -190,16 +190,44 @@ side of the fence:
 
 | | stock | port v1.8 |
 |---|---:|---:|
-| `extra_pbuf_core0` (NSS-side, from the 8 MiB carve-out) | **802,816** | **0** |
+| `extra_pbuf_core0` (extra NSS descriptors, host-backed) | **802,816** | **0** |
 | `n2h_empty_pool_buf_core0` (host-side, Linux slab) | **4096** | **8704** |
 | resulting `n2h_pbuf_def_total_count` | **14,884** | 9,984 |
 | `n2h_pbuf_def_free_count` | 6,692 | 9,982 |
 
 Stock ends up with **more** NSS descriptors (14,884 vs 9,984) while spending
-**less** Linux memory, because `extra_pbuf_core0` is carved out of
-`nss@40000000` — 8 MiB that is `no-map` reserved on our board too, whether we use
-it or not. `/sys/kernel/debug/qca-nss-drv/meminfo/core0` shows it:
-`heap_ddr_size 0x800000 @ 0x40000000`.
+**less** Linux memory on the empty-buffer pool.
+
+> **Correction (v1.9 review).** An earlier revision of this section said
+> `extra_pbuf_core0` is "carved out of `nss@40000000`", i.e. that stock moves the
+> buffering to the other side of the fence for free. **That is wrong**, and the
+> error propagated into `V1.9-TUNING.md` and briefly into
+> `tools/integrate-wifi-nss.py` before an adversarial review of the v1.9 changes
+> caught it. In `nss-drv` the extra pbuf pages come from **host** memory:
+> `nss_n2h_buf_pool_cfg()` does `kzalloc(PAGE_SIZE, GFP_ATOMIC)` +
+> `dma_map_single()` per page, the function header reads "Add extra NSS bufs from
+> host memory", and `nss_core.h` names the accounting field
+> `buf_sz_allocated /* size of bufs allocated from host */`.
+>
+> So 802,816 bytes is ~784 KiB of **additional** Linux memory, not a relocation
+> out of Linux. The net of matching stock is still strongly positive — roughly
+> 10 MB of empty-pool slab returned against ~0.8 MB handed back — but it is a
+> net, not a free transfer, and that distinction is what makes the arithmetic
+> below honest.
+>
+> Two further properties of this knob, from the same source:
+> - **Write-once per boot.** The handler returns `-EPERM` once
+>   `buf_sz_allocated` is non-zero, so `extra_pbuf_core0` cannot be re-tuned or
+>   undone without a module reload. It is *not* "runtime-reversible".
+> - **`BUG_ON` on the first failed atomic page.** The allocation loop is
+>   `GFP_ATOMIC` with `BUG_ON(!page_count)`. Setting this on a memory-pressured
+>   box is therefore not risk-free, and it interacts badly with any proposal to
+>   shrink `vm.min_free_kbytes` (finding #2) on the same box.
+
+The NSS's own DDR heap is separate and unchanged by this knob:
+`/sys/kernel/debug/qca-nss-drv/meminfo/core0` shows `heap_ddr_size 0x800000 @
+0x40000000`, the 8 MiB `nss@40000000` region that is `no-map` reserved on our
+board whether we use it or not.
 
 **This is the actionable finding for PR #17's NSS memory profile:** set
 `n2h_empty_pool_buf_core0=4096` and `extra_pbuf_core0=802816`, matching stock.
