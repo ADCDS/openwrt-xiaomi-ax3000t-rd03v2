@@ -257,6 +257,29 @@ with `sysupgrade -u -b` while `rc.local` is unedited, or after the restore run
 Nothing ships by default to turn pause off. `ethtool` is in every image: NSS
 builds get it through `qca-nss-ecm` and `build.sh` adds it to the default build.
 
+### ath11k crash-recovery fixes in both builds
+
+Three patches in `files/` reach both builds:
+- `955` removes a one-shot WARN seen when a station is deleted while the
+  firmware is dead or wedged; `956` removes the regulatory `-22` line printed
+  on recoveries.
+- `957` keeps `ath11k_ahb_power_up()` from booting silently on top of a user PD
+  power reference that is already held: one a failed `rproc_shutdown()` kept
+  on hw-restart, one kept on remove before a module reload or re-probe, or one
+  taken through remoteproc sysfs. It drops the reference first and fails with
+  `-EBUSY` and an error if it cannot. It does not recover a user PD whose stop
+  keeps failing (for example after a root PD assert): the hw-restart, a reload
+  and a sysfs stop/start still fail then, now with an error instead of a
+  silent wait.
+
+Bench checks for these patches:
+- `955`: the WARN is one-shot, so check for `sta_info.c:1559` only in a boot
+  where it has not fired yet.
+- `957`: grep for `failed to shut down remote processor`,
+  `already holds .* power reference` and `cannot drop the power reference`
+  after assert and hw-restart trials. A forced reload-failure scenario is
+  still needed with 957 in the image.
+
 ## Final installed-image test
 
 Hardware: one RD03v2, 256 MB RAM, IPQ5018 + QCN6122 + AN8855. A wired WSL2 host

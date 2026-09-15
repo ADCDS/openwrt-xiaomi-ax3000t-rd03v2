@@ -1,0 +1,186 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: ahb: don't boot on top of a kept power reference
+
+ath11k_ahb_power_down() ignores the return value of rproc_shutdown().
+rproc_shutdown() leaves the power count as it was on every error path
+(it takes the reference back when rproc_stop() fails, and never drops
+it when the processor is not running), so after a failed shutdown the
+reference is still held. The next ath11k_ahb_power_up() then calls
+rproc_boot(), which only raises the count to 2 and returns 0 without
+starting anything, and the driver waits for a firmware that never
+boots. Every later shutdown is one reference short: module unload and
+remoteproc sysfs "stop" only decrement the count and never stop the
+user PD.
+
+On RD03v2 (IPQ5018 multi-PD) a hw-restart after a root PD assert hits
+this: the user PD stop handshake times out (-110, "pd not stopped").
+The same happens on remove (module unload, device re-probe) when the
+stop fails there, and then the knowledge that the reference was kept
+is freed with the device.
+
+Track whether this device holds a reference, and check the count
+itself before booting:
+- power_down() drops the reference only when this device holds one,
+  and keeps it with a warning when rproc_shutdown() fails.
+- power_up() drops any reference the user PD already holds before it
+  calls rproc_boot(): the one this device kept (in-place hw-restart),
+  one an earlier instance kept before a module reload or re-probe, or
+  one taken through remoteproc sysfs (that processor is simply booted
+  again). Only this driver and sysfs take references on a user PD. If a
+  reference cannot be dropped (the stop fails again, or the processor
+  holds a reference while not running), it logs an error and returns
+  -EBUSY instead of booting on top of it.
+
+This does not make a user PD whose stop keeps failing come back: the
+hw-restart, a reload or a sysfs stop/start still cannot recover it
+until the stop itself succeeds. It only replaces a silent hang with an
+error, and lets the boot proceed once a retried stop works.
+---
+--- a/drivers/net/wireless/ath/ath11k/ahb.h
++++ b/drivers/net/wireless/ath/ath11k/ahb.h
+@@ -23,6 +23,8 @@
+ 
+ struct ath11k_ahb {
+ 	struct rproc *tgt_rproc;
++	/* this device holds a tgt_rproc power reference (rproc_boot() done) */
++	bool rproc_powered;
+ 	struct {
+ 		struct device *dev;
+ 		struct iommu_domain *iommu_domain;
+--- a/drivers/net/wireless/ath/ath11k/ahb.c
++++ b/drivers/net/wireless/ath/ath11k/ahb.c
+@@ -415,23 +415,131 @@
+ 	ath11k_ce_cleanup_pipes(ab);
+ }
+ 
++/*
++ * Nothing but this driver and remoteproc sysfs takes a power reference on a
++ * user PD: auto_boot is off, and the root PD driver only boots the root PD.
++ * Normally there is at most one; the bound only stops a runaway loop.
++ */
++#define ATH11K_AHB_RPROC_MAX_DROPS	4
++
++/* consistent snapshot; waits for a remoteproc recovery in progress */
++static int ath11k_ahb_rproc_power(struct rproc *rproc,
++				  enum rproc_state *state)
++{
++	int power;
++
++	mutex_lock(&rproc->lock);
++	*state = rproc->state;
++	power = atomic_read(&rproc->power);
++	mutex_unlock(&rproc->lock);
++
++	return power;
++}
++
++/*
++ * A power reference that exists before rproc_boot() is one of:
++ * - the one this device kept when its last power down failed
++ *   (ab_ahb->rproc_powered is still set; in-place hw-restart);
++ * - the one an earlier instance of this device kept when its power down
++ *   failed on remove (module reload, device re-probe). That instance and
++ *   its rproc_powered flag are gone, only the count is left;
++ * - one taken through remoteproc sysfs "start".
++ * rproc_boot() on top of any of them only raises the count and returns 0
++ * without starting the firmware: the driver would wait for a firmware that
++ * never boots, and every later shutdown would be one reference short.
++ * Drop them first, which stops the processor (a sysfs-started one is simply
++ * booted again). If a reference cannot be dropped, say so and don't boot.
++ */
++static int ath11k_ahb_rproc_drop_stale_refs(struct ath11k_base *ab)
++{
++	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
++	struct rproc *rproc = ab_ahb->tgt_rproc;
++	enum rproc_state state;
++	int i, power, ret = 0;
++
++	power = ath11k_ahb_rproc_power(rproc, &state);
++	if (power) {
++		ath11k_warn(ab, "remote processor %s already holds %d power reference(s) (state %d, %s), dropping them before boot\n",
++			    rproc->name, power, state,
++			    ab_ahb->rproc_powered ?
++			    "kept by a failed shutdown of this device" :
++			    "not taken by this device instance: failed shutdown before a reload or re-probe, or remoteproc sysfs");
++	}
++
++	for (i = 0; power && i < ATH11K_AHB_RPROC_MAX_DROPS; i++) {
++		/* rproc_shutdown() refuses a processor that is not running */
++		if (state != RPROC_RUNNING && state != RPROC_ATTACHED)
++			break;
++
++		ret = rproc_shutdown(rproc);
++		power = ath11k_ahb_rproc_power(rproc, &state);
++		if (ret)
++			break;
++	}
++
++	if (power) {
++		ath11k_err(ab, "cannot drop the power reference(s) of remote processor %s (count %d, state %d, error %d), not booting it\n",
++			   rproc->name, power, state, ret);
++		return -EBUSY;
++	}
++
++	ab_ahb->rproc_powered = false;
++
++	return 0;
++}
++
+ static int ath11k_ahb_power_up(struct ath11k_base *ab)
+ {
+ 	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+ 	int ret;
+ 
+-	ret = rproc_boot(ab_ahb->tgt_rproc);
++	ret = ath11k_ahb_rproc_drop_stale_refs(ab);
+ 	if (ret)
++		return ret;
++
++	ret = rproc_boot(ab_ahb->tgt_rproc);
++	if (ret) {
+ 		ath11k_err(ab, "failed to boot the remote processor Q6\n");
++		return ret;
++	}
++
++	ab_ahb->rproc_powered = true;
+ 
+-	return ret;
++	return 0;
+ }
+ 
+ static void ath11k_ahb_power_down(struct ath11k_base *ab, bool is_suspend)
+ {
+ 	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
++	struct rproc *rproc = ab_ahb->tgt_rproc;
++	enum rproc_state state;
++	int power, ret;
++
++	/* a redundant rproc_shutdown() would drop another user's reference */
++	if (!ab_ahb->rproc_powered) {
++		ath11k_dbg(ab, ATH11K_DBG_AHB,
++			   "remote processor %s not powered by this device, skipping shutdown\n",
++			   rproc->name);
++		return;
++	}
++
++	ret = rproc_shutdown(rproc);
++	if (ret) {
++		/*
++		 * rproc_shutdown() puts the reference back when the stop fails
++		 * and fails without touching it when the processor is not
++		 * running. No reference left means it was stopped from
++		 * elsewhere (remoteproc sysfs) and there is nothing to drop.
++		 */
++		power = ath11k_ahb_rproc_power(rproc, &state);
++		if (power) {
++			ath11k_warn(ab, "failed to shut down remote processor %s: %d (count %d, state %d), its next power up retries\n",
++				    rproc->name, ret, power, state);
++			return;
++		}
++	}
+ 
+-	rproc_shutdown(ab_ahb->tgt_rproc);
++	ab_ahb->rproc_powered = false;
+ }
+ 
+ static void ath11k_ahb_init_qmi_ce_config(struct ath11k_base *ab)

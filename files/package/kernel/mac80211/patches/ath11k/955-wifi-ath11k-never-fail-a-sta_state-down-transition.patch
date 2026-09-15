@@ -1,0 +1,45 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: never fail a sta_state down transition
+
+mac80211 documents that .sta_state "must not fail for down transitions":
+the station is torn down whatever the driver returns, and a non-zero
+return only trips WARN_ON_ONCE() in __sta_info_destroy_part2() (NONE ->
+NOTEXIST) or the "Driver is not allowed to fail" WARN_ONCE() in
+_sta_info_move_state().
+
+ath11k propagates WMI errors from ath11k_mac_station_remove() and
+ath11k_station_disassoc(). When a station is deleted while the firmware
+is dead (-ESHUTDOWN while ATH11K_FLAG_CRASH_FLUSH is set) or wedged
+(-ENOBUFS, CE ring not serviced), the first such deletion after
+mac80211 is loaded produces (both WARNs are one-shot):
+
+  WARNING: ... at net/mac80211/sta_info.c:1559 sta_set_sinfo+0x1104/0x1128 [mac80211]
+  x0 : 00000000ffffff94    (-ESHUTDOWN; -ENOBUFS = ffffff97 on a zombie QCN6122)
+   sta_info_destroy_addr_bss / ieee80211_del_station / nl80211_del_station
+
+(sta_set_sinfo is kallsyms' nearest global symbol in the stripped module;
+the PC is in __sta_info_destroy_part2() at the drv_sta_state() check.)
+
+The host-side peer is already freed in the NONE -> NOTEXIST branch when
+the firmware delete fails, so report success for all down transitions
+and keep the ath11k_warn() lines.
+---
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -9932,6 +9932,16 @@
+ 				    sta->addr);
+ 	}
+ 
++	/* mac80211 does not allow a driver to fail a transition down the
++	 * state list: the station is torn down regardless, and an error only
++	 * trips a WARN in _sta_info_move_state()/__sta_info_destroy_part2().
++	 * That happens whenever WMI is unusable - -ESHUTDOWN after a firmware
++	 * crash, -ENOBUFS when the firmware stops servicing its rings - and
++	 * the host-side peer is freed in the NONE -> NOTEXIST branch anyway.
++	 */
++	if (new_state < old_state)
++		ret = 0;
++
+ 	mutex_unlock(&ar->conf_mutex);
+ 	return ret;
+ }
