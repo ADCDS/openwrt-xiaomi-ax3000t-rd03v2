@@ -30,7 +30,9 @@ rebase surrounding contexts; original patch authorship is retained. Two RD03v2
 patches follow the series: `999-998` moves the NSS teardown in firmware-crash
 recovery after the interrupt quiesce added by `953` (the donor hunk lands before
 it) and clears freed tx-descriptor addresses so a failed re-setup cannot free
-them twice; `999-999` is the QCN6122 register fix below. The donor
+them twice; `999-999` is the QCN6122 register fix below. The other
+`999-999-rd03v2-*` patches are described under "ECM VLAN tags for Wi-Fi over a
+VLAN-aware bridge". The donor
 series itself is fetched from the pinned source, not re-attributed here.
 Optional LibreSpeed feed links are excluded in this mode because their virtual
 providers caused a Kconfig cycle in the tested feed set. This does not delete
@@ -126,6 +128,17 @@ Still not accelerated (these stay on the slow path and are delivered):
   `ecm_db_connection_add_vlan_filter()`;
 - bridged flows to a host that uses one MAC on several VLANs of the bridge
   (`v4_ported_vlan_filter_add_fail`).
+
+On the same VLAN-aware bridge no client got past the WPA handshake before ECM
+was involved. With NSS offload hostapd receives EAPOL on a packet socket, and
+M2 of the 4-way handshake reached the bridge addressed to the AP, kept its PVID
+tag and was passed up on `br-lan.<vid>`, where hostapd does not listen: every
+handshake timed out (reason 15) on every SSID.
+`999-999-rd03v2-nss-vlan-eapol-to-pae-group` re-addresses EAPOL frames for the
+AP to the 802.1X PAE group address, which the bridge passes up on the ingress
+port. `999-999-rd03v2-reo-update-queue-noncoherent-free` fixes the donor's REO
+update-queue cleanup, which freed `dma_alloc_noncoherent()` descriptors with
+`kfree()` and hit a slab WARNING on `rmmod` after a firmware crash.
 
 ### Receive pause on the switch-facing GMAC (all builds)
 

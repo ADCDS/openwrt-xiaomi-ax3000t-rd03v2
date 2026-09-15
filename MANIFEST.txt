@@ -274,6 +274,9 @@ NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
   tools/check-wifi-nss-port.sh audits the full backports patch sequence.
   experimental/wifi-nss/patch-overrides/ retains donor authorship, fixes QCN6122 BAR/windows and
     orders the NSS teardown after 953's crash-path interrupt quiesce (999-998).
+    999-999-rd03v2-nss-vlan-eapol-to-pae-group delivers EAPOL to hostapd on
+    VLAN-aware bridges; 999-999-rd03v2-reo-update-queue-noncoherent-free frees
+    queued REO update descriptors the way they were allocated.
   nss/feed-patches/qca-nss-ecm/0028-ecm-nss-dsa-bridged-tags.patch tags bridged ported flows.
   nss/feed-patches/qca-nss-ecm/0029-ecm-nss-vlan-aware-bridge-wifi.patch fixes rule VLAN tags for
     Wi-Fi flows over a VLAN-aware DSA bridge (bridged and routed).
