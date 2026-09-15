@@ -1,0 +1,84 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: keep sends blocked until recovery sets the rings up
+
+ath11k_core_reconfigure_on_crash() clears the HAL ring table with
+ath11k_hal_srng_clear() and then clears ATH11K_FLAG_CRASH_FLUSH before
+calling ath11k_core_qmi_firmware_ready(), which sets the CE rings up
+again only after its QMI exchanges with the firmware, tens of
+milliseconds later. mac80211 keeps calling into the driver during a
+recovery, so a WMI command sent in that window passes the CRASH_FLUSH
+check in ath11k_ce_send() and reads the cleared ring's NULL tail pointer
+in ath11k_hal_srng_access_begin(), with BH disabled: the kernel panics.
+
+On an IPQ5018/QCN6122 AX3000T this reset the board when a user PD was
+restarted after a double firmware crash. mac80211 had been sending the
+same burst of WMI commands every 6.066 s (failing with -ESHUTDOWN) and
+the oops came exactly when the next burst was due, 37 ms after the
+recovery's QMI device info exchange. A single recovery has the same
+window, only rarely with a sender in it.
+
+Set CRASH_FLUSH again when ath11k_core_qmi_firmware_ready() starts on a
+registered device and clear it once the CE and DP rings are set up,
+before ath11k_core_start() needs WMI, unless the firmware crashed again
+meanwhile (fw_crash_counter moved), which must keep sends failing fast.
+ath11k_core_reconfigure_on_crash() still clears the flag first, so also
+check in ath11k_ce_send() that the ring is set up before touching it.
+
+--- a/drivers/net/wireless/ath/ath11k/core.c
++++ b/drivers/net/wireless/ath/ath11k/core.c
+@@ -2300,6 +2300,7 @@
+ 
+ int ath11k_core_qmi_firmware_ready(struct ath11k_base *ab)
+ {
++	u32 crashes = 0;
+ 	int ret;
+ 
+ 	switch (ath11k_crypto_mode) {
+@@ -2316,6 +2317,19 @@
+ 		return -EINVAL;
+ 	}
+ 
++	/*
++	 * A crash recovery gets here with the HAL ring table cleared, and
++	 * mac80211 still sends WMI commands. Keep them failing with -ESHUTDOWN
++	 * until the rings are set up again below: the QMI exchanges before
++	 * that take tens of milliseconds.
++	 */
++	if (test_bit(ATH11K_FLAG_REGISTERED, &ab->dev_flags)) {
++		set_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags);
++		spin_lock_bh(&ab->base_lock);
++		crashes = ab->stats.fw_crash_counter;
++		spin_unlock_bh(&ab->base_lock);
++	}
++
+ 	ret = ath11k_core_start_firmware(ab, ab->fw_mode);
+ 	if (ret) {
+ 		ath11k_err(ab, "failed to start firmware: %d\n", ret);
+@@ -2334,6 +2348,12 @@
+ 		goto err_firmware_stop;
+ 	}
+ 
++	/* unless the firmware crashed again meanwhile (QMI server exit) */
++	spin_lock_bh(&ab->base_lock);
++	if (ab->stats.fw_crash_counter == crashes)
++		clear_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags);
++	spin_unlock_bh(&ab->base_lock);
++
+ 	if (ath11k_frame_mode == ATH11K_HW_TXRX_RAW)
+ 		set_bit(ATH11K_FLAG_RAW_MODE, &ab->dev_flags);
+ 
+--- a/drivers/net/wireless/ath/ath11k/ce.c
++++ b/drivers/net/wireless/ath/ath11k/ce.c
+@@ -760,6 +760,12 @@
+ 
+ 	spin_lock_bh(&srng->lock);
+ 
++	/* cleared by a crash recovery that has not set the rings up yet */
++	if (unlikely(!srng->initialized || !srng->u.src_ring.tp_addr)) {
++		ret = -ESHUTDOWN;
++		goto err_unlock;
++	}
++
+ 	ath11k_hal_srng_access_begin(ab, srng);
+ 
+ 	if (unlikely(ath11k_hal_srng_src_num_free(ab, srng, false) < 1)) {
