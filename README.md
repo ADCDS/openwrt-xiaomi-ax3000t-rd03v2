@@ -445,7 +445,7 @@ See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 **v1.9 adds ~6 MB back.** Live inspection of a stock RD03v2 (ROM 2.0.28) showed stock hands the NSS
 only 4096 host-side buffers where the NSS memory profile defaults to 8704. Those are empty skbs pinned
 in Linux slab as `SUnreclaim`, so halving them is a straight return: measured boot-to-boot on the bench,
-same image, idle, `SUnreclaim` **44,576 → 38,144 kB** and `MemAvailable` **37,088 → 42,820 kB**. It ships
+same image, idle, `SUnreclaim` **44,576 → 38,204 / 38,144 kB** across two boots and `MemAvailable` **37,088 → ~42,800 kB**. It ships
 as `/etc/init.d/nss-bufpool` (NSS builds only in effect — on a plain build the sysctl tree does not exist
 and the script is a no-op). See [`stock-investigation/`](stock-investigation/) for the full comparison, and
 note what v1.9 deliberately does **not** take from stock: `extra_pbuf_core0`, which *costs* ~784 kB of host

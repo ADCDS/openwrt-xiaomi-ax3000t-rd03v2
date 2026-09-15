@@ -187,11 +187,11 @@ target/linux/qualcommax/ipq50xx/base-files/
          NOTE: rc.local is in /lib/upgrade/keep.d/base-files-essential, so
          a PLAIN sysupgrade restores the running copy over the image's and
          those knobs can go stale across an upgrade. See README.
-   4088  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-bufpool
+   4513  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-bufpool
          v1.9. Sets the NSS host buffer pool to stock's 4096 instead of
          the profile default 8704 (START=96, after qca-nss-drv at 94 and
-         after done/rc.local at 95). Worth ~6.4 MB of unreclaimable slab,
-         measured boot-to-boot. Deliberately NOT in rc.local, which
+         after done/rc.local at 95). Worth ~6.3 MB of unreclaimable slab,
+         measured over two idle boots. Deliberately NOT in rc.local, which
          sysupgrade preserves: an upgrading user would keep their old copy
          and silently never run it. Deliberately does NOT set stock's
          extra_pbuf_core0: that COSTS ~784 kB of host memory and its
