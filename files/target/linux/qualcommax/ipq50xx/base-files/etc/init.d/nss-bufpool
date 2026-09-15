@@ -31,10 +31,10 @@
 #   - It is write-once per boot (-EPERM once buf_sz_allocated is set), so it
 #     cannot be undone without a module reload.
 # Trading a reboot-loop tail risk for 4,900 extra descriptors - which cost
-# ~784 kB of host memory to obtain - is a bad deal. The
-# pool write below allocates nothing and has no BUG_ON path, so it carries none
-# of that risk while delivering the memory. See
-# stock-investigation/notes/V1.9-TUNING.md finding #1.
+# ~784 kB of host memory to obtain - is a bad deal. The pool write below
+# allocates nothing and has no BUG_ON path, so it carries none of that risk
+# while delivering the memory.
+# See stock-investigation/notes/V1.9-TUNING.md finding #1.
 #
 # WHY AN INIT SCRIPT AND NOT rc.local
 # /etc/rc.local is in /lib/upgrade/keep.d/base-files-essential, and sysupgrade
