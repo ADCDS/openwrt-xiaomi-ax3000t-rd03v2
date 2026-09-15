@@ -1,0 +1,81 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: keep the HAL when crash recovery fails
+
+ath11k_core_reconfigure_on_crash() keeps the HAL across a restart
+(ath11k_hal_srng_clear() instead of deinit/init, since 32be3ca4cf78b),
+but when ath11k_core_qmi_firmware_ready() fails it still calls
+ath11k_hal_srng_deinit(), which frees the rdp/wrp buffers and sets
+srng_config to NULL. Nothing initialises the HAL again: the next restart
+of that device goes through ath11k_hal_srng_clear() and
+ath11k_ce_init_pipes(), which dereference the freed state
+(ath11k_hal_srng_get_entrysize() reads srng_config).
+
+This is reachable on an IPQ5018 when the firmware crashes again during
+recovery ("failed to start core: -110", "failed to reconfigure driver on
+crash recovery") and the device is then restarted, e.g. by a watchdog
+restarting its user PD.
+
+Keep the HAL on failure; it is freed on device removal as usual. A
+failed recovery can leave it half set up, so also make the paths that
+run before the next restart cope with that:
+
+- set ATH11K_FLAG_CRASH_FLUSH again, so nothing is sent through the
+  rings; the next restart clears it before setting them up.
+
+- ath11k_ce_tx_process_cb() is reached from ath11k_ce_cleanup_pipes()
+  and ath11k_ce_send() before that check. Skip it while the pipe's
+  source ring is not set up (ath11k_hal_srng_clear() zeroed srng_list).
+  This covers the TX completion poll only, which the next restart's
+  ath11k_ce_cleanup_pipes() always runs; it does not make the window
+  in which that restart sets the rings up again safe for concurrent
+  senders, which was not safe before either.
+
+- ath11k_dp_free() frees the TX status buffers without clearing their
+  pointers; the next restart's ath11k_dp_free(), or device removal,
+  would free them again if ath11k_dp_alloc() failed before reallocating
+  them.
+
+--- a/drivers/net/wireless/ath/ath11k/core.c
++++ b/drivers/net/wireless/ath/ath11k/core.c
+@@ -2406,7 +2406,11 @@
+ 	return 0;
+ 
+ err_hal_srng_deinit:
+-	ath11k_hal_srng_deinit(ab);
++	/* Keep the HAL: the next restart clears and reuses it
++	 * (ath11k_hal_srng_clear() needs srng_config), and device removal
++	 * frees it. Nothing may send through the half-set-up rings meanwhile.
++	 */
++	set_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags);
+ 	return ret;
+ }
+ 
+--- a/drivers/net/wireless/ath/ath11k/ce.c
++++ b/drivers/net/wireless/ath/ath11k/ce.c
+@@ -502,6 +502,13 @@
+ 	struct sk_buff *skb;
+ 	struct sk_buff_head list;
+ 
++	/* A crash recovery that failed early leaves the HAL ring table
++	 * cleared until the next one sets the rings up again.
++	 */
++	if (!pipe->src_ring ||
++	    !ab->hal.srng_list[pipe->src_ring->hal_ring_id].initialized)
++		return;
++
+ 	__skb_queue_head_init(&list);
+ 	while (!IS_ERR(skb = ath11k_ce_completed_send_next(pipe))) {
+ 		if (!skb)
+--- a/drivers/net/wireless/ath/ath11k/dp.c
++++ b/drivers/net/wireless/ath/ath11k/dp.c
+@@ -1044,6 +1044,10 @@
+ 		kfree(dp->tx_ring[i].tx_status);
+ 	}
+ 
++	/* freed again if the next ath11k_dp_alloc() fails before replacing them */
++	for (i = 0; i < ARRAY_SIZE(dp->tx_ring); i++)
++		dp->tx_ring[i].tx_status = NULL;
++
+ 	/* Deinit any SOC level resource */
+ }
+ 

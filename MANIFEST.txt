@@ -104,6 +104,12 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          oopsed in ath11k_dp_rx_pdev_free() (panic_on_oops -> reboot, or a
          hung unload). Skip ath11k_mac_destroy() while REGISTERED. Verified:
          forced double crash -> failed reconfigure -> hw-restart, no oops.
+  3162  package/kernel/mac80211/patches/ath11k/961-wifi-ath11k-keep-the-hal-when-crash-recovery-fails.patch
+         A failed crash recovery freed the HAL that the next restart reuses:
+         restarting pd-1 after a double crash oopsed in ath11k_core_restart
+         (use after free, panic_on_oops -> reboot). Keeps the HAL, blocks
+         sends on it until the next restart, skips CE completion on rings
+         that are not set up, and clears the freed TX status pointers.
   12707  package/kernel/mac80211/Makefile
          Adds -DCONFIG_ATH11K_SMALLBUFFERS to the smallbuffers build variant
          (mirrors the existing ath10k-smallbuffers define).
