@@ -10,9 +10,35 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 DONOR_REV = "92a2d104145c8d265851c4b388a41bd8e9c21cd9"
-# The NSS build defaults to MEDIUM; LOW caps accelerated connections at 512
-# per family (1024 total), which is too few for the gateway this build is for.
-# WIFI_NSS_MEM_PROFILE=LOW keeps the smaller host buffer pool if RAM demands it.
+# The NSS build defaults to MEDIUM. This used to be justified here with "LOW
+# caps accelerated connections at 512 per family (1024 total), which is too few
+# for the gateway this build is for" — but the live stock investigation
+# contradicts the premise: stock RD03v2 (ROM 2.0.28) runs
+# qca_nss_drv.max_ipv4_conn=512 / max_ipv6_conn=512, exactly the LOW numbers, on
+# a consumer gateway. See stock-investigation/notes/FINDINGS.md (phase 4).
+#
+# That does not make LOW automatically right for us — a PPPoE gateway with many
+# clients is not stock's bench case, and 512 is a hard cap on *accelerated*
+# flows, with the rest falling back to the slow path. MEDIUM's 2048/2048 stays.
+#
+# The reason to keep MEDIUM is the connection table, NOT the buffer pool. The
+# profile ties the two together at build time, and MEDIUM's host-side pool is
+# expensive: n2h_empty_pool_buf_core0=8704 buffers x CONFIG_SKB_RECYCLE_SIZE
+# (2304 B) sit in Linux slab permanently as pure SUnreclaim. Stock asks Linux
+# for half as many (4096) and compensates inside the NSS with
+# extra_pbuf_core0=802816, paid out of the 8 MiB nss@40000000 carve-out that is
+# no-map reserved on our board whether we use it or not.
+#
+# So the two are decoupled deliberately: keep MEDIUM's connection table here,
+# and take LOW's host buffer pool at runtime via the n2hcfg sysctls (see the
+# rc.local block build.sh prepends, and notes/V1.9-TUNING.md finding #1).
+#
+# Note for anyone tempted to copy stock's /etc/sysctl.d/qca-nss-drv.conf: its
+# dev.nss.ipv4cfg.ipv4_conn=4096 line is dead. That sysctl does not exist at
+# runtime (only ipv4_accel_mode and ipv4_dscp_map are present); the module
+# parameter max_ipv4_conn is what actually sizes the table.
+#
+# WIFI_NSS_MEM_PROFILE=LOW still switches the whole profile if RAM demands it.
 MEM_PROFILE = os.environ.get("WIFI_NSS_MEM_PROFILE", "MEDIUM").upper()
 if MEM_PROFILE not in ("LOW", "MEDIUM"):
     raise SystemExit("WIFI_NSS_MEM_PROFILE must be LOW or MEDIUM")
