@@ -1,0 +1,111 @@
+=== Phase 2 on hardware: NSS image flashed to the dev bench ===
+
+Image: v19-build-nss, NSS=1 KMODS=1, from repo commit 377c052 (+ later doc-only
+commits). sysupgrade sha256 2c0c87eb...ae38. Flashed via the sanctioned
+initramfs pivot over the wired link; read-back verified byte-exact before
+reboot (prefix md5 cd62728b... matched, 0 non-0xff bytes past the image).
+
+--- FINDING #3: CONFIRMED ON HARDWARE ---
+
+Cold-boot dmesg, reserved memory:
+  0x40000000..0x407fffff ( 8192 KiB) nomap memory@40000000     <- NSS
+  0x4a400000..0x4a7fffff ( 4096 KiB) nomap tz_apps@4a400000
+  0x4a800000..0x4a9fffff ( 2048 KiB) nomap bootloader@4a800000
+  0x4aa00000..0x4aafffff ( 1024 KiB) nomap sbl@4aa00000
+  0x4ab00000..0x4abfffff ( 1024 KiB) nomap smem@4ab00000
+  0x4ac00000..0x4adfffff ( 2048 KiB) nomap tz@4ac00000
+  0x4b000000..0x4dffffff (49152 KiB) nomap wcss@4b000000       <- Q6, full size
+
+  OVERLAP DETECTED count: 0          (was 1 before the change)
+  q6_mem_regions in /sys/firmware/devicetree/base/reserved-memory/: ABSENT
+  "unable to acquire memory-region" in dmesg: 0
+  remoteproc0 running, pd-1 running, pd-2 running, pd-3 offline (2-radio board)
+  /proc/iomem: 4e000000-4fffffff still System RAM
+  q6/firmware-crash/rproc errors: 0
+
+--- FINDING #1: THE KNOB WORKS, THE ARITHMETIC DOES NOT ---
+
+Both writes succeeded on a freshly booted box (extra_pbuf unspent, both knobs
+-rw-r--r--). extra_pbuf_core0 first, then the pool, as the convention requires.
+
+  n2h_empty_pool_buf_core0 : 8704 -> 4096
+  extra_pbuf_core0         : 0    -> 802816
+  n2h_pbuf_def_total_count : 9984 -> 14884    <- exactly stock's number
+
+That last line is the important one: the NSS-side descriptor pool DID grow to
+stock's 14884 at runtime, with no core restart. So the mechanism works and #1
+does not have to become a build-time change.
+
+SUnreclaim, sampled every 10 s:
+  before        44740 kB
+  t+0           45400
+  t+10          39612    <- almost all of it lands within 10 s
+  t+20          39540
+  t+30          39560
+  t+40          39524
+  t+50          39540
+  t+60          39528
+  after         39528 kB
+
+  OBSERVED  : -5212 kB
+  PREDICTED : -9584 kB net (10368 returned - 784 spent)
+  -> 54% of prediction. MemAvailable +4516 kB.
+
+The shortfall is the 2304 B/buffer assumption, which Q1-MEMORY.md already
+flagged as "the assumption to attack". Solving for it from the measurement:
+
+  freed 5212 kB + extra_pbuf 784 kB = 5996 kB gross for 4608 buffers
+  => 1332 B per buffer, not 2304 B
+
+1332 is close to kmalloc-1024 (1024) + skbuff_head_cache (~256) = 1280, i.e.
+the NSS payload lands one slab class LOWER than the estimate assumed. Note the
+original 97% "match" was against a stock-vs-port SUnreclaim DIFFERENCE that
+also contains ath11k, module and workload differences - it was never a
+controlled measurement of this knob alone. This is.
+
+So finding #1's real gain on this build is ~5.1 MB, not ~10 MB. Still the
+largest single win available and still low-risk, but the README/notes number
+has to change.
+
+--- LOAD TEST: kill criterion NOT tripped ---
+
+Forwarded traffic, wired host -> bench -> 5 GHz tiny, with the pool at 4096:
+
+  run 1 (60 s): 611 MB, 85.4 Mbit/s, 301 retr
+  run 2 (60 s): 600 MB, 83.8 Mbit/s, 233 retr
+
+  n2h_payload_alloc_fails      : 5 -> 5 -> 5   (frozen through 1.2 GB)
+  n2h_pbuf_def_alloc_fail_payload: 5 -> 5
+  n2h_pbuf_def_free_count      : 14882 throughout
+
+No starvation at 4096 buffers under this load. For reference the pre-change
+baseline on the same path was 82.6 Mbit/s, so throughput did not regress.
+
+CAVEAT on what this load test does NOT cover: syd (192.168.1.50) and tiny
+(192.168.1.146) are both in br-lan, so the traffic is BRIDGED, not routed.
+ipv4_create_requests stays 0 and ECM never engages - correctly. Exercising the
+NSS routed fast path needs a second subnet (a WAN, or moving one client off
+br-lan); wan is currently down. The pool question is answered for the wifi<->
+wired datapath, which is what allocates from the n2h pool, but the ECM
+acceleration path is still unexercised on this build.
+
+--- OPERATIONAL TRAP FOUND (not a code defect) ---
+
+After sysupgrade -f with the config backup, NSS redirect was OFF:
+
+  /proc/sys/dev/nss/general/redirect = 0
+
+The image is correct - /rom/etc/rc.local carries the NSS block build.sh
+prepends. But the config backup was taken from the PLAIN build, whose
+/etc/rc.local has no NSS block, and sysupgrade restored that file over the
+image's version. The overlay copy shadowed /rom and the box booted with
+offload half-configured (accel modes come from the same block, and were also
+missing until rc.local ran... they read 1 only because the file that sets them
+is the one that was replaced).
+
+Fix on the box: restore /rom/etc/rc.local over /etc/rc.local.
+
+Worth carrying into the release notes: restoring a config backup ACROSS build
+variants (plain <-> NSS) silently reverts /etc/rc.local, and with it the NSS
+runtime knobs. This matters directly for finding #1, because if #1 ships as an
+rc.local block it inherits exactly this failure mode.
