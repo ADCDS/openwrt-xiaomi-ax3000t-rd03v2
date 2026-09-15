@@ -30,6 +30,15 @@ package/
          nss-dp: don't fail probe when fixed-link registration fails
          (swphy can't emulate >1G speeds; needed for the 2.5G-capable
          fixed-link uplink to the AN8855 switch).
+   4155  package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch
+         nss-dp: honour the AN8855's pause frames on the PHY-less switch
+         conduit (RD03v2 MAC2 only; RX pause on by default, TX refused).
+         All builds. Without it the AN8855 CPU port drops bursts from the
+         GMAC (measured with NSS Wi-Fi forwarding and on the default build;
+         a plain-NSS emulation over one Wi-Fi path never triggered pause). A
+         real plain-NSS build is pending bench confirmation.
+         Opt out without a rebuild with `ethtool -A eth1 rx off` (see
+         docs/nss-wifi-validation.md to keep it across reboots).
     960  package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx
          Adds xiaomi,mi-router-ax3000t-v2 to the uboot-envtools device list
          (env in 0:APPSBLENV @ 0x0, size 0x10000, sector 0x20000). Without it
@@ -266,4 +275,6 @@ NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
   experimental/wifi-nss/patch-overrides/ retains donor authorship, fixes QCN6122 BAR/windows and
     orders the NSS teardown after 953's crash-path interrupt quiesce (999-998).
   nss/feed-patches/qca-nss-ecm/0028-ecm-nss-dsa-bridged-tags.patch tags bridged ported flows.
-  files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch enables RD03v2 MAC2 RX pause.
+  The switch-conduit RX-pause patch is not part of this integration:
+    files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch applies to
+    every build (ethtool -A eth1 rx on|off at runtime).
