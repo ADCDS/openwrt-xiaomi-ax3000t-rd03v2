@@ -1,0 +1,29 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: free the rx monitor dst and desc rings
+
+ath11k_dp_rx_pdev_srng_alloc() sets up rxdma_mon_dst_ring and
+rxdma_mon_desc_ring when rxdma1_enable is set, but
+ath11k_dp_rx_pdev_srng_free() never frees them, and
+ath11k_dp_link_desc_cleanup() deliberately skips the ring cleanup for
+HAL_RXDMA_MONITOR_DESC. Every firmware-crash recovery goes through
+ath11k_dp_pdev_free() and allocates both rings again, so their DMA
+coherent buffers leak: 128 * 32 + 7 bytes and 4096 * 8 + 7 bytes with
+smallbuffers, the 12288 and 40960 byte vmalloc areas that each per-radio
+restart left behind on an IPQ5018/QCN6122 AX3000T (104 KiB per root-PD
+assert, which restarts both radios). rmmod leaked them the same way.
+
+Free both rings with the other pdev rings. ath11k_dp_srng_cleanup() is a
+no-op for a ring that was never set up.
+
+---
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c
+@@ -532,6 +532,8 @@
+ 	}
+ 
+ 	ath11k_dp_srng_cleanup(ab, &dp->rxdma_mon_buf_ring.refill_buf_ring);
++	ath11k_dp_srng_cleanup(ab, &dp->rxdma_mon_dst_ring);
++	ath11k_dp_srng_cleanup(ab, &dp->rxdma_mon_desc_ring);
+ }
+ 
+ void ath11k_dp_pdev_reo_cleanup(struct ath11k_base *ab)
