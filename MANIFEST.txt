@@ -90,6 +90,13 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          Ziyang Huang's patch (OpenWrt PR #21495, authorship preserved):
          gates ath11k's DP ring-buffer sizes behind CONFIG_ATH11K_SMALLBUFFERS
          so they shrink on low-RAM devices. Halves the ath11k footprint.
+  1243  package/kernel/mac80211/patches/ath11k/958-wifi-ath11k-free-the-rx-monitor-dst-and-desc-rings.patch
+         ath11k_dp_rx_pdev_srng_free() never freed rxdma_mon_dst_ring and
+         rxdma_mon_desc_ring, and every crash recovery allocates them again:
+         each per-radio restart leaked one 12288 and one 40960 byte DMA
+         vmalloc area (104 KiB per root-PD assert). Upstream bug. Verified
+         on the default build: remap total unchanged over 3 hw-restarts and
+         3 asserts, clients recovered, no WARN.
   12707  package/kernel/mac80211/Makefile
          Adds -DCONFIG_ATH11K_SMALLBUFFERS to the smallbuffers build variant
          (mirrors the existing ath10k-smallbuffers define).
