@@ -259,7 +259,7 @@ builds get it through `qca-nss-ecm` and `build.sh` adds it to the default build.
 
 ### ath11k crash-recovery fixes in both builds
 
-Four patches in `files/` reach both builds:
+Five patches in `files/` reach both builds:
 - `955` removes a one-shot WARN seen when a station is deleted while the
   firmware is dead or wedged; `956` removes the regulatory `-22` line printed
   on recoveries.
@@ -273,6 +273,8 @@ Four patches in `files/` reach both builds:
   silent wait.
 - `958` frees the RX monitor rings every crash recovery allocated again
   (104 KiB of DMA memory leaked per root-PD assert).
+- `959` fixes the unwind of a crash recovery that fails because the firmware
+  crashed again: it keeps the registered `ieee80211_hw`.
 
 Bench checks for these patches:
 - `955`: the WARN is one-shot, so check for `sta_info.c:1559` only in a boot
