@@ -266,7 +266,9 @@ Worth recording, because these were the plausible suspects:
 
 Ranked by MB per unit of risk:
 
-1. **NSS pool sizing** (~10 MB, runtime-reversible, no downside found).
+1. **NSS pool sizing** (~9.4 MB net; see the correction above - only
+   `n2h_empty_pool_buf_core0` is re-tunable, `extra_pbuf_core0` is write-once per
+   boot and carries a `GFP_ATOMIC`/`BUG_ON` hazard).
    `n2h_empty_pool_buf_core0=4096`, `extra_pbuf_core0=802816`. Verify by reading
    `SUnreclaim` before/after on a test box.
 2. **Finish NSS Wi-Fi offload** (Q2). Beyond CPU, it collapses the host DP ring
@@ -307,7 +309,8 @@ on this bench.
   unit's LAN.
 - **Confirming the NSS pool hypothesis** by writing
   `n2h_empty_pool_buf_core0=4096` on a port-side test box and re-reading
-  `SUnreclaim`. Runtime-only and reversible; not done here because the only
+  `SUnreclaim`. Runtime-only, and re-tunable for the pool knob (though
+  `extra_pbuf_core0` is write-once per boot); not done here because the only
   port-side box available is in service.
 - Per-cache attribution on either side. Blocked: no `CONFIG_SLUB_DEBUG` on stock
   *or* on our build. Getting it needs a kernel rebuild on our side; on stock it is

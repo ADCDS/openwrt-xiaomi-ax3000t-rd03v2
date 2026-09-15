@@ -50,15 +50,50 @@ say "1. BEFORE - n2h stats"
 nstat
 
 # ---- the only writes in this script ----
-# Ordering matters: extra_pbuf_core0 reconfigures the NSS's own DDR heap, so it
-# goes FIRST; the host pool shrink follows. (V1.9-TUNING.md, finding #1.)
+#
+# ORDER: extra_pbuf_core0 first. Not because the driver requires it - the two
+# sysctls take independent paths (different semaphores, different message types)
+# and nss_n2h_set_empty_buf_pool() never consults buf_sz_allocated - but because
+# extra_pbuf_core0 is WRITE-ONCE PER BOOT: nss_n2h_buf_cfg_core0_handler()
+# returns -EPERM as soon as nss_ctx->buf_sz_allocated is non-zero. Write the
+# knob that gets one chance while it still has it.
+#
+# THIS SCRIPT IS THEREFORE NOT RE-RUNNABLE WITHIN A BOOT. On a second run the
+# -EPERM makes the write fail, yet the handler assigns the sysctl variable from
+# buf_sz_allocated before returning, so the READBACK STILL PRINTS 802816. That
+# looks like success. The check below distinguishes the two cases explicitly.
+#
+# Also note what this write is NOT: extra_pbuf pages are kzalloc(GFP_ATOMIC) +
+# dma_map_single from HOST memory ("Add extra NSS bufs from host memory",
+# nss_n2h.c), not the nss@40000000 carve-out. 802816 is a BYTE count
+# (num_pages = ALIGN(size, PAGE_SIZE)/PAGE_SIZE), so it costs 196 pages =
+# 784 KiB of extra Linux memory. The allocation loop carries BUG_ON(!page_count)
+# if the first page of a message fails, and with MAX_PAGES_PER_MSG=32 those
+# 196 pages span 7 messages - 7 chances to panic a memory-pressured box. Do not
+# run this on anything you are not willing to reboot.
 say "2. WRITE extra_pbuf_core0 = 802816 (stock's value)"
-echo 802816 > "$N2H/extra_pbuf_core0" 2>&1 && echo "  write ok" || echo "  WRITE FAILED"
+pre_extra=$(cat "$N2H/extra_pbuf_core0" 2>/dev/null)
+echo "  before: $pre_extra"
+if [ "${pre_extra:-0}" != "0" ]; then
+  echo "  !! already non-zero: this boot has had extra_pbuf set already."
+  echo "  !! The write below WILL fail with -EPERM and the readback will still"
+  echo "  !! show the old value. Reboot before trusting this run."
+fi
+if echo 802816 > "$N2H/extra_pbuf_core0" 2>/dev/null; then
+  echo "  write ok"
+else
+  echo "  WRITE FAILED (-EPERM => already set this boot; readback below is NOT proof)"
+fi
 sleep 2
-echo "  readback: $(cat "$N2H/extra_pbuf_core0" 2>/dev/null)"
+echo "  readback: $(cat "$N2H/extra_pbuf_core0" 2>/dev/null)  <- equals buf_sz_allocated, not necessarily what we just wrote"
 
 say "3. WRITE n2h_empty_pool_buf_core0 = 4096 (stock's value, ours is 8704)"
-echo 4096 > "$N2H/n2h_empty_pool_buf_core0" 2>&1 && echo "  write ok" || echo "  WRITE FAILED"
+echo "  before: $(cat "$N2H/n2h_empty_pool_buf_core0" 2>/dev/null)"
+if echo 4096 > "$N2H/n2h_empty_pool_buf_core0" 2>/dev/null; then
+  echo "  write ok"
+else
+  echo "  WRITE FAILED"
+fi
 echo "  readback: $(cat "$N2H/n2h_empty_pool_buf_core0" 2>/dev/null)"
 
 say "4. settle - sampling SUnreclaim every 10 s for 60 s"
@@ -80,9 +115,14 @@ say "6. interpretation"
 cat <<'EOT'
 Compare SUnreclaim BEFORE vs AFTER.
 
-  ~10 MB lower  -> the runtime write DOES free memory. Finding #1 ships as the
-                   rc.local block build.sh prepends (next to general/redirect
-                   and the accel modes).
+Expect the NET, not the gross: the pool shrink returns (8704-4096) x 2304 B =
+10.12 MiB, while extra_pbuf_core0=802816 hands ~0.77 MiB straight back as host
+pages. So a full success looks like roughly -9.4 MiB, not -10.1 MiB.
+
+  ~9.4 MB lower -> the runtime write DOES free memory. Finding #1 ships as an
+                   rc.local block (build.sh's current block sets only
+                   general/redirect and the two accel modes; the n2hcfg writes
+                   would be added next to them).
   unchanged     -> the pool is sized at init only. The rc.local knob would be
                    cosmetic; #1 must instead become a build-time change, i.e.
                    the MEDIUM-vs-LOW profile decision of finding #4. Do NOT
@@ -99,5 +139,8 @@ value is therefore NOT the pass/fail test and is not comparable to stock's "99"
 on stock's own firmware. What matters is the DELTA across a forwarded-traffic
 load run, measured after this change on our build.
 
-These writes are runtime-only: nothing here persists across a reboot.
+Neither write persists across a reboot - but "not persistent" is not the same as
+"reversible". n2h_empty_pool_buf_core0 can be written again freely;
+extra_pbuf_core0 CANNOT be lowered or re-set this boot (-EPERM), and the pages it
+allocated stay allocated until the module is reloaded. Reboot between runs.
 EOT

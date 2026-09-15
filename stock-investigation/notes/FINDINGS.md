@@ -194,9 +194,15 @@ And the resulting pools, live:
 
 Read those two tables together, because the pattern is the whole point: **stock
 puts more buffering in the NSS's own reserved heap and less in Linux slab.**
-`extra_pbuf_core0=802816` grows the NSS-side descriptor pool to 14884 — paid for
-out of the 8 MiB `nss@40000000` carve-out, which is reserved whether we use it or
-not. The host-side pool it asks Linux for is only 4096 buffers, half of ours.
+`extra_pbuf_core0=802816` grows the NSS-side descriptor pool to 14884. The
+host-side pool it asks Linux for is only 4096 buffers, half of ours.
+
+> **Correction (v1.9 review).** This paragraph used to say those descriptors are
+> "paid for out of the 8 MiB `nss@40000000` carve-out". They are not: in
+> `nss-drv` the extra pbuf pages are `kzalloc(GFP_ATOMIC)` + `dma_map_single`
+> from **host** memory. 802,816 is a byte count, so it is ~784 KiB of extra
+> Linux memory, and the net gain of matching stock is ~9.4 MB, not ~10 MB. The
+> knob is also write-once per boot (`-EPERM`). See `Q1-MEMORY.md`.
 
 `/sys/kernel/debug/qca-nss-drv/meminfo/core0` confirms where the NSS heap lives:
 
@@ -366,7 +372,7 @@ properly the bench needs a wired host on one of the RD03v2's LAN ports.
 | Finding | Follow-up |
 |---|---|
 | `min_free_kbytes` 2048 vs our 16384 | Ship a sysctl default. ~16 MB of `MemAvailable` on a 175 MB box. Test under load before committing — see Q1 note for the caveat. |
-| Host NSS pool 4096 vs our 8704, `extra_pbuf_core0` 802816 vs 0 | The numbers PR #17's memory profile asked for. Moves ~10 MB out of Linux slab into the NSS carve-out we already pay for. |
+| Host NSS pool 4096 vs our 8704, `extra_pbuf_core0` 802816 vs 0 | The numbers PR #17's memory profile asked for. Returns ~10 MB of Linux slab and spends ~0.8 MB of host memory on `extra_pbuf` (which is **not** the carve-out), so ~9.4 MB net. |
 | `wifili` present on stock, absent on v1.8 | Q2 is settled in favour of finishing the NSS Wi-Fi work; it is also what buys stock the 1-ring DP layout. |
 | MAC flow control `0x6` vs our `0x4` | PR #19's RX pause matches stock's direction; consider TX pause too. |
 | `bdata` does not protect `boot_wait`/`uart_en` | README install warning needs the `bdata set` step spelled out. |
