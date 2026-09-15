@@ -106,12 +106,17 @@
 		};
 	};
 
-	reserved-memory {
-		q6_mem_regions: q6_mem_regions@4b000000 {
-			no-map;
-			reg = <0x0 0x4b000000 0x0 0x3000000>;
-		};
-	};
+	/*
+	 * No reserved-memory node for the Q6 here on purpose. The 48 MiB WCSS
+	 * carve-out at 0x4b000000 is already declared upstream as
+	 * q6_region: wcss@4b000000 (patches-6.12/0189-...-bringup-q6.patch, at
+	 * 0x1b00000) and resized to 0x3000000 by ipq5018-qcn6122.dtsi, which
+	 * this board includes above. Declaring our own node over the same base
+	 * and size only produced a duplicate reservation and an
+	 * "OF: reserved mem: OVERLAP DETECTED!" at every boot, which would also
+	 * have masked a genuine overlap later. Override &q6_region (as
+	 * ipq5018-scr50axe.dts does) if this board ever needs a different size.
+	 */
 };
 
 &sleep_clk {
