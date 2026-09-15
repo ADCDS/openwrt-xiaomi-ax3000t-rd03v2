@@ -1,0 +1,76 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] ath11k: nss: deliver EAPOL to hostapd on VLAN-aware bridges
+
+With NSS offload mac80211 does not advertise EAPOL over nl80211, so hostapd
+receives EAPOL on a packet socket and only accepts frames whose ingress
+interface is the VAP or its bridge. The NSS glue hands M2 of the 4-way
+handshake to the VAP netdev addressed to the AP's own MAC; the bridge passes
+it up locally, and on a vlan_filtering bridge the frame keeps its PVID tag and
+is demuxed onto br-lan.<vid>, which hostapd never listens on. Every handshake
+times out (client reason=15) on every SSID.
+
+Re-address EAPOL frames destined to the AP to the 802.1X PAE group address:
+the bridge never forwards 01:80:c2:00:00:03 with the default group_fwd_mask
+and passes it up on the ingress port itself, where hostapd always listens.
+
+--- a/drivers/net/wireless/ath/ath11k/nss.c
++++ b/drivers/net/wireless/ath/ath11k/nss.c
+@@ -550,6 +550,42 @@
+ 	/*TODO*/
+ }
+ 
++/* With NSS offload mac80211 does not advertise control port over nl80211,
++ * so hostapd receives EAPOL on a PF_PACKET socket and only accepts frames
++ * whose ingress ifindex is the VAP or its bridge. An EAPOL frame addressed
++ * to the AP's own MAC is a bridge-local unicast: br_pass_frame_up() hands it
++ * to the bridge device, and on a VLAN-filtering bridge (bridge self is a
++ * tagged member) it is then demuxed to br-lan.<vid>, which hostapd never
++ * listens on, so the 4-way handshake times out.
++ *
++ * Re-address such frames to the 802.1X PAE group address instead. The
++ * bridge does not forward 01:80:c2:00:00:03 (unless group_fwd_mask asks it
++ * to) and returns RX_HANDLER_PASS, so the frame is delivered on the VAP
++ * netdev itself, which hostapd always listens on, independent of VLANs.
++ */
++static void ath11k_nss_rx_eapol_to_pae_group(struct ieee80211_vif *vif,
++					     struct sk_buff *skb)
++{
++	static const u8 pae_group_addr[ETH_ALEN] __aligned(2) = {
++		0x01, 0x80, 0xc2, 0x00, 0x00, 0x03
++	};
++	struct ethhdr *ehdr;
++
++	if (vif->type != NL80211_IFTYPE_AP &&
++	    vif->type != NL80211_IFTYPE_AP_VLAN)
++		return;
++
++	if (skb_ensure_writable(skb, ETH_HLEN))
++		return;
++
++	ehdr = (struct ethhdr *)skb->data;
++	if (ehdr->h_proto != cpu_to_be16(ETH_P_PAE) ||
++	    !ether_addr_equal(ehdr->h_dest, vif->addr))
++		return;
++
++	ether_addr_copy(ehdr->h_dest, pae_group_addr);
++}
++
+ /* TODO: move to mac80211 after cleanups/refactoring required after feature completion */
+ static int ath11k_nss_deliver_rx(struct ieee80211_vif *vif, struct sk_buff *skb,
+ 				 bool eth,  int data_offs, struct napi_struct *napi)
+@@ -582,6 +618,7 @@
+ 	}
+ 
+ deliver_msdu:
++	ath11k_nss_rx_eapol_to_pae_group(vif, skb);
+ 	skb->protocol = eth_type_trans(skb, dev);
+ 	napi_gro_receive(napi, skb);
+ 	return 0;
+@@ -602,6 +639,7 @@
+ 
+ 	while (!skb_queue_empty(&subframe_list)) {
+ 		subframe = __skb_dequeue(&subframe_list);
++		ath11k_nss_rx_eapol_to_pae_group(vif, subframe);
+ 		subframe->protocol = eth_type_trans(subframe, dev);
+ 		napi_gro_receive(napi, subframe);
+ 	}

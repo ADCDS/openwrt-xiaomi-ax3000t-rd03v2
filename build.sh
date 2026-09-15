@@ -328,6 +328,10 @@ CONFIG_PACKAGE_luci=y
 CONFIG_PACKAGE_kmod-tun=y
 CONFIG_PACKAGE_kmod-inet-diag=y
 CONFIG_PACKAGE_kmod-nft-tproxy=y
+# ethtool (~44 KB): the switch-conduit RX pause from qca-nss-dp 0002 is
+# switched with `ethtool -A eth1 rx on|off`. NSS builds already get it via
+# qca-nss-ecm; this makes that no-rebuild opt-out work on the default build.
+CONFIG_PACKAGE_ethtool=y
 EOF
 
 # NSS firmware MUST match the driver ABI. The nss feed branch (NSS-12.5-K6.x)
