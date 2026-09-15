@@ -246,6 +246,34 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
          inherited the previous failure (and leaked an IRQ enable, the
          "Unbalanced enable for IRQ" warning). Also takes the start
          timeout from 5 s to the vendor's 10 s.
+  24838  target/linux/qualcommax/patches-6.12/0823-remoteproc-qcom_q6v5_mpd-respawn-user-pds-after-root-pd-crash.patch
+         Issue #15. A root PD assert recovers only the root; the user PDs
+         (and the wlfw QMI servers in them) were never spawned again, so
+         both radios stayed dead. Stale user PDs (spawned under an earlier
+         root boot) now skip the stop handshake, and, unless
+         qcom_q6v5_mpd.respawn_userpds=0, the user PDs are torn down with
+         the crashed root and respawned from an rproc subdev that starts
+         after glink. Respawn is suppressed when the root crashes again
+         within 60 s of its last recovery or after respawn_max_per_hour
+         (default 6) respawns, so a firmware that crashes during the
+         owner's recovery cannot loop. Whether the root is alive is
+         decided under upd_lock from driver state, not from the root's
+         rproc state. A failed root restart is logged. Verified: root-PD
+         asserts recovered in place on both builds, the 7th within an hour
+         suppressed as designed.
+  4720  target/linux/qualcommax/patches-6.12/0824-remoteproc-qcom_q6v5_mpd-tear-down-user-pds-even-when-respawn-is-suppressed.patch
+         0823 tore the user PDs down with a crashed root only when a
+         respawn was allowed. Now they are always torn down (internal radio
+         shutdown, MSA unlock) and the rate limit gates only the respawn;
+         a PD left down is cold booted by its owner's stop/start.
+ 12824  target/linux/qualcommax/patches-6.12/0825-remoteproc-qcom_q6v5_mpd-unwind-a-failed-user-pd-start.patch
+         A failed user PD load or start leaked the reference wcss_pd_load()
+         took on the root, so the root never shut down afterwards (a driver
+         reload no longer cold booted it). Drop it on failure, and stop a
+         root whose firmware died unhandled without the 5 s handshake. A PD
+         whose spawn or power-up failed is stopped by a direct handshake
+         and unlocked if it answers; otherwise its MSA region stays locked
+         (the PD is not loaded again) until the root firmware is gone.
   4043  target/linux/qualcommax/patches-6.12/0918-soc-qcom-smp2p-clear-cached-inbound-values-on-restart.patch
          Issue #1, the actual fix for a dead radio. smp2p only raises an
          interrupt for bits that CHANGED, but its SMEM items outlive the
