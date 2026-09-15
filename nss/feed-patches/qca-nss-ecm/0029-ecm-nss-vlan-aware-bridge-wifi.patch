@@ -1,0 +1,408 @@
+ecm: fix NSS VLAN tags for Wi-Fi flows over a VLAN-aware DSA bridge
+
+With br-lan vlan_filtering=1 on the RD03v2 (AN8855, tag_8021q tagger, CPU
+port a tagged member of every bridge VLAN per 999-2762), accelerated flows
+between a Wi-Fi VAP and anything else stalled as soon as ECM pushed the rule,
+because the rule's VLAN tags did not match the frames on either side. With
+ECM's IPv4 front end stopped, the same flows passed.
+
+1. Bridged DSA port <-> VAP: no tag on the conduit side.
+
+   ecm_nss_common_dsa_8021q_vid_get() returns 0 for a port of a VLAN-aware
+   bridge, and the NSS frontend never reads ECM's bridge VLAN filter data, so
+   the rule carried no VLAN. Frames from the switch arrive on eth1 tagged with
+   the bridge VID; the NSS forwarded them to the VAP with a 4-byte shifted
+   Ethernet header (seen on the client: "59:90:81:00:00:14 >
+   37:df:00:e0:4c:12" for 00:e0:4c:12:59:90 > 00:05:16:5d:37:df on VLAN 20).
+   Clients drop that unless the shifted DA happens to be multicast: a BCM43455
+   and an RT3070 received 0 of ~9000 UDP frames on VLAN 1 and VLAN 20, a
+   QCA9377 received all of them by luck. Frames towards the switch left the
+   NSS untagged and fell into the CPU port's all-ports PVID.
+
+   For a tag_8021q DSA user port of a VLAN-aware bridge, take the VLAN ECM
+   recorded for that port in ci->vlan_filter, whatever the port's untagged
+   flag, and only when both directions recorded the same VID for the port
+   (flow ingress/return egress for the 'from' side, flow egress/return
+   ingress for the 'to' side). ecm_db_connection_add_vlan_filter() carries
+   one side's VID into the other side's walk and br_fdb_find_vid_by_mac()
+   returns the newest FDB entry for a MAC in any VLAN, so the entries can disagree
+   (a routed flow through the bridge master to a trunk port, a host using
+   one MAC on several VLANs); such a connection is refused acceleration
+   instead of getting a wrong or missing tag.
+
+2. Routed VAP <-> WAN over br-lan.N: a tag on the Wi-Fi side.
+
+   The stock VLAN branch copies the br-lan.N VID into the rule for the whole
+   side, but the side's innermost interface is the VAP, an untagged bridge
+   member that never sees the tag. Drop the primary tag of a side when it
+   comes from a VLAN netdev on a VLAN-filtering bridge and the innermost
+   interface is a non-DSA bridge port that is untagged in that VLAN. DSA
+   ports keep the tag: their conduit carries it.
+
+Measured with this patch (RD03v2, K1 image, br-lan VLAN 1 untagged lan2-4,
+VLAN 20 tagged, rd03v2-iot SSID on VLAN 20):
+  bridged UDP wired->Wi-Fi: BCM43455 3810/3810, RT3070 3622/3806 (2.4 GHz),
+  QCA9377 3809/3809, correct headers; TCP both directions accelerated
+  (85/87, 7-12, 68/214 Mbit/s); Wi-Fi->wired frames leave untagged on VLAN 1
+  and tagged on VLAN 20.
+
+Not covered: non-ported and multicast rules; routed flows between two VLANs
+of the same bridge are still refused by ecm_db_connection_add_vlan_filter()
+(slow path, correct), as are bridged flows to a host that uses one MAC on
+several VLANs of the bridge.
+
+--- a/frontends/nss/ecm_nss_common.h
++++ b/frontends/nss/ecm_nss_common.h
+@@ -114,9 +114,10 @@
+ 	return dev;
+ }
+ 
++#include <linux/if_bridge.h>
++#include <linux/if_vlan.h>
+ #if IS_ENABLED(CONFIG_NET_DSA)
+ #include <linux/dsa/8021q.h>
+-#include <linux/if_bridge.h>
+ #endif
+ 
+ /*
+@@ -180,6 +181,170 @@
+ #endif
+ }
+ 
++#ifdef ECM_BRIDGE_VLAN_FILTERING_ENABLE
++/*
++ * ecm_nss_common_vlan_filter_vid()
++ *	The 802.1Q VID ci->vlan_filter recorded for `dev` in the two entries
++ *	starting at `first`: 0 when neither names dev, -1 when the entry is not
++ *	a usable 802.1Q VID.
++ */
++static inline int ecm_nss_common_vlan_filter_vid(struct ecm_db_connection_instance *ci,
++						 struct net_device *dev, int first)
++{
++	struct ecm_db_connection_vlan_filter *vf;
++	int i;
++
++	for (i = first; i < first + ECM_VLAN_FILTER_RULE_IFACE_MAX; i++) {
++		vf = &ci->vlan_filter[i];
++		if (!vf->is_valid || !vf->ii ||
++		    ecm_db_iface_interface_identifier_get(vf->ii) != dev->ifindex) {
++			continue;
++		}
++		if (vf->vlan_tpid != ETH_P_8021Q || !vf->vlan_tag || vf->vlan_tag >= VLAN_N_VID) {
++			return -1;
++		}
++		return vf->vlan_tag;
++	}
++	return 0;
++}
++#endif
++
++/*
++ * ecm_nss_common_dsa_rule_vid_get()
++ *	The VID an NSS rule must carry on the conduit for the flow side whose
++ *	innermost interface is `dev`: 0 to leave that side untagged, -1 when the
++ *	connection must not be accelerated.
++ *
++ *	  - outside a VLAN-aware bridge: the tag_8021q VID from
++ *	    ecm_nss_common_dsa_8021q_vid_get();
++ *	  - a tag_8021q DSA user port of a VLAN-aware bridge: the bridge VLAN
++ *	    this connection uses on that port, whether the port itself sends
++ *	    it tagged or untagged. The CPU port is a tagged member of every
++ *	    bridge VLAN (999-2762), so the conduit carries that tag in both
++ *	    directions. ECM records the VLAN in ci->vlan_filter, but only the
++ *	    SFE frontend ever read it: NSS rules went out with no VLAN, frames
++ *	    from the switch kept their 802.1Q header through the NSS (most
++ *	    Wi-Fi clients drop those), and frames towards the switch fell into
++ *	    the CPU port's all-ports PVID.
++ *
++ *	The VLAN is taken only when both directions recorded the same VID for
++ *	dev: flow egress and return ingress for the 'to' side (to_side), flow
++ *	ingress and return egress for the 'from' side. They can disagree -
++ *	ecm_db_connection_add_vlan_filter() carries the VID found for one side
++ *	into the walk of the other, and br_fdb_find_vid_by_mac() returns the
++ *	newest FDB entry for a MAC in any VLAN - for example a routed flow through the
++ *	bridge master itself to a trunk port, or a host using one MAC on several
++ *	VLANs. A VLAN-aware port without an agreeing VID is refused (-1) rather
++ *	than left untagged, which would put it back in the all-ports PVID.
++ */
++static inline int ecm_nss_common_dsa_rule_vid_get(struct ecm_db_connection_instance *ci,
++						  struct net_device *dev, bool to_side)
++{
++	int vid = ecm_nss_common_dsa_8021q_vid_get(dev);
++#if IS_ENABLED(CONFIG_NET_DSA) && defined(ECM_BRIDGE_VLAN_FILTERING_ENABLE)
++	struct dsa_port *dp;
++	struct net_device *br;
++	int ret_vid;
++
++	if (vid || !dsa_user_dev_check(dev)) {
++		return vid;
++	}
++
++	dp = dsa_port_from_netdev(dev);
++	if (IS_ERR_OR_NULL(dp) || !dp->ds->tag_8021q_ctx) {
++		return 0;
++	}
++
++	br = dsa_port_bridge_dev_get(dp);
++	if (!br || !br_vlan_enabled(br)) {
++		return 0;
++	}
++	if (!ci->vlan_filter_valid || !ci->vlan_filter) {
++		return -1;
++	}
++
++	if (to_side) {
++		vid = ecm_nss_common_vlan_filter_vid(ci, dev, ECM_VLAN_FILTER_RULE_FLOW_EGRESS1);
++		ret_vid = ecm_nss_common_vlan_filter_vid(ci, dev, ECM_VLAN_FILTER_RULE_RET_INGRESS1);
++	} else {
++		vid = ecm_nss_common_vlan_filter_vid(ci, dev, ECM_VLAN_FILTER_RULE_FLOW_INGRESS1);
++		ret_vid = ecm_nss_common_vlan_filter_vid(ci, dev, ECM_VLAN_FILTER_RULE_RET_EGRESS1);
++	}
++	if (vid <= 0 || vid != ret_vid) {
++		return -1;
++	}
++#endif
++	return vid;
++}
++
++/*
++ * ecm_nss_common_bridge_vlan_side_untagged()
++ *	True when one flow side's primary VLAN tag came from a VLAN netdev on a
++ *	VLAN-filtering bridge (br-lan.N) while the innermost interface of that
++ *	side - the one the NSS really exchanges frames with - is a non-DSA
++ *	bridge port that is an UNTAGGED member of that VLAN, such as a Wi-Fi
++ *	VAP. Nothing on that side carries the tag, so a tag in the rule makes
++ *	the NSS forward frames with a shifted L2 header: routed Wi-Fi <-> WAN
++ *	traffic over br-lan.1 stalled as soon as ECM accelerated it.
++ *
++ *	DSA ports keep the stock behaviour: the conduit of a tag_8021q switch
++ *	carries the bridge VID even for untagged ports.
++ */
++static inline bool ecm_nss_common_bridge_vlan_side_untagged(struct ecm_db_iface_instance *ifaces[], int32_t first)
++{
++	struct bridge_vlan_info vinfo;
++	struct net_device *vdev;
++	struct net_device *port;
++	struct net_device *br;
++	bool untagged = false;
++	int32_t i;
++	u16 vid;
++
++	for (i = first + 1; i < ECM_DB_IFACE_HEIRARCHY_MAX; i++) {
++		if (ecm_db_iface_type_get(ifaces[i]) == ECM_DB_IFACE_TYPE_VLAN) {
++			break;
++		}
++	}
++	if (i >= ECM_DB_IFACE_HEIRARCHY_MAX) {
++		return false;
++	}
++
++	vdev = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(ifaces[i]));
++	if (!vdev) {
++		return false;
++	}
++
++	port = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(ifaces[first]));
++	if (!port) {
++		dev_put(vdev);
++		return false;
++	}
++
++	rcu_read_lock();
++	if (!is_vlan_dev(vdev) || !netif_is_bridge_port(port)) {
++		goto out;
++	}
++#if IS_ENABLED(CONFIG_NET_DSA)
++	if (dsa_user_dev_check(port)) {
++		goto out;
++	}
++#endif
++	br = vlan_dev_real_dev(vdev);
++	vid = vlan_dev_vlan_id(vdev);
++	if (!netif_is_bridge_master(br) || !br_vlan_enabled(br) ||
++	    netdev_master_upper_dev_get_rcu(port) != br) {
++		goto out;
++	}
++	if (!br_vlan_get_info_rcu(port, vid, &vinfo)) {
++		untagged = !!(vinfo.flags & BRIDGE_VLAN_INFO_UNTAGGED);
++	}
++out:
++	rcu_read_unlock();
++	dev_put(port);
++	dev_put(vdev);
++	return untagged;
++}
++
+ /*
+  * This macro converts ECM ip_addr_t to NSS IPv6 address
+  */
+--- a/frontends/nss/ecm_nss_ported_ipv4.c
++++ b/frontends/nss/ecm_nss_ported_ipv4.c
+@@ -1077,6 +1077,31 @@
+ 	}
+ #endif
+ 
++	/*
++	 * A VLAN netdev on a VLAN-filtering bridge (br-lan.N) tagged this side,
++	 * but when the innermost port is an untagged non-DSA member (a Wi-Fi VAP)
++	 * no frame on that side carries the tag. See
++	 * ecm_nss_common_bridge_vlan_side_untagged().
++	 */
++	if ((nircm->vlan_primary_rule.ingress_vlan_tag != ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_secondary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    ecm_nss_common_bridge_vlan_side_untagged(from_ifaces, from_ifaces_first)) {
++		nircm->vlan_primary_rule.ingress_vlan_tag = ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED;
++		DEBUG_TRACE("%px: untagged bridge VLAN port, no ingress vlan tag\n", feci);
++	}
++	if ((nircm->vlan_primary_rule.egress_vlan_tag != ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_secondary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    ecm_nss_common_bridge_vlan_side_untagged(to_ifaces, to_ifaces_first)) {
++		nircm->vlan_primary_rule.egress_vlan_tag = ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED;
++		DEBUG_TRACE("%px: untagged bridge VLAN port, no egress vlan tag\n", feci);
++	}
++	if ((nircm->vlan_primary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_primary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_secondary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_secondary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)) {
++		nircm->valid_flags &= ~NSS_IPV4_RULE_CREATE_VLAN_VALID;
++	}
++
+ 	if (ecm_nss_ipv4_vlan_passthrough_enable && !ecm_db_connection_is_routed_get(feci->ci) &&
+ 	   (nircm->vlan_primary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
+ 	   (nircm->vlan_primary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)) {
+@@ -1116,7 +1141,7 @@
+ 	 * leaves the rule alone.
+ 	 */
+ 	{
+-		uint16_t dsa_vid;
++		int dsa_vid;
+ 		struct net_device *dsa_dev;
+ 
+ 		/*
+@@ -1130,12 +1155,18 @@
+ 		if (nircm->vlan_primary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)
+ 			dsa_dev = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(to_ifaces[to_ifaces_first]));
+ 		if (dsa_dev) {
+-			dsa_vid = ecm_nss_common_dsa_8021q_vid_get(dsa_dev);
++			dsa_vid = ecm_nss_common_dsa_rule_vid_get(feci->ci, dsa_dev, true);
+ 			dev_put(dsa_dev);
++			if (dsa_vid < 0) {
++				DEBUG_TRACE("%px: no consistent bridge VLAN on the DSA port\n", feci);
++				ecm_db_connection_interfaces_deref(from_ifaces, from_ifaces_first);
++				ecm_db_connection_interfaces_deref(to_ifaces, to_ifaces_first);
++				goto ported_accel_bad_rule;
++			}
+ 			if (dsa_vid) {
+ 				nircm->vlan_primary_rule.egress_vlan_tag = (ETH_P_8021Q << 16) | dsa_vid;
+ 				nircm->valid_flags |= NSS_IPV4_RULE_CREATE_VLAN_VALID;
+-				DEBUG_TRACE("%px: dsa egress vid: %u\n", feci, dsa_vid);
++				DEBUG_TRACE("%px: dsa egress vid: %d\n", feci, dsa_vid);
+ 			}
+ 		}
+ 
+@@ -1143,12 +1174,18 @@
+ 		if (nircm->vlan_primary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)
+ 			dsa_dev = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(from_ifaces[from_ifaces_first]));
+ 		if (dsa_dev) {
+-			dsa_vid = ecm_nss_common_dsa_8021q_vid_get(dsa_dev);
++			dsa_vid = ecm_nss_common_dsa_rule_vid_get(feci->ci, dsa_dev, false);
+ 			dev_put(dsa_dev);
++			if (dsa_vid < 0) {
++				DEBUG_TRACE("%px: no consistent bridge VLAN on the DSA port\n", feci);
++				ecm_db_connection_interfaces_deref(from_ifaces, from_ifaces_first);
++				ecm_db_connection_interfaces_deref(to_ifaces, to_ifaces_first);
++				goto ported_accel_bad_rule;
++			}
+ 			if (dsa_vid) {
+ 				nircm->vlan_primary_rule.ingress_vlan_tag = (ETH_P_8021Q << 16) | dsa_vid;
+ 				nircm->valid_flags |= NSS_IPV4_RULE_CREATE_VLAN_VALID;
+-				DEBUG_TRACE("%px: dsa ingress vid: %u\n", feci, dsa_vid);
++				DEBUG_TRACE("%px: dsa ingress vid: %d\n", feci, dsa_vid);
+ 			}
+ 		}
+ 	}
+--- a/frontends/nss/ecm_nss_ported_ipv6.c
++++ b/frontends/nss/ecm_nss_ported_ipv6.c
+@@ -1039,6 +1039,31 @@
+ 	}
+ #endif
+ 
++	/*
++	 * A VLAN netdev on a VLAN-filtering bridge (br-lan.N) tagged this side,
++	 * but when the innermost port is an untagged non-DSA member (a Wi-Fi VAP)
++	 * no frame on that side carries the tag. See
++	 * ecm_nss_common_bridge_vlan_side_untagged().
++	 */
++	if ((nircm->vlan_primary_rule.ingress_vlan_tag != ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_secondary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    ecm_nss_common_bridge_vlan_side_untagged(from_ifaces, from_ifaces_first)) {
++		nircm->vlan_primary_rule.ingress_vlan_tag = ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED;
++		DEBUG_TRACE("%px: untagged bridge VLAN port, no ingress vlan tag\n", feci);
++	}
++	if ((nircm->vlan_primary_rule.egress_vlan_tag != ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_secondary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    ecm_nss_common_bridge_vlan_side_untagged(to_ifaces, to_ifaces_first)) {
++		nircm->vlan_primary_rule.egress_vlan_tag = ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED;
++		DEBUG_TRACE("%px: untagged bridge VLAN port, no egress vlan tag\n", feci);
++	}
++	if ((nircm->vlan_primary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_primary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_secondary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
++	    (nircm->vlan_secondary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)) {
++		nircm->valid_flags &= ~NSS_IPV6_RULE_CREATE_VLAN_VALID;
++	}
++
+ 	if (ecm_nss_ipv6_vlan_passthrough_enable && !ecm_db_connection_is_routed_get(feci->ci) &&
+ 	   (nircm->vlan_primary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED) &&
+ 	   (nircm->vlan_primary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)) {
+@@ -1060,7 +1085,7 @@
+ 	 * PVID-0 fallback, gated by the slowest member port.
+ 	 */
+ 	{
+-		uint16_t dsa_vid;
++		int dsa_vid;
+ 		struct net_device *dsa_dev;
+ 
+ 		/*
+@@ -1074,12 +1099,18 @@
+ 		if (nircm->vlan_primary_rule.egress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)
+ 			dsa_dev = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(to_ifaces[to_ifaces_first]));
+ 		if (dsa_dev) {
+-			dsa_vid = ecm_nss_common_dsa_8021q_vid_get(dsa_dev);
++			dsa_vid = ecm_nss_common_dsa_rule_vid_get(feci->ci, dsa_dev, true);
+ 			dev_put(dsa_dev);
++			if (dsa_vid < 0) {
++				DEBUG_TRACE("%px: no consistent bridge VLAN on the DSA port\n", feci);
++				ecm_db_connection_interfaces_deref(from_ifaces, from_ifaces_first);
++				ecm_db_connection_interfaces_deref(to_ifaces, to_ifaces_first);
++				goto ported_accel_bad_rule;
++			}
+ 			if (dsa_vid) {
+ 				nircm->vlan_primary_rule.egress_vlan_tag = (ETH_P_8021Q << 16) | dsa_vid;
+ 				nircm->valid_flags |= NSS_IPV6_RULE_CREATE_VLAN_VALID;
+-				DEBUG_TRACE("%px: dsa egress vid: %u\n", feci, dsa_vid);
++				DEBUG_TRACE("%px: dsa egress vid: %d\n", feci, dsa_vid);
+ 			}
+ 		}
+ 
+@@ -1087,12 +1118,18 @@
+ 		if (nircm->vlan_primary_rule.ingress_vlan_tag == ECM_FRONT_END_VLAN_ID_NOT_CONFIGURED)
+ 			dsa_dev = dev_get_by_index(&init_net, ecm_db_iface_interface_identifier_get(from_ifaces[from_ifaces_first]));
+ 		if (dsa_dev) {
+-			dsa_vid = ecm_nss_common_dsa_8021q_vid_get(dsa_dev);
++			dsa_vid = ecm_nss_common_dsa_rule_vid_get(feci->ci, dsa_dev, false);
+ 			dev_put(dsa_dev);
++			if (dsa_vid < 0) {
++				DEBUG_TRACE("%px: no consistent bridge VLAN on the DSA port\n", feci);
++				ecm_db_connection_interfaces_deref(from_ifaces, from_ifaces_first);
++				ecm_db_connection_interfaces_deref(to_ifaces, to_ifaces_first);
++				goto ported_accel_bad_rule;
++			}
+ 			if (dsa_vid) {
+ 				nircm->vlan_primary_rule.ingress_vlan_tag = (ETH_P_8021Q << 16) | dsa_vid;
+ 				nircm->valid_flags |= NSS_IPV6_RULE_CREATE_VLAN_VALID;
+-				DEBUG_TRACE("%px: dsa ingress vid: %u\n", feci, dsa_vid);
++				DEBUG_TRACE("%px: dsa ingress vid: %d\n", feci, dsa_vid);
+ 			}
+ 		}
+ 	}
