@@ -198,3 +198,47 @@ be quoted to four significant figures. The honest statement is:
 The earlier text saying "1,332 B per buffer" derived from T1 alone plus the
 extra_pbuf cost; it is the top of the range, not a precise constant. Adjusted
 wording accordingly.
+
+=== ADDENDUM 3: boot-to-boot A/B with the real rc.local block ===
+
+Installed the block exactly as build.sh generates it into the bench's
+/etc/rc.local and rebooted, to test the thing that actually ships rather than
+hand-typed sysctl writes.
+
+First attempt FAILED to persist and is worth recording as a trap: writing the
+file with `cat > /etc/rc.local` from an ssh command silently did not reach the
+overlay - after the reboot /etc/rc.local was byte-identical to /rom (md5
+db60e29a..., 1453 bytes) and none of the pool knobs had been applied. An append
+(`>> /etc/rc.local`) DID create /overlay/upper/etc/rc.local, so the overlay was
+writable the whole time; the truncating redirect is what lost. Staging in /tmp
+and `mv`-ing into place worked (2751 bytes, 6 nss lines, overlay copy present).
+Anyone hand-patching rc.local on this box should verify
+/overlay/upper/etc/rc.local afterwards, not just re-read /etc/rc.local.
+
+With the block correctly installed, after a clean reboot:
+
+    n2h_empty_pool_buf_core0 = 4096      (applied at boot)
+    extra_pbuf_core0         = 802816    (applied at boot)
+    general/redirect         = 1
+    n2h_pbuf_def_total_count = 14884
+    n2h_payload_alloc_fails  = 5
+
+So the block works unattended: rc.local runs late enough that
+/proc/sys/dev/nss/n2hcfg exists, and both writes land. This is the first proof
+the change does anything on a box nobody is logged into.
+
+BOOT-TO-BOOT A/B on the same box, same image, both idle a minute after boot,
+differing only in whether rc.local carried the block:
+
+    without the block : SUnreclaim 44,576 kB
+    with the block    : SUnreclaim 38,992 kB
+    net               :          -5,584 kB
+
+This is the number to quote. It is a like-for-like comparison rather than a
+before/after within one boot, and it already includes extra_pbuf's ~784 kB
+cost, so it is the true net gain of shipping the change. It sits at the top of
+the 3.4-5.2 MB range seen from mid-boot toggling, which makes sense: the
+toggling runs happened on boxes with clients associated and traffic flowing.
+
+MemAvailable at the same instant: 40,016 kB with the block, against 37,088 kB
+without - consistent, and the figure a user would actually notice.

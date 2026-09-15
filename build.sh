@@ -143,11 +143,12 @@ echo 1 > /proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode 2>/dev/null\
 # Host-side NSS buffer pool, matching stock RD03v2 (ROM 2.0.28). The non-LOW\
 # profile default is 8704 empty skbs handed to the NSS; they live in Linux slab\
 # permanently as SUnreclaim. Stock runs 4096 and buys the descriptors back with\
-# extra_pbuf_core0. Measured on the bench: SUnreclaim -5,212 kB on a fresh boot,\
-# and the NSS descriptor pool grows 9,984 -> 14,884 (stock'"'"'s exact number) with\
-# no core restart. Driving the knob both ways on one boot moves SUnreclaim by\
-# -5.2 / +4.3 / -3.4 MB, so the effect is causal and reversible, and ~5 MB is an\
-# order of magnitude rather than a constant. 1.7 GB of forwarded traffic left\
+# extra_pbuf_core0. Boot-to-boot A/B on the bench, same image, idle, differing\
+# only in whether this block ran: SUnreclaim 44,576 -> 38,992 kB, a net -5,584 kB\
+# after extra_pbuf'"'"'s own cost, with MemAvailable 37,088 -> 40,016 kB. The NSS\
+# descriptor pool reaches 14,884, stock'"'"'s exact number, with no core restart.\
+# Driving the pool knob both ways mid-boot moves SUnreclaim -5.2 / +4.3 / -3.4 MB,\
+# so the effect is causal and reversible. 1.7 GB of forwarded traffic left\
 # n2h_payload_alloc_fails unmoved, so 4096 is enough for this datapath.\
 #\
 # extra_pbuf_core0 goes FIRST because it is write-once per boot: the handler\
