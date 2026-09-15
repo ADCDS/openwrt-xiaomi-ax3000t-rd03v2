@@ -97,6 +97,13 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          vmalloc area (104 KiB per root-PD assert). Upstream bug. Verified
          on the default build: remap total unchanged over 3 hw-restarts and
          3 asserts, clients recovered, no WARN.
+  2068  package/kernel/mac80211/patches/ath11k/959-wifi-ath11k-dont-free-a-registered-hw-when-restart-fails.patch
+         When the firmware crashed again during crash recovery, the failed
+         ath11k_core_start()/qmi_firmware_ready() unwind freed the still
+         registered ieee80211_hw and cleared pdev->ar; the next restart
+         oopsed in ath11k_dp_rx_pdev_free() (panic_on_oops -> reboot, or a
+         hung unload). Skip ath11k_mac_destroy() while REGISTERED. Verified:
+         forced double crash -> failed reconfigure -> hw-restart, no oops.
   12707  package/kernel/mac80211/Makefile
          Adds -DCONFIG_ATH11K_SMALLBUFFERS to the smallbuffers build variant
          (mirrors the existing ath10k-smallbuffers define).
