@@ -265,3 +265,34 @@ and inspecting the tree it prepared:
     - the apostrophe in "stock's exact number" survived intact
 
 extra_pbuf_core0 precedes the pool write, as the write-once property requires.
+
+=== ADDENDUM 5: the load test does NOT show 4096 is enough ===
+
+Review demolished this claim and it is worth recording plainly, because I had
+written "4096 is enough for this datapath" into build.sh.
+
+    n2h_pbuf_def_total_count = 14884
+    n2h_pbuf_def_free_count  = 14882
+    => peak in-flight = 2 buffers = 0.05% of a 4096 pool
+
+A run that never puts more than 2 buffers in flight cannot distinguish 4096
+from 8704, or from 512. The frozen payload_alloc_fails=5 is not evidence of
+headroom either - it is a cumulative counter that simply never incremented,
+exactly as it sat frozen at 45864 on the v1.8 box. The experiment script says
+this correctly ("its absolute value is therefore NOT the pass/fail test"), and
+build.sh contradicted it.
+
+Contributing factors: ~85 Mbit/s is roughly 10% of this board's rated NAT
+throughput, and the flow was Wi-Fi<->wired, which on a build without the
+experimental Wi-Fi offload never engages the accelerated path that actually
+drains the n2h pool (ipv4_create_requests stayed 0 throughout).
+
+What the load runs DO support: the change causes no regression at this load -
+~1.7 GB moved with no alloc failures and throughput slightly up on the
+pre-change baseline. That is worth having, but it is a "no harm observed"
+result, not a capacity result.
+
+Still genuinely untested: an accelerated WAN<->LAN NAT flow at a few hundred
+Mbit/s, which needs a WAN uplink the bench does not have. Until then the honest
+position is that 4096 matches what stock ships and shows no ill effect at the
+loads reachable here.
