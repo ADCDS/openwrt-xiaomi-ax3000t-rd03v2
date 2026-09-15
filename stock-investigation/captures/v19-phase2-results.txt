@@ -392,3 +392,42 @@ Lesson for the release build: do not trust an incremental image after changing a
 base-files file. Either rebuild from scratch or clear
 build_dir/target-*/root*-<target> and re-run package/install first, then verify
 the artifact itself with unsquashfs rather than the tree.
+
+=== ADDENDUM 8: genuine boot-time verification (the R3 objection closed) ===
+
+R3's central objection was that the script had never actually run at boot: the
+rc.d symlink post-dated the only boot, so every observation was hand-invoked.
+Re-tested with the timestamps checked FIRST this time:
+
+    script installed : 12:41:07
+    symlink created  : 12:41:08
+    BOOT             : 12:41:12      <- both predate the boot
+    log line         : 12:41:21      <- 9 s after boot
+
+So this is a real boot-time run. After a further clean reboot:
+
+    logread : "nss-bufpool: pool 8704 -> 4096"
+    dmesg "Additional pbufs" count : 0
+    pool=4096   extra_pbuf=0
+    SUnreclaim 38,144 kB   MemFree 46,848 kB   MemAvailable 42,820 kB
+    both radios up, 6 qca_nss modules loaded
+
+38,144 kB is the lowest SUnreclaim of every configuration tried, against
+44,576 kB for a boot with no knobs - about 6.3 MB, consistent with the earlier
+clean-boot figure and with extra_pbuf's absence now saving rather than costing.
+
+One anomaly chased to ground rather than left hanging: a mid-sequence reading
+showed extra_pbuf=802816 with a matching dmesg line, on a boot whose rc.local was
+the clean image copy (md5 matching /rom, zero n2hcfg references). It was me: the
+12:42:38 log line is my own test of the stale-rc.local warning path, which sets
+the knob deliberately. Nothing in the image writes extra_pbuf - grep over /etc
+and /usr/sbin returns only nss-bufpool itself, which merely READS it to emit that
+warning.
+
+Also learned: `sysupgrade -n` from the installed system is REFUSED on this board
+("Image check failed", with the platform's own message pointing at the initramfs
+path). That is the documented in-place-flash guard doing its job, and it is why
+`sysupgrade -T` returned 1 beforehand. A clean-overlay flash therefore has to go
+through the initramfs pivot; the board will not let you shortcut it. The reboot
+test above achieves the same evidence without another pivot, because the overlay
+rc.local was already removed and verified identical to /rom.
