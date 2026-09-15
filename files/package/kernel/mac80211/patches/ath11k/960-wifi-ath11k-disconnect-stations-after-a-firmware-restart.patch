@@ -1,0 +1,138 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: disconnect stations after a firmware restart
+
+After a firmware crash, mac80211 reconfigures the hardware and installs
+every station and group key again, but the firmware starts assigning
+CCMP packet numbers from zero. Stations stay associated, and a receiver
+that enforces replay protection in its own firmware drops every frame
+from the AP as a replay until the AP has sent as many frames as before
+the crash - minutes to hours for an idle client. On an IPQ5018/QCN6122
+AX3000T a BCM43455 client (Raspberry Pi 4) stayed deaf through 50k
+frames after an in-place root-PD recovery and came back only past its
+old counter; QCA9377 and RT3070 clients, whose drivers skip the check,
+were not affected.
+
+Setting the transmit sequence counter of WMI_VDEV_INSTALL_KEY_CMDID to a
+value above any PN used before the crash does not help: firmware
+WLAN.HK.2.7.0.1-01744 ignores it (tested with and without
+WMI_KEY_TX_USAGE, PN 2.8e8 against a counter of 2e5; the client stayed
+associated and deaf).
+
+So do what vendor firmware recovery does and make the peers reconnect
+when the restart's reconfiguration completes, unless mac80211 generates
+the packet numbers (raw mode, hardware crypto disabled):
+
+- report every station of the radio's AP interfaces that has a pairwise
+  key in the hardware as lost. hostapd disassociates them
+  (disassoc_low_ack, enabled by default; with it disabled the stations
+  stay associated as before), and they associate again with fresh keys
+  a few seconds later. The report goes to the AP's netdev, where
+  hostapd also finds the stations of its AP_VLANs. Stations of open
+  networks are left alone. Not covered: mesh peers (nothing acts on a
+  lost mesh peer report), and a station whose key failed to install
+  again during the restart (mac80211 no longer counts it as a hardware
+  key).
+
+- disconnect station interfaces with ieee80211_hw_restart_disconnect().
+  This was done only for firmware with support_fw_mac_sequence, but the
+  packet numbers restart on all firmware.
+
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -8934,6 +8934,72 @@
+ 	return ret;
+ }
+ 
++/* After a firmware restart mac80211 installs the stations' keys again, but
++ * the firmware starts their transmit packet numbers from zero and ignores
++ * the counter in WMI_VDEV_INSTALL_KEY_CMDID. A peer that enforces replay
++ * protection then drops every frame from us until the counter catches up.
++ * Report the AP's stations with a pairwise key as lost so hostapd
++ * (disassoc_low_ack, on by default) disassociates them and they rejoin with
++ * fresh keys, the way vendor firmware recovery does.
++ */
++#define ATH11K_RESTART_KICK_NUM_PKT 10
++
++/* not when mac80211 generates the packet numbers */
++static bool ath11k_mac_fw_generates_pn(struct ath11k_base *ab)
++{
++	return !test_bit(ATH11K_FLAG_HW_CRYPTO_DISABLED, &ab->dev_flags) &&
++	       !test_bit(ATH11K_FLAG_RAW_MODE, &ab->dev_flags);
++}
++
++struct ath11k_restart_kick_arg {
++	struct ieee80211_sta *sta;
++	bool keyed;
++};
++
++static void ath11k_mac_restart_kick_key_iter(struct ieee80211_hw *hw,
++					     struct ieee80211_vif *vif,
++					     struct ieee80211_sta *sta,
++					     struct ieee80211_key_conf *key,
++					     void *data)
++{
++	struct ath11k_restart_kick_arg *arg = data;
++
++	if (sta == arg->sta && key->flags & IEEE80211_KEY_FLAG_PAIRWISE)
++		arg->keyed = true;
++}
++
++static void ath11k_mac_restart_kick_sta_iter(void *data,
++					     struct ieee80211_sta *sta)
++{
++	struct ath11k_sta *arsta = ath11k_sta_to_arsta(sta);
++	struct ath11k_restart_kick_arg arg = { .sta = sta };
++	struct ath11k_vif *arvif = arsta->arvif;
++	struct ath11k *ar = data;
++	struct wireless_dev *wdev;
++
++	/* nothing acts on the report for a mesh peer */
++	if (!arvif || arvif->ar != ar || arvif->vif->type != NL80211_IFTYPE_AP)
++		return;
++
++	/* An open network's stations have no packet numbers to lose. All
++	 * interfaces: a station's key sits on its AP_VLAN if it has one.
++	 */
++	ieee80211_iter_keys_rcu(ar->hw, NULL,
++				ath11k_mac_restart_kick_key_iter, &arg);
++	if (!arg.keyed)
++		return;
++
++	/* What ieee80211_report_low_ack() does, but on the AP's own netdev:
++	 * hostapd ignores the event on an AP_VLAN netdev that is not bridged
++	 * with its BSS.
++	 */
++	wdev = ieee80211_vif_to_wdev(arvif->vif);
++	if (wdev && wdev->netdev)
++		cfg80211_cqm_pktloss_notify(wdev->netdev, sta->addr,
++					    ATH11K_RESTART_KICK_NUM_PKT,
++					    GFP_ATOMIC);
++}
++
+ static void
+ ath11k_mac_op_reconfig_complete(struct ieee80211_hw *hw,
+ 				enum ieee80211_reconfig_type reconfig_type)
+@@ -8973,12 +9039,22 @@
+ 				ath11k_dbg(ab, ATH11K_DBG_BOOT, "reset success\n");
+ 			}
+ 		}
+-		if (ar->ab->hw_params.support_fw_mac_sequence) {
++		/* When the firmware's transmit packet numbers restarted from
++		 * zero (see above), reconnect station interfaces too, whatever
++		 * the firmware does with the MAC sequence numbers.
++		 */
++		if (ar->ab->hw_params.support_fw_mac_sequence ||
++		    ath11k_mac_fw_generates_pn(ar->ab)) {
+ 			list_for_each_entry(arvif, &ar->arvifs, list) {
+ 				if (arvif->is_up && arvif->vdev_type == WMI_VDEV_TYPE_STA)
+ 					ieee80211_hw_restart_disconnect(arvif->vif);
+ 			}
+ 		}
++
++		if (ath11k_mac_fw_generates_pn(ar->ab))
++			ieee80211_iterate_stations_atomic(ar->hw,
++							  ath11k_mac_restart_kick_sta_iter,
++							  ar);
+ 	}
+ 
+ 	mutex_unlock(&ar->conf_mutex);

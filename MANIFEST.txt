@@ -104,6 +104,14 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          oopsed in ath11k_dp_rx_pdev_free() (panic_on_oops -> reboot, or a
          hung unload). Skip ath11k_mac_destroy() while REGISTERED. Verified:
          forced double crash -> failed reconfigure -> hw-restart, no oops.
+  5439  package/kernel/mac80211/patches/ath11k/960-wifi-ath11k-disconnect-stations-after-a-firmware-restart.patch
+         After a firmware restart the firmware restarts CCMP transmit packet
+         numbers at 0 and ignores the key install counter, so a client that
+         checks replays in firmware (BCM43455) stays associated and deaf.
+         Reports the AP's stations with a hardware pairwise key as lost
+         (hostapd disassoc_low_ack, on by default, disassociates them) and
+         reconnects station interfaces; not in raw or software-crypto mode.
+         Verified on both builds.
   3162  package/kernel/mac80211/patches/ath11k/961-wifi-ath11k-keep-the-hal-when-crash-recovery-fails.patch
          A failed crash recovery freed the HAL that the next restart reuses:
          restarting pd-1 after a double crash oopsed in ath11k_core_restart

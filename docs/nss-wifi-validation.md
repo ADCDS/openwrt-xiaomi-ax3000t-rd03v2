@@ -259,7 +259,7 @@ builds get it through `qca-nss-ecm` and `build.sh` adds it to the default build.
 
 ### ath11k crash-recovery fixes in both builds
 
-Eight patches in `files/` reach both builds:
+Nine patches in `files/` reach both builds:
 - `955` removes a one-shot WARN seen when a station is deleted while the
   firmware is dead or wedged; `956` removes the regulatory `-22` line printed
   on recoveries.
@@ -277,6 +277,8 @@ Eight patches in `files/` reach both builds:
   firmware crashed again: `959` keeps the registered `ieee80211_hw`, `961`
   keeps the HAL that the next restart reuses (restarting pd-1 afterwards
   oopsed in `ath11k_core_restart`).
+- `960` makes stations reconnect after a firmware restart, whose CCMP packet
+  numbers start again from zero (a BCM43455 client stayed deaf otherwise).
 - `962` keeps a recovery that follows a failed one from disabling the
   interrupts a second time (`disable_irq()` nests), which left the data path
   interrupts (IPQ5018) or the CE interrupts (QCN6122) off after it.
@@ -290,6 +292,15 @@ Bench checks for these patches:
   `already holds .* power reference` and `cannot drop the power reference`
   after assert and hw-restart trials. A forced reload-failure scenario is
   still needed with 957 in the image.
+
+Status:
+- With 950-963 in the stack, donor patches `199-003` (a `core.c` and a
+  `mac.c` hunk) and `203` (`wmi.h`) apply with fuzz 1-2; the RD03v2 overrides
+  apply without fuzz.
+- The default-build replay applies 955-963 cleanly.
+- `ath11k.ko` and `ath11k_ahb.ko` build without warnings (`-Werror`) with the
+  NSS package's kbuild flags. The default-build ath11k sources also compile
+  against that configuration.
 
 ## Final installed-image test
 
