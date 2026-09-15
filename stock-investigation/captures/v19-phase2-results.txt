@@ -242,3 +242,26 @@ toggling runs happened on boxes with clients associated and traffic flowing.
 
 MemAvailable at the same instant: 40,016 kB with the block, against 37,088 kB
 without - consistent, and the figure a user would actually notice.
+
+=== ADDENDUM 4: build.sh's sed verified inside a real build tree ===
+
+The A/B above installed a hand-generated copy of the block. That leaves a gap:
+it does not prove build.sh's `sed -i '1i\...'` produces the right file during an
+actual image build, where the escaped newlines and the escaped apostrophe in
+"stock's" have to survive.
+
+Closed by starting a second full NSS=1 KMODS=1 build from the repo at 01b91f5
+and inspecting the tree it prepared:
+
+  openwrt/target/linux/qualcommax/ipq50xx/base-files/etc/rc.local
+    - valid shell (`sh -n` clean)
+    - 6 matches for dev/nss (5 writes + 1 comment reference)
+    - write order as intended:
+        5: echo 1 > /proc/sys/dev/nss/general/redirect
+        6: echo 1 > /proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode
+        7: echo 1 > /proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode
+       26: echo 802816 > /proc/sys/dev/nss/n2hcfg/extra_pbuf_core0
+       27: echo 4096   > /proc/sys/dev/nss/n2hcfg/n2h_empty_pool_buf_core0
+    - the apostrophe in "stock's exact number" survived intact
+
+extra_pbuf_core0 precedes the pool write, as the write-once property requires.
