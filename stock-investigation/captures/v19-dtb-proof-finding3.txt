@@ -1,0 +1,84 @@
+=== Finding #3: offline DTB proof that deleting q6_mem_regions is a no-op ===
+
+Method: compile the board DTS before and after the change against the same
+staged tree (mainline v6.12 ipq5018.dtsi + the OpenWrt qualcommax patches that
+touch it, notably 0189-...-bringup-q6.patch which declares q6_region), then
+decompile both DTBs and diff. This tests the built artifact, not the source.
+
+--- sizes ---
+before.dtb: 29684 bytes
+after.dtb : 29612 bytes
+
+--- COMPLETE diff of the decompiled trees ---
+--- before.decompiled.dts	2026-09-15 15:38:18.048901925 -0300
++++ after.decompiled.dts	2026-09-15 15:38:18.048901925 -0300
+@@ -166,11 +166,6 @@
+ 			no-map;
+ 			phandle = <0x46>;
+ 		};
+-
+-		q6_mem_regions@4b000000 {
+-			no-map;
+-			reg = <0x00 0x4b000000 0x00 0x3000000>;
+-		};
+ 	};
+ 
+ 	soc@0 {
+
+--- the surviving Q6 reservation in AFTER ---
+		wcss@4b000000 {
+			reg = <0x00 0x4b000000 0x00 0x3000000>;
+			no-map;
+			phandle = <0x46>;
+		};
+
+--- every reserved-memory child in AFTER ---
+  	tz_apps@4a400000 {				reg = <0x00 0x4a400000 0x00 0x400000>;
+  	bootloader@4a800000 {				reg = <0x00 0x4a800000 0x00 0x200000>;
+  	sbl@4aa00000 {				reg = <0x00 0x4aa00000 0x00 0x100000>;
+  	smem@4ab00000 {				reg = <0x00 0x4ab00000 0x00 0x100000>;
+  	tz@4ac00000 {				reg = <0x00 0x4ac00000 0x00 0x200000>;
+  	wcss@4b000000 {				reg = <0x00 0x4b000000 0x00 0x3000000>;
+
+Conclusion: the ONLY change to the built device tree is the removal of the
+duplicate q6_mem_regions@4b000000 node. wcss@4b000000 keeps base 0x4b000000,
+size 0x3000000, no-map and its phandle, so the 48 MiB Q6 carve-out is
+bit-for-bit what it was. Nothing referenced the deleted label: a repo-wide
+grep for q6_mem_regions returned exactly one hit, its own declaration.
+
+=== Same proof for the NSS=1 build variant ===
+
+build.sh NSS=1 inserts ipq5018-nss.dtsi after the qcn6122 include and applies
+0819-...-add-NSS-reserved-memory.patch (which adds nss_region: memory@40000000).
+Reproduced both, then rebuilt and re-diffed:
+
+before.nss.dtb: 32451 bytes
+after.nss.dtb : 32379 bytes
+
+--- before.nss.dec.dts	2026-09-15 15:39:41.063627285 -0300
++++ after.nss.dec.dts	2026-09-15 15:39:41.063627285 -0300
+@@ -172,11 +172,6 @@
+ 			no-map;
+ 			phandle = <0x46>;
+ 		};
+-
+-		q6_mem_regions@4b000000 {
+-			no-map;
+-			reg = <0x00 0x4b000000 0x00 0x3000000>;
+-		};
+ 	};
+ 
+ 	soc@0 {
+
+--- every reserved-memory child in the NSS build, AFTER ---
+  memory@40000000 {  reg = <0x00 0x40000000 0x00 0x800000>;
+  tz_apps@4a400000 {  reg = <0x00 0x4a400000 0x00 0x400000>;
+  bootloader@4a800000 {  reg = <0x00 0x4a800000 0x00 0x200000>;
+  sbl@4aa00000 {  reg = <0x00 0x4aa00000 0x00 0x100000>;
+  smem@4ab00000 {  reg = <0x00 0x4ab00000 0x00 0x100000>;
+  tz@4ac00000 {  reg = <0x00 0x4ac00000 0x00 0x200000>;
+  wcss@4b000000 {  reg = <0x00 0x4b000000 0x00 0x3000000>;
+
+Identical result on the NSS build: one node removed, nothing else. The NSS
+carve-out (memory@40000000, 8 MiB) and the Q6 carve-out (wcss@4b000000,
+0x3000000) are both untouched.
