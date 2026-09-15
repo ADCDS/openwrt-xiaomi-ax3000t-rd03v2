@@ -1,0 +1,73 @@
+#!/bin/sh
+# bsh - run a command on the DEV BENCH RD03v2 (the port-side unit under test),
+# forced over the WIRED link.
+#
+# Unlike rsh (stock unit) and psh (in-service reference AP), this box is ours to
+# write to: it gets reflashed, sysctls poked, and rebooted.
+#
+#   ./bsh 'uptime'
+#   ./bsh < some-script.sh
+#
+# WHY THE NETNS: the USB3 ethernet to the bench lives in the root-owned "bench"
+# network namespace, not the default one. Outside that netns the only route to
+# the bench is over WiFi (the USB3 *wireless* adapter), which is exactly the
+# link a reflash tears down. Every command therefore runs inside the netns so it
+# cannot silently take the WiFi path. Needs root for `ip netns exec`.
+#
+# The bench-side address is STATIC (192.168.1.50, outside the .100-.249 DHCP
+# pool) precisely so the control path cannot expire or be reassigned mid-flash.
+set -eu
+
+envfile="$(dirname "$0")/../.bench-env"
+[ -f "$envfile" ] && . "$envfile"
+
+: "${BENCH_HOST:=192.168.1.1}"
+: "${BENCH_USER:=root}"
+: "${BENCH_NETNS:=bench}"
+: "${BENCH_IF:=enx00e04c125990}"
+: "${BENCH_ADDR:=192.168.1.50/24}"
+if [ -z "${BENCH_PASS:-}" ]; then
+  echo "$(basename "$0"): BENCH_PASS is not set; put it in stock-investigation/.bench-env" >&2
+  exit 2
+fi
+
+SUDO=""
+[ "$(id -u)" = 0 ] || SUDO="sudo -n"
+
+# Fail loudly if the wired path is not there, instead of appearing to work over
+# WiFi from the default namespace.
+if ! $SUDO ip netns list 2>/dev/null | grep -qw "$BENCH_NETNS"; then
+  echo "$(basename "$0"): netns '$BENCH_NETNS' not found - is the USB3 ethernet set up?" >&2
+  exit 3
+fi
+if ! $SUDO ip netns exec "$BENCH_NETNS" ip -br addr show "$BENCH_IF" 2>/dev/null \
+     | grep -q "${BENCH_ADDR%%/*}"; then
+  echo "$(basename "$0"): $BENCH_IF is not holding $BENCH_ADDR in netns $BENCH_NETNS." >&2
+  echo "  Re-pin it (a DHCP lease here can expire mid-flash):" >&2
+  echo "    sudo ip netns exec $BENCH_NETNS ip addr add $BENCH_ADDR dev $BENCH_IF" >&2
+  exit 4
+fi
+
+# -F /dev/null: the host has a root-owned ssh_config drop-in with bad
+#   permissions that makes ssh bail out (same reason rsh does this).
+# SSH_ASKPASS_REQUIRE=never + unset DISPLAY: stop ssh popping a GUI password
+#   dialog when it wants a passphrase.
+SSH_OPTS="-F /dev/null
+  -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile=/dev/null
+  -o LogLevel=ERROR
+  -o ConnectTimeout=10
+  -o ServerAliveInterval=15"
+
+unset DISPLAY
+export SSH_ASKPASS_REQUIRE=never
+
+if [ "$#" -gt 0 ]; then
+  exec $SUDO ip netns exec "$BENCH_NETNS" \
+    env SSH_ASKPASS_REQUIRE=never sshpass -p "$BENCH_PASS" \
+    ssh $SSH_OPTS "$BENCH_USER@$BENCH_HOST" "$@"
+else
+  exec $SUDO ip netns exec "$BENCH_NETNS" \
+    env SSH_ASKPASS_REQUIRE=never sshpass -p "$BENCH_PASS" \
+    ssh $SSH_OPTS "$BENCH_USER@$BENCH_HOST" 'sh -s'
+fi

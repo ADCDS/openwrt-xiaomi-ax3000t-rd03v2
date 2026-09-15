@@ -17,6 +17,7 @@ envfile="$here/../.bench-env"
 [ -f "$envfile" ] && . "$envfile"
 : "${STOCK_PASS:=__unset_password__}"
 : "${BENCH_PSK:=__unset_psk__}"
+: "${BENCH_PASS:=__unset_bench_password__}"
 
 for f in "$raw"/*.txt "$raw"/*.csv; do
   [ -e "$f" ] || continue
@@ -30,6 +31,7 @@ for f in "$raw"/*.txt "$raw"/*.csv; do
     -e 's/\bBRAVO(-IOT)?\b/<redacted-ssid>/g' \
     -e "s/${STOCK_PASS}/<redacted-password>/g" \
     -e "s/${BENCH_PSK}/<redacted-psk>/g" \
+    -e "s/${BENCH_PASS}/<redacted-password>/g" \
     -e 's/^([A-Za-z_]*(passwd|password|psk|key|secret)[A-Za-z_]*[ ]?=[ ]?).*/\1<redacted>/I' \
     "$f" > "$out/$b"
 done
@@ -44,4 +46,4 @@ fi
 echo "scrubbed $(ls -1 "$out" | wc -l) files into captures/"
 echo
 echo "residual identifier check (should be empty):"
-grep -rInE "([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}|\[50 92 6a|64595/|2168377895|minet_rd03|${STOCK_PASS}|${BENCH_PSK}" "$out" || echo "  clean"
+grep -rInE "([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}|\[50 92 6a|64595/|2168377895|minet_rd03|${STOCK_PASS}|${BENCH_PSK}|${BENCH_PASS}" "$out" || echo "  clean"

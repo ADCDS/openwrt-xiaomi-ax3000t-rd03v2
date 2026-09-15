@@ -44,18 +44,20 @@ have it. Create it first, or the helpers refuse to run:
 cat > .bench-env <<'EOF'
 STOCK_PASS=<bench root password>
 BENCH_PSK=<bench AP PSK; only needed to attach a client for phase 8>
+BENCH_PASS=<dev bench root password; only needed by bsh, see below>
 EOF
 chmod 600 .bench-env
 ```
 
-`scrub.sh` reads the same file, so both secrets get stripped from `captures/`
-without either one being written into a tracked script.
+`scrub.sh` reads the same file, so those secrets get stripped from `captures/`
+without any of them being written into a tracked script.
 
 ```sh
 cd scripts
 ./rsh 'uptime'                 # one-off command on the bench unit
 ./rrun phase1.sh > ../raw/phase1-memlayout.txt
 ./psh  'uptime'                # read-only, on the port-side reference AP
+./bsh  'uptime'                # dev bench (our unit under test), over the wire
 ./scrub.sh
 ```
 
@@ -64,6 +66,18 @@ cd scripts
 | `rsh` | bench stock unit, `192.168.31.1` | password auth via `sshpass`, credentials from `.bench-env`; override with `STOCK_HOST`/`STOCK_PASS` |
 | `rrun <script>` | same | stages the script in `/tmp` and runs it with stdin closed, then deletes it |
 | `psh` | port reference AP, `192.168.100.2` | key auth (`~/.ssh/id_router`) |
+| `bsh` | dev bench port unit, `192.168.1.1` | **writable** — this is the box we reflash. Forces the wired path (see below) |
+
+`rsh` and `psh` are read-only by policy. `bsh` is not: the dev bench is ours to
+reflash, poke sysctls on, and reboot.
+
+**`bsh` forces the wired link.** The USB3 ethernet to the dev bench lives in a
+root-owned `bench` network namespace, so `bsh` runs everything under
+`ip netns exec` (hence sudo). Outside that namespace the only route to the bench
+is over WiFi — the very link a reflash tears down. The bench-side address is
+static (`192.168.1.50`, deliberately outside the `.100`-`.249` DHCP pool) so the
+control path cannot expire or be reassigned mid-flash; `bsh` refuses to run if
+that address is missing rather than quietly falling back to WiFi.
 
 **Use `rrun`, not `rsh < script`, for anything that might read stdin.** Piping a
 script into `ssh 'sh -s'` makes the script itself the remote shell's stdin, so a
