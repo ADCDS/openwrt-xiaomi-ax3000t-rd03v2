@@ -1,0 +1,46 @@
+=== v1.9 bench topology, established Phase 0 ===
+
+  syd (this host)                    RD03v2 dev bench                tiny (RPi)
+  enx00e04c125990  --- wired --->    lan3 (1000M, carrier=1)
+  192.168.1.50/24 (STATIC)           br-lan 192.168.1.1
+  in netns "bench"                   phy1-ap0 (5 GHz ch36)  <-- wifi --  wlan0
+                                                                         192.168.1.146
+                                                                         (DHCP)
+
+Control paths (deliberately NOT the links under test):
+  - bench   : wired, via scripts/bsh -> ip netns exec bench -> ssh root@192.168.1.1
+  - tiny    : wired, br0/eth0 192.168.100.145 (NOT wlan0). A bench reflash drops
+              tiny's wifi; its control path must not ride on it.
+
+Addressing decisions:
+  - syd's bench-side address is STATIC 192.168.1.50/24, outside the bench DHCP
+    pool (.100-.249, 12h lease). A lease here can expire or be reassigned
+    mid-flash; the control path must not depend on one.
+  - Stale addresses removed during setup: 192.168.2.101/24 (syd wired),
+    192.168.2.60/24 (tiny wlan0). Both were leftovers from an earlier bench
+    topology and were why the wired link first appeared "not cabled" - the cable
+    was fine, the L3 addressing was simply on a network nobody served.
+
+tiny wifi notes:
+  - wlan0 was NM-"unmanaged" and held by a stray wpa_supplicant (PID 4223,
+    /run/wifi-client-wlan0.conf) already pinned to BSSID xx:xx:xx:xx:xx:xx, i.e.
+    someone had set this up before. Retired it so NetworkManager owns wlan0.
+  - A plain `nmcli dev wifi connect ... bssid <5GHz>` still associated to 2.4 GHz
+    (phy0-ap0). Pinning the PROFILE with `802-11-wireless.band a` plus the bssid
+    is what actually holds it on 5 GHz.
+  - Associated: ch36 (5180 MHz), -7 dBm at the AP, tx 325 Mbit/s VHT-MCS 7
+    80 MHz VHT-NSS 1.
+
+=== Forwarded-path validation (the setup notes/V1.9-TUNING.md asks for) ===
+
+iperf3, wired host -> bench -> 5 GHz tiny, 10 s:
+  98.5 MBytes, 82.6 Mbit/s sender / 82.2 Mbit/s receiver, 12 retransmits
+
+Interface counters across a separate 5 s run, proving the traffic is FORWARDED
+(crosses two interfaces) rather than terminated on the router:
+  before: lan3 rx=108471066  phy1-ap0 tx=109897927
+  after : lan3 rx=163024017  phy1-ap0 tx=165165033
+  delta : lan3 rx +54552951 (+54.5 MB)   phy1-ap0 tx +55267106 (+55.3 MB)
+
+This engages ECM on an NSS build, which the existing phase-8 captures could not:
+those ran wifi-to-router (terminated). This is the load generator for finding #1.
