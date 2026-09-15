@@ -156,17 +156,21 @@ Buttons
 
 target/linux/qualcommax/
 ------------------------
-  13504  target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
+  17784  target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
          Device tree: SoC, NAND partitions, AN8855 switch, QCN6122,
          LEDs, buttons, MACs/caldata wiring. Both CPU ports are wired:
          port@5 -> dp2/eth1 (2.5G, the default user-port conduit) and
          port@4 -> dp1/eth0 (1G via AN8855 PHY5 <-> IPQ5018 GE PHY, real
          link state) — the dual-conduit topology the NSS offload steers
-         WAN traffic onto (see docs/nss-offload.md).
-   7887  target/linux/qualcommax/image/ipq50xx.mk
+         WAN traffic onto (see docs/nss-offload.md). Declares no
+         reserved-memory node of its own: the Q6 carve-out comes from
+         upstream's q6_region (wcss@4b000000), resized by
+         ipq5018-qcn6122.dtsi. A local duplicate used to trip
+         "OF: reserved mem: OVERLAP DETECTED!" at every boot.
+   7938  target/linux/qualcommax/image/ipq50xx.mk
          Image recipe Device/xiaomi_mi-router-ax3000t-v2
          (DTS config@mp03.3, KERNEL_IN_UBI, wifi fw + board-data pkgs).
-    695  target/linux/qualcommax/ipq50xx/config-default
+    743  target/linux/qualcommax/ipq50xx/config-default
          Enables the AN8855 kernel symbols for ipq50xx: AIR_AN8855_PHY,
          MDIO_AN8855, MFD_AIROHA_AN8855, NET_DSA_AN8855,
          NET_DSA_TAG_MTK, NVMEM_AN8855_EFUSE.
@@ -178,7 +182,13 @@ target/linux/qualcommax/ipq50xx/base-files/
     966  target/linux/qualcommax/ipq50xx/base-files/etc/rc.local
          Re-arms the U-Boot boot-success flags after a good boot, so the
          loader's A/B failsafe does not eventually fall back to stock. The
-         NSS build prepends the /proc/sys/dev/nss knobs to this same file.
+         NSS build prepends the /proc/sys/dev/nss knobs to this same file:
+         general/redirect, the two ipv{4,6} accel modes, and (v1.9) the
+         n2hcfg host buffer pool at stock's 4096 with extra_pbuf_core0 —
+         worth ~5.5 MB of unreclaimable slab, measured boot-to-boot.
+         NOTE: this is a config file, so restoring a backup taken on the
+         other build flavour reverts it and silently disables all of the
+         above. See README.
    4034  target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
          Caldata extraction from 0:ART — 2.4 GHz @ 0x1000,
          5 GHz (QCN6122) @ 0x26800, 0x20000 each.
@@ -211,7 +221,7 @@ target/linux/qualcommax/ipq50xx/base-files/
          See docs/q6-firmware-crash.md.
    243  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog
          procd service for the above (START=99, respawns).
-   5705  target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
+   6823  target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
          sysupgrade/NAND-install + U-Boot boot-flags: initramfs prepare,
          fw_setenv boot_wait/uart_en, flag_boot_rootfs toggle.
 
@@ -219,9 +229,9 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
 ---------------------------------------------------------
    7676  target/linux/qualcommax/files/drivers/mfd/airoha-an8855.c
          AN8855 MFD core: shared regmap/register access for sub-drivers.
-  65699  target/linux/qualcommax/files/drivers/net/dsa/an8855.c
+  71027  target/linux/qualcommax/files/drivers/net/dsa/an8855.c
          AN8855 DSA switch driver core (ports, VLAN, FDB, MIB).
-  29963  target/linux/qualcommax/files/drivers/net/dsa/an8855.h
+  30575  target/linux/qualcommax/files/drivers/net/dsa/an8855.h
          AN8855 DSA driver header: register/field definitions.
    6763  target/linux/qualcommax/files/drivers/net/dsa/an8855_nl.c
          AN8855 netlink interface (debug/config access to switch regs).
@@ -300,7 +310,7 @@ AN8855 switch driver (kernel, via files/ + patches-6.12/)
   12419  target/linux/qualcommax/patches-6.12/737-net-dsa-add-Airoha-AN8855.patch
          Kernel wiring for the AN8855 drivers (Kconfig/Makefile hooks;
          from the upstream "net: dsa: Add Airoha AN8855 support" v11 series).
-  44675  target/linux/qualcommax/patches-6.12/999-2757-net-dsa-add-an8855-v2p0p1-and-netlink-support.patch
+  42302  target/linux/qualcommax/patches-6.12/999-2757-net-dsa-add-an8855-v2p0p1-and-netlink-support.patch
          AN8855 driver update to v2.0.1 + netlink support (openwrt PR
          #2757 series); pairs with the sources under files/drivers/.
 
