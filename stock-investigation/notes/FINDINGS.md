@@ -193,7 +193,9 @@ And the resulting pools, live:
 | `n2h_n2h_tot_payloads` | 10617 | 4520 |
 
 Read those two tables together, because the pattern is the whole point: **stock
-puts more buffering in the NSS's own reserved heap and less in Linux slab.**
+buys more NSS-side descriptors while spending far less Linux memory on the
+empty-buffer pool.** (Not "moves the buffering into the NSS's own reserved
+heap" - see the correction below; the extra pbuf pages are host-allocated.)
 `extra_pbuf_core0=802816` grows the NSS-side descriptor pool to 14884. The
 host-side pool it asks Linux for is only 4096 buffers, half of ours.
 

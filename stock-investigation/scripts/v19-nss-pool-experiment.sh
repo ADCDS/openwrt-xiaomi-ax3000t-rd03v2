@@ -115,11 +115,14 @@ say "6. interpretation"
 cat <<'EOT'
 Compare SUnreclaim BEFORE vs AFTER.
 
-Expect the NET, not the gross: the pool shrink returns (8704-4096) x 2304 B =
-10.12 MiB, while extra_pbuf_core0=802816 hands ~0.77 MiB straight back as host
-pages. So a full success looks like roughly -9.4 MiB, not -10.1 MiB.
+Expect the NET, not the gross. /proc/meminfo is in kB, so work in kB:
+    pool shrink : (8704 - 4096) x 2304 B = 10,368 kB returned
+    extra_pbuf  :               802,816 B =    784 kB spent (host pages)
+    NET                                   =  9,584 kB
+So a full success is SUnreclaim about 9,584 kB lower - NOT 10,368. Expecting the
+gross figure would make a correct result look like it fell ~800 kB short.
 
-  ~9.4 MB lower -> the runtime write DOES free memory. Finding #1 ships as an
+  ~9,584 kB lower -> the runtime write DOES free memory. Finding #1 ships as an
                    rc.local block (build.sh's current block sets only
                    general/redirect and the two accel modes; the n2hcfg writes
                    would be added next to them).
