@@ -1,0 +1,14 @@
+=== TCP reverse (hal 5GHz -> host 2.4GHz) 90s ===
+[  5]  30.01-45.02  sec  10.0 MBytes  5.59 Mbits/sec                  
+[  5]  45.02-60.01  sec  9.62 MBytes  5.38 Mbits/sec                  
+[  5]  60.01-75.02  sec  12.5 MBytes  6.99 Mbits/sec                  
+[  5]  75.02-90.01  sec  11.6 MBytes  6.50 Mbits/sec                  
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-90.02  sec  64.0 MBytes  5.96 Mbits/sec  860            sender
+[  5]   0.00-90.01  sec  63.9 MBytes  5.95 Mbits/sec                  receiver
+
+iperf Done.
+
+=== TCP forward (host 2.4GHz -> hal 5GHz) 90s ===
+iperf3: error - unable to receive control message - port may not be available, the other side may have stopped running, etc.: Connection reset by peer

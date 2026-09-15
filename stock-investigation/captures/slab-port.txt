@@ -1,0 +1,470 @@
+===== slub sysfs capability =====
+sample=/sys/kernel/slab/:0000016
+aliases align cache_dma cpu_partial cpu_slabs ctor destroy_by_rcu hwcache_align min_partial object_size objects_partial objs_per_slab order partial reclaim_account shrink slab_size slabs_cpu_partial usersize 
+
+===== per-cache totals (name total_objects objects object_size slabs order slab_size) =====
+:0000016   16  0 16
+:0000024   24  0 24
+:0000032   32  0 32
+:0000040   40  0 40
+:0000048   48  0 48
+:0000056   56  0 56
+:0000064   64  0 64
+:0000072   72  0 72
+:0000080   80  0 80
+:0000096   96  0 96
+:0000128   128  0 128
+:0000136   136  0 136
+:0000160   160  0 160
+:0000184   184  0 184
+:0000192   192  0 192
+:0000200   200  0 200
+:0000224   224  0 224
+:0000240   240  0 240
+:0000256   256  0 256
+:0000512   512  1 512
+:0000576   576  1 576
+:0000704   704  2 704
+:0000960   960  2 960
+:0001024   1024  2 1024
+:0002048   2048  3 2048
+:0004096   4096  3 4096
+:A-0000016   16  0 16
+:A-0000040   40  0 40
+:A-0000048   48  0 48
+:A-0000056   56  0 56
+:A-0000064   64  0 64
+:A-0000072   72  0 72
+:A-0000080   80  0 80
+:A-0000120   120  0 120
+:A-0000128   128  0 128
+:A-0000136   136  0 136
+:A-0000152   152  0 152
+:A-0000192   176  0 192
+:A-0000256   256  0 256
+:A-0000384   336  1 384
+:A-0000600   600  1 600
+:A-0000704   704  2 704
+:A-0000768   760  2 768
+:A-0000960   952  2 960
+:A-0001024   1024  2 1024
+:A-0001088   1088  2 1088
+:A-0001216   1160  2 1216
+:A-0001280   1280  2 1280
+:A-0002880   2880  3 2880
+:a-0000016   16  0 16
+:a-0000032   32  0 32
+:a-0000040   40  0 40
+:a-0000048   48  0 48
+:a-0000056   56  0 56
+:a-0000064   64  0 64
+:a-0000104   104  0 104
+:a-0000112   112  0 112
+:a-0000168   168  0 168
+:a-0000256   208  0 256
+MPTCP   1928  3 1984
+MPTCPv6   2088  3 2112
+RAW   960  2 960
+RAWv6   1160  2 1216
+TCP   2240  3 2304
+TCPv6   2432  3 2496
+anon_vma   96  0 104
+bdev_cache   1504  3 1536
+bio-112   112  0 128
+bio-176   176  0 192
+bio-232   232  0 256
+bio-240   240  0 256
+dentry   192  0 192
+dma-kmalloc-128   128  0 128
+dma-kmalloc-16   16  0 16
+dma-kmalloc-192   192  0 192
+dma-kmalloc-1k   1024  2 1024
+dma-kmalloc-256   256  0 256
+dma-kmalloc-2k   2048  3 2048
+dma-kmalloc-32   32  0 32
+dma-kmalloc-4k   4096  3 4096
+dma-kmalloc-512   512  1 512
+dma-kmalloc-64   64  0 64
+dma-kmalloc-8   8  0 8
+dma-kmalloc-8k   8192  3 8192
+dma-kmalloc-96   96  0 96
+ext4_inode_cache   1104  2 1112
+filp   176  0 192
+inode_cache   600  1 608
+io_kiocb   248  0 256
+jbd2_journal_head   112  0 120
+jffs2_i   688  2 696
+kmalloc-128   128  0 128
+kmalloc-16   16  0 16
+kmalloc-192   192  0 192
+kmalloc-1k   1024  2 1024
+kmalloc-256   256  0 256
+kmalloc-2k   2048  3 2048
+kmalloc-32   32  0 32
+kmalloc-4k   4096  3 4096
+kmalloc-512   512  1 512
+kmalloc-64   64  0 64
+kmalloc-8   8  0 8
+kmalloc-8k   8192  3 8192
+kmalloc-96   96  0 96
+kmalloc-cg-128   128  0 128
+kmalloc-cg-16   16  0 16
+kmalloc-cg-192   192  0 192
+kmalloc-cg-1k   1024  2 1024
+kmalloc-cg-256   256  0 256
+kmalloc-cg-2k   2048  3 2048
+kmalloc-cg-32   32  0 32
+kmalloc-cg-4k   4096  3 4096
+kmalloc-cg-512   512  1 512
+kmalloc-cg-64   64  0 64
+kmalloc-cg-8   8  0 8
+kmalloc-cg-8k   8192  3 8192
+kmalloc-cg-96   96  0 96
+kmalloc-rcl-128   128  0 128
+kmalloc-rcl-16   16  0 16
+kmalloc-rcl-192   192  0 192
+kmalloc-rcl-1k   1024  2 1024
+kmalloc-rcl-256   256  0 256
+kmalloc-rcl-2k   2048  3 2048
+kmalloc-rcl-32   32  0 32
+kmalloc-rcl-4k   4096  3 4096
+kmalloc-rcl-512   512  1 512
+kmalloc-rcl-64   64  0 64
+kmalloc-rcl-8   8  0 8
+kmalloc-rcl-8k   8192  3 8192
+kmalloc-rcl-96   96  0 96
+kmalloc_buckets   112  0 112
+kmem_cache   216  0 256
+kmem_cache_node   32  0 32
+memdup_user-128   128  0 128
+memdup_user-16   16  0 16
+memdup_user-192   192  0 192
+memdup_user-1k   1024  2 1024
+memdup_user-256   256  0 256
+memdup_user-2k   2048  3 2048
+memdup_user-32   32  0 32
+memdup_user-4k   4096  3 4096
+memdup_user-512   512  1 512
+memdup_user-64   64  0 64
+memdup_user-8   8  0 8
+memdup_user-8k   8192  3 8192
+memdup_user-96   96  0 96
+mm_struct   1096  2 1152
+mqueue_inode_cache   920  2 960
+msg_msg-128   128  0 128
+msg_msg-16   16  0 16
+msg_msg-192   192  0 192
+msg_msg-1k   1024  2 1024
+msg_msg-256   256  0 256
+msg_msg-2k   2048  3 2048
+msg_msg-32   32  0 32
+msg_msg-4k   4096  3 4096
+msg_msg-512   512  1 512
+msg_msg-64   64  0 64
+msg_msg-8   8  0 8
+msg_msg-8k   8192  3 8192
+msg_msg-96   96  0 96
+names_cache   4096  3 4096
+nf_conntrack   248  0 256
+ovl_inode   680  2 688
+proc_dir_entry   192  0 192
+proc_inode_cache   672  1 680
+radix_tree_node   576  1 584
+request_sock_TCP   304  0 312
+request_sock_TCPv6   304  0 312
+request_sock_subflow_v4   376  1 384
+request_sock_subflow_v6   376  1 384
+shmem_inode_cache   712  2 720
+sighand_cache   2080  3 2112
+skb_data_cache   2688  3 2688
+skb_data_cache_2100   2688  3 2688
+skbuff_head_cache   224  0 256
+skbuff_small_head   704  2 704
+sock_inode_cache   768  2 832
+squashfs_inode_cache   664  2 704
+task_struct   3712  3 3712
+tw_sock_TCP   240  0 248
+tw_sock_TCPv6   240  0 248
+ubifs_inode_slab   768  2 776
+uts_namespace   432  1 432
+
+===== aliases =====
+PING -> :A-0000960
+PINGv6 -> :A-0001216
+QIPCRTR -> :A-0000768
+UDP -> :A-0001088
+UDP-Lite -> :A-0001088
+UDPLITEv6 -> :A-0001280
+UDPv6 -> :A-0001280
+UNIX -> :A-0001024
+UNIX-STREAM -> :A-0001024
+aio_kiocb -> :0000192
+anon_vma_chain -> :A-0000064
+backing_aio -> :0000128
+bio_post_read_ctx -> :a-0000048
+biovec-128 -> :0002048
+biovec-16 -> :0000256
+biovec-64 -> :0001024
+biovec-max -> :0004096
+blkdev_ioc -> :0000016
+buffer_head -> :a-0000104
+cred -> :A-0000192
+dmaengine-unmap-2 -> :0000064
+ep_head -> :A-0000016
+eventpoll_epi -> :A-0000128
+eventpoll_pwq -> :A-0000064
+ext4_allocation_context -> :a-0000168
+ext4_fc_dentry_update -> :a-0000104
+ext4_free_data -> :a-0000056
+ext4_io_end -> :a-0000064
+ext4_io_end_vec -> :0000032
+ext4_prealloc_space -> :a-0000112
+ext4_system_zone -> :0000040
+extent_status -> :a-0000040
+fanotify_fid_event -> :0000072
+fanotify_mark -> :A-0000080
+fanotify_path_event -> :0000064
+fasync_cache -> :A-0000048
+fib6_node -> :A-0000128
+file_lease_cache -> :0000160
+file_lock_cache -> :0000192
+file_lock_ctx -> :0000056
+files_cache -> :A-0000704
+fs_cache -> :A-0000064
+fsnotify_mark_connector -> :0000024
+inet_peer -> :0000192
+inotify_inode_mark -> :A-0000080
+ip4-frags -> :0000200
+ip6-frags -> :0000184
+ip6_dst_cache -> :A-0000256
+ip_fib_alias -> :A-0000056
+ip_fib_trie -> :A-0000048
+jbd2_inode -> :0000064
+jbd2_journal_handle -> :a-0000056
+jbd2_revoke_record_s -> :a-0000032
+jbd2_revoke_table_s -> :a-0000016
+jbd2_transaction_s -> :a-0000256
+jffs2_full_dnode -> :0000024
+jffs2_inode_cache -> :0000048
+jffs2_node_frag -> :0000040
+jffs2_raw_dirent -> :0000064
+jffs2_raw_inode -> :0000128
+jffs2_refblock -> :0000240
+jffs2_tmp_dnode_info -> :0000056
+jffs2_xattr_datum -> :0000096
+jffs2_xattr_ref -> :0000048
+kernfs_iattrs_cache -> :0000080
+kernfs_node_cache -> :0000136
+key_jar -> :0000256
+kioctx -> :0000576
+maple_node -> :0000256
+mb_cache_entry -> :a-0000056
+mfc6_cache -> :0000192
+mfc_cache -> :0000192
+mnt_cache -> :A-0000384
+net_bridge_fdb_entry -> :0000128
+net_namespace -> :A-0002880
+nf-frags -> :0000184
+nf_conntrack_expect -> :0000224
+nsproxy -> :A-0000072
+pde_opener -> :A-0000040
+pending_reservation -> :a-0000032
+pid -> :A-0000128
+pid_2 -> :A-0000192
+pid_namespace -> :A-0000136
+pool_workqueue -> :0000512
+posix_timers_cache -> :A-0000256
+request_queue -> :0000960
+rtable -> :0000192
+seq_file -> :A-0000120
+sgpool-128 -> :0004096
+sgpool-16 -> :0000512
+sgpool-32 -> :0001024
+sgpool-64 -> :0002048
+sgpool-8 -> :0000256
+signal_cache -> :A-0000960
+sigqueue -> :A-0000080
+skbuff_ext_cache -> :0000064
+skbuff_fclone_cache -> :0000512
+task_group -> :0000704
+tcp_bind2_bucket -> :A-0000128
+tcp_bind_bucket -> :A-0000128
+ubi_aeb_slab_cache -> :0000056
+ubi_wl_entry_slab -> :0000032
+uid_cache -> :0000128
+user_namespace -> :A-0000600
+vm_area_struct -> :A-0000152
+vma_lock -> :A-0000040
+vmap_area -> :0000072
+
+===== nss n2h config (port) =====
+/proc/sys/dev/nss/clock/auto_scale = 1
+/proc/sys/dev/nss/clock/current_freq = 
+/proc/sys/dev/nss/clock/freq_table = 
+/proc/sys/dev/nss/clock/inst_per_sec = 
+/proc/sys/dev/nss/general/coredump = 0
+/proc/sys/dev/nss/general/jumbo_mru = 0
+/proc/sys/dev/nss/general/logbuf = 0
+/proc/sys/dev/nss/general/paged_mode = 0
+/proc/sys/dev/nss/general/redirect = 1
+/proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode = 1
+/proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode = 1
+/proc/sys/dev/nss/n2hcfg/extra_pbuf_core0 = 0
+/proc/sys/dev/nss/n2hcfg/host_bp_enable0 = 0
+/proc/sys/dev/nss/n2hcfg/mitigation_core0 = 1
+/proc/sys/dev/nss/n2hcfg/n2h_empty_paged_pool_buf_core0 = 0
+/proc/sys/dev/nss/n2hcfg/n2h_empty_pool_buf_core0 = 8704
+/proc/sys/dev/nss/n2hcfg/n2h_high_water_core0 = 8704
+/proc/sys/dev/nss/n2hcfg/n2h_low_water_core0 = 4352
+/proc/sys/dev/nss/n2hcfg/n2h_paged_high_water_core0 = 0
+/proc/sys/dev/nss/n2hcfg/n2h_paged_low_water_core0 = 0
+/proc/sys/dev/nss/n2hcfg/n2h_queue_limit_core0 = 256
+/proc/sys/dev/nss/n2hcfg/n2h_wifi_pool_buf = 0
+/proc/sys/dev/nss/n2hcfg/qos_mem_size = 0
+/proc/sys/dev/nss/pppoe/br_accel_mode = 1
+/proc/sys/dev/nss/project/wt_stats = 0
+/proc/sys/dev/nss/rps/enable = 0
+/proc/sys/dev/nss/rps/hash_bitmap = 3
+/proc/sys/dev/nss/rps/pri_map = Cores: -1 -1 -1 -1 
+/proc/sys/dev/nss/skb_reuse/max_size = 4096
+/proc/sys/dev/nss/skb_reuse/min_sizes = 
+/proc/sys/dev/nss/stats/non_zero_stats = 0
+
+===== skb recycler (port) =====
+count
+cpu0
+cpu1
+flush
+max_skbs
+max_spare_skbs
+skb_recycler_enable
+/proc/net/skb_recycler/count = recycle_list[0]: 0
+recycle_list[1]: 0
+recycle_spare_list[0]: 0
+recycle_spare_list[1]: 0
+global_list[0]: 0
+global_list[1]: 0
+global_list[2]: 0
+global_list[3]: 0
+global_list[4]: 0
+global_list[5]: 0
+global_list[6]: 0
+global_list[7]: 0
+total: 0
+/proc/net/skb_recycler/flush = 
+/proc/net/skb_recycler/max_skbs = 512
+/proc/net/skb_recycler/max_spare_skbs = 128
+/proc/net/skb_recycler/skb_recycler_enable = 0
+
+===== nss stats dir (port) =====
+cpu_load_ubi
+drv
+dynamic_if
+eth_rx
+gre
+ipv4
+ipv6
+l2tpv2
+n2h
+pppoe
+pptp
+project
+unaligned
+-- n2h --
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< N2H 0 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	n2h_rx_pkts                       = 1039649716      common
+	n2h_rx_byts                       = 177176482226    common
+	n2h_tx_pkts                       = 10241032        common
+	n2h_tx_byts                       = 4015412773      common
+	n2h_rx_queue[0]_drops             = 13696           drop
+	n2h_rx_queue[1]_drops             = 0               drop
+	n2h_rx_queue[2]_drops             = 0               drop
+	n2h_rx_queue[3]_drops             = 0               drop
+	n2h_queue_drops                   = 0               drop
+	n2h_ticks                         = 0               special
+	n2h_worst_ticks                   = 0               special
+	n2h_iterations                    = 0               special
+	n2h_pbuf_ocm_total_count          = 1500            special
+	n2h_pbuf_ocm_free_count           = 1372            special
+	n2h_pbuf_ocm_alloc_fail_payload   = 102125          special
+	n2h_pbuf_ocm_alloc_fail_nopayload = 206562          special
+	n2h_pbuf_def_total_count          = 9984            special
+	n2h_pbuf_def_free_count           = 9982            special
+	n2h_pbuf_def_alloc_fail_payload   = 49262           special
+	n2h_pbuf_def_alloc_fail_nopayload = 2769            special
+	n2h_payload_alloc_fails           = 45864           special
+	n2h_payload_free_count            = 4453            special
+	n2h_h2n_control_pkts              = 3289            special
+	n2h_h2n_control_byts              = 6525376         special
+	n2h_n2h_control_pkts              = 1007126309      special
+	n2h_n2h_control_byts              = 139848571648    special
+	n2h_h2n_data_pkts                 = 10237751        special
+	n2h_h2n_data_byts                 = 4008888813      special
+	n2h_n2h_data_pkts                 = 32523444        special
+	n2h_n2h_data_byts                 = 37327915030     special
+	n2h_n2h_tot_payloads              = 4583            special
+	n2h_n2h_data_interface_invalid    = 0               special
+	n2h_n2h_enqueue_retries           = 0               special
+-- meminfo core0 --
+Index Name                             Default User    Size       DMA Addr  
+N/A   n2h_rings                        SDRAM   SDRAM   0x30c0     0x438bc000
+N/A   h2n_rings                        SDRAM   SDRAM   0x71c0     0x43ad0000
+0     profile_dma_ctrl                 SDRAM   SDRAM   0x100      0x43817e00
+1     gmac_tx_desc_0                   SDRAM   SDRAM   0x1000     0x43272000
+2     gmac_tx_desc_1                   UTCM_SHARED UTCM_SHARED 0x1000     0x3f02e000
+3     gmac_rx_desc_0                   SDRAM   SDRAM   0x1000     0x43277000
+4     gmac_rx_desc_1                   UTCM_SHARED UTCM_SHARED 0x1000     0x3f02f000
+5     crypto_ce5_dma_desc_in           SDRAM   SDRAM   0x2000     0x43008000
+6     crypto_ce5_dma_desc_in_sg        SDRAM   SDRAM   0x2000     0x4300c000
+7     crypto_ce5_bypass_desc_in        SDRAM   SDRAM   0x800      0x43a62800
+8     crypto_ce5_bypass_desc_in_sg     SDRAM   SDRAM   0x800      0x43a66000
+9     crypto_ce5_dma_desc_out          SDRAM   SDRAM   0x2000     0x4300a000
+10    crypto_ce5_dma_desc_out_sg       SDRAM   SDRAM   0x2000     0x43a68000
+11    crypto_ce5_bypass_desc_out       SDRAM   SDRAM   0x800      0x43a64800
+12    crypto_ce5_bypass_desc_out_sg    SDRAM   SDRAM   0x800      0x43a67000
+13    crypto_ce5_hw_unlock             SDRAM   SDRAM   0x40       0x43331c40
+14    crypto_ce5_hwtk_null             SDRAM   SDRAM   0x100      0x43817700
+15    crypto_ce5_hwtk_aead             SDRAM   SDRAM   0x10000    0x43a70000
+16    crypto_ce5_hwtk_cipher           SDRAM   SDRAM   0x10000    0x43a80000
+17    crypto_ce5_hwtk_hash             SDRAM   SDRAM   0x10000    0x43a90000
+18    crypto_ce5_hw_result_null        SDRAM   SDRAM   0xc0       0x42c03f00
+19    crypto_ce5_hw_result_aead        SDRAM   SDRAM   0xc000     0x43aa0000
+20    crypto_ce5_hw_result_cipher      SDRAM   SDRAM   0xc000     0x43ab0000
+21    crypto_ce5_hw_result_hash        SDRAM   SDRAM   0xc000     0x43ac0000
+22    heap_ddr_size                    (null)  (null)  0x800000   0x40000000
+23    debug_boot_log_desc              SDRAM   SDRAM   0x1420     0x43a6c000
+24    nss_if_mem_map_inst              SDRAM   SDRAM   0x200      0x43832a00
+Available IMEM: 0x0
+How to configure? 
+Overwrite the /etc/modules.d/32-qca-nss-drv with following contents then reboot
+
+qca-nss-drv meminfo_user_config="<core_id, name, memory_type>, .."
+
+For example, <1, h2n_rings, IMEM> stands for: h2n_rings of core 1 is on IMEM
+Note:UTCM_SHARED cannot be used for n2h_rings, h2n_rings and debug_log_boot_desc.
+
+===== ath11k module params (port) =====
+== ath11k
+   cold_boot_cal = Y
+   crypto_mode = 0
+   debug_mask = 0
+   frame_mode = 1
+   ftm_mode = N
+== ath11k_ahb
+== ath11k_pci
+== qca_nss_drv
+   max_ipv4_conn = 2048
+   max_ipv6_conn = 2048
+   meminfo_user_config = 
+   nss_skip_nw_process = 0
+   pn_mq_en = N
+   qos_mem_size = 0
+
+===== conntrack (port) =====
+net.netfilter.nf_conntrack_max = 32768
+net.netfilter.nf_conntrack_count = 0

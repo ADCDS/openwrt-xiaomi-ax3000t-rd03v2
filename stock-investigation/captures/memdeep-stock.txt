@@ -1,0 +1,208 @@
+
+===== marker =====
+Wed Dec 24 14:06:15 CST 2025
+uptime: 4143.09 7648.02
+1.10 1.28 1.16 1/142 2770
+
+===== meminfo =====
+MemTotal:         186664 kB
+MemFree:           14436 kB
+MemAvailable:      65872 kB
+Buffers:           12496 kB
+Cached:            53584 kB
+SwapCached:            0 kB
+Active:            56092 kB
+Inactive:          15704 kB
+Active(anon):       6796 kB
+Inactive(anon):      760 kB
+Active(file):      49296 kB
+Inactive(file):    14944 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                 0 kB
+Writeback:             0 kB
+AnonPages:          5724 kB
+Mapped:             9872 kB
+Shmem:              1840 kB
+Slab:              58012 kB
+SReclaimable:       7156 kB
+SUnreclaim:        50856 kB
+KernelStack:        1120 kB
+PageTables:          720 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:       93332 kB
+Committed_AS:      18116 kB
+VmallocTotal:    1818624 kB
+VmallocUsed:           0 kB
+VmallocChunk:          0 kB
+
+===== zone-managed =====
+        spanned  65536
+        present  48896
+        managed  46666
+  start_pfn:         262144
+
+===== kernel-image-extent =====
+81208200 T _stext
+817c92a4 T _etext
+-- iomem kernel lines --
+  41208000-417c92a3 : Kernel code
+  417fa000-418a8aaf : Kernel data
+
+===== module-memory =====
+-- sum of module sizes from /proc/modules --
+modules=206  total=9242159 bytes (8.81 MiB)
+-- top 25 modules by size --
+      1.34 KiB  xt_u32
+      2.02 KiB  xt_time
+      2.76 KiB  xt_tcpudp
+      1.33 KiB  xt_tcpmss
+      1.17 KiB  xt_string
+      1.24 KiB  xt_statistic
+      1.15 KiB  xt_state
+      7.38 KiB  xt_set
+      7.23 KiB  xt_recent
+      1.15 KiB  xt_quota
+      1.00 KiB  xt_pkttype
+      1.74 KiB  xt_physdev
+      1.15 KiB  xt_owner
+      1.74 KiB  xt_nat
+      2.16 KiB  xt_multiport
+      1.02 KiB  xt_mark
+      1.71 KiB  xt_mac
+      1.47 KiB  xt_limit
+      1.09 KiB  xt_length
+      1.28 KiB  xt_hl
+      1.23 KiB  xt_helper
+      7.12 KiB  xt_hashlimit
+      9.64 KiB  xt_flowMARK
+      1.88 KiB  xt_ecn
+      1.47 KiB  xt_dscp
+-- vmalloc attributed to load_module --
+206
+load_module vmalloc = 10539008 bytes (10.05 MiB)
+
+===== dma-coherent-wifi =====
+-- qdf DMA-consistent (Wi-Fi datapath rings/descriptors) --
+allocs=86 total=17477632 bytes (16.67 MiB)
+-- dma_alloc / atomic pool --
+atomic_pool = 2101248 bytes (2.00 MiB)
+-- all 'user' (dma) mappings --
+user/dma mappings=93 total=19771392 bytes (18.86 MiB)
+
+===== vmalloc-breakdown =====
+    50700288  ioremap | devm_ioremap_wc+0x3c/0x70
+    22253568  ioremap | devm_ioremap+0x3c/0x70
+    17477632  user | __qdf_mem_alloc_consistent+0xd8/0x124 [qdf]
+    10539008  vmalloc | load_module+0x6f4/0x1b14
+     2105344  ioremap | cnss_pci_alloc_fw_mem+0x624/0x6c0
+     2101248  user | atomic_pool_init+0x0/0x154
+     2101248  ioremap | ssdk_plat_init+0x130/0x314 [qca_ssdk]
+     2101248  ioremap | hif_ahb_enable_bus+0x2a0/0x374 [qca_ol]
+     2101248  ioremap | cnss_wlfw_device_info_send_sync+0x2fc/0x45c
+     2097152  ioremap | pci_reserve_io+0x0/0x30
+      532480  vmalloc | xz_dec_lzma2_create+0x3c/0x78
+      528384  ioremap | xq_crash_init+0x11c/0x438
+      393216  vmalloc | ubifs_mount_orphans+0x3c/0x56c
+      393216  vmalloc | ubifs_mount+0xb18/0x1d64
+      393216  vmalloc | ubifs_mount+0xa58/0x1d64
+      393216  vmalloc | ubifs_lpt_init+0x62c/0x888
+      274432  vmalloc | jffs2_zlib_init+0x18/0x74
+      270336  vmalloc | ubi_attach_mtd_dev+0x844/0xde4
+      266240  vmalloc | 0x7f3fc014
+      266240  ioremap | xq_crash_init+0x314/0x438
+      184320  user | bam_alloc_chan+0xc0/0xf8
+      163840  vmalloc | pcpu_get_vm_areas+0x0/0x500
+      151552  vmalloc | deflate_init+0x1c/0xb8
+      147456  ioremap | of_iomap+0x38/0x58
+      135168  vmalloc | ecm_db_node_init+0x68/0xb0 [ecm]
+      135168  vmalloc | ecm_db_node_init+0x44/0xb0 [ecm]
+      135168  vmalloc | ecm_db_mapping_init+0x68/0xb0 [ecm]
+      135168  vmalloc | ecm_db_mapping_init+0x44/0xb0 [ecm]
+      135168  vmalloc | ecm_db_host_init+0x68/0xb0 [ecm]
+      135168  vmalloc | ecm_db_host_init+0x44/0xb0 [ecm]
+      135168  vmalloc | ecm_db_connection_init+0xd4/0x180 [ecm]
+      135168  vmalloc | ecm_db_connection_init+0xa0/0x180 [ecm]
+      135168  vmalloc | ecm_db_connection_init+0x7c/0x180 [ecm]
+      135168  vmalloc | ecm_db_connection_init+0x108/0x180 [ecm]
+      102400  vmalloc | xt_alloc_table_info+0x48/0x84 [x_tables]
+       57344  vmalloc | ubi_read_volume_table+0x37c/0x97c
+       49152  vmalloc | n_tty_open+0x10/0xcc
+       49152  vmalloc | jffs2_zlib_init+0x2c/0x74
+       49152  vmalloc | deflate_init+0x70/0xb8
+       24576  vmalloc | ubifs_lpt_init+0x5fc/0x888
+
+===== vmalloc-real-ram =====
+non-ioremap vmalloc = 35250176 bytes (33.62 MiB)
+ioremap (no RAM cost) = 84516864 bytes (80.60 MiB)
+
+===== slab-note =====
+stock is CONFIG_SLUB without CONFIG_SLUB_DEBUG: no /proc/slabinfo and
+the per-cache objects/slabs sysfs attributes read 0/absent.
+meminfo Slab/SReclaimable/SUnreclaim (from vmstat NR_SLAB_*) is all there is.
+nr_slab_reclaimable 1789
+nr_slab_unreclaimable 12714
+
+===== percpu =====
+0xff7d8000-0xff7ec000   81920 pcpu_get_vm_areas+0x0/0x500 vmalloc
+0xff7ec000-0xff800000   81920 pcpu_get_vm_areas+0x0/0x500 vmalloc
+nr_cpus: 2
+
+===== buddyinfo =====
+Node 0, zone   Normal     34     13      8      4      2      1      3      3      3      2      1 
+-- free memory by order (KiB) --
+order-0  count=34     =      136 KiB
+order-1  count=14     =      112 KiB
+order-2  count=10     =      160 KiB
+order-3  count=4      =      128 KiB
+order-4  count=2      =      128 KiB
+order-5  count=1      =      128 KiB
+order-6  count=3      =      768 KiB
+order-7  count=3      =     1536 KiB
+order-8  count=3      =     3072 KiB
+order-9  count=2      =     4096 KiB
+order-10 count=1      =     4096 KiB
+
+===== processes-rss =====
+-- userspace RSS total --
+sum VmRSS (double counts shared) = 40392 kB
+-- top 20 --
+3804 nginx
+2912 messagingagent
+2544 cab_meshd
+2272 syslog-ng
+2104 nginx
+1912 hostapd
+1216 fcgi-cgi
+1140 miwifi-roam
+1084 iwevent-call
+1040 miio_client_hel
+1040 miio_client
+1036 trafficd
+1028 netifd
+992 ash
+980 miwifi-discover
+960 sh
+880 dnsmasq
+868 procd
+808 smartcontroller
+796 sh
+
+===== accounting =====
+MemTotal        186664 kB
+  MemFree        14064 kB
+  Buffers        12496 kB
+  Cached         53584 kB
+  AnonPages       5788 kB
+  Slab           58012 kB
+  KernelStack     1248 kB
+  PageTables       712 kB
+  ---------------------
+  accounted     145904 kB
+  UNACCOUNTED    40760 kB   <- modules + DMA-coherent + percpu + memmap gaps
+
+===== swiotlb =====
