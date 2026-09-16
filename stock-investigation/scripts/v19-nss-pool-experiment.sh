@@ -115,15 +115,19 @@ say "6. interpretation"
 cat <<'EOT'
 Compare SUnreclaim BEFORE vs AFTER.
 
-MEASURED on the v1.9 bench (2026-07, freshly booted NSS build):
+NOTE: v1.9 ships the POOL KNOB ONLY, via /etc/init.d/nss-bufpool.
+extra_pbuf_core0 was dropped - see V1.9-TUNING.md finding #1. This script still
+writes both because its purpose is to characterise them; do not read a run of it
+as a preview of the shipped configuration.
 
-    SUnreclaim  44,740 -> 39,528 kB   =  -5,212 kB
-    pbuf_def_total_count 9,984 -> 14,884 (stock's number, no core restart)
+MEASURED on matched idle boots with the shipped (pool-only) configuration:
 
-That is the number to expect, and it is NOT the old prediction. The estimate
-said 9,584 kB net (10,368 returned at 2,304 B/buffer, less 784 kB for
-extra_pbuf); the hardware says 5,212 kB. Back-solving gives 1,332 B per buffer,
-about kmalloc-1024 + skbuff_head_cache - one slab class below the assumption.
+    SUnreclaim  44,576 -> 38,204 / 38,144 kB   =  about -6.3 MB
+
+The arm that also set extra_pbuf gave only -5,212 kB from a single mid-boot
+write, because that knob spends ~784 kB of host memory. Either way the original
+9,584 kB estimate was wrong: it assumed 2,304 B per buffer, and back-solving from
+the measurements gives 760-1,332 B, about kmalloc-1024 + skbuff_head_cache.
 The 2,304 B figure came from a stock-vs-port SUnreclaim difference that also
 contained ath11k and workload differences, so it was never a clean measurement.
 

@@ -266,9 +266,10 @@ Worth recording, because these were the plausible suspects:
 
 Ranked by MB per unit of risk:
 
-1. **NSS pool sizing** (~9.4 MB net; see the correction above - only
-   `n2h_empty_pool_buf_core0` is re-tunable, `extra_pbuf_core0` is write-once per
-   boot and carries a `GFP_ATOMIC`/`BUG_ON` hazard).
+1. **NSS pool sizing** (**shipped in v1.9 as the pool knob only: ~6.3 MB
+   measured**). `extra_pbuf_core0` was dropped - it costs ~784 kB of host memory,
+   is write-once per boot, and its `GFP_ATOMIC` allocator carries a `BUG_ON`
+   that would be a reboot loop at boot. See `V1.9-TUNING.md` finding #1.
    `n2h_empty_pool_buf_core0=4096`, `extra_pbuf_core0=802816`. Verify by reading
    `SUnreclaim` before/after on a test box.
 2. **Finish NSS Wi-Fi offload** (Q2). Beyond CPU, it collapses the host DP ring
