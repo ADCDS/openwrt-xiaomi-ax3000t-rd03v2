@@ -1,0 +1,86 @@
+=== THE GATE IS CLOSED: Wi-Fi NSS offload accelerates on hardware ===
+
+Image: clean build from a fresh clone of HEAD, flashed via the initramfs pivot
+(read-back sha256 bb121a64d488c14ec3bf9e7b, byte-exact), then sysupgrade -n to
+NAND. This is the artifact built by the committed build.sh, not a hand-patch.
+
+--- 1. The recall cause is fixed ---
+
+    pre-flash  (v19 -nss without donor) : nss_offload param ABSENT
+    this image                          : nss_offload = 1
+
+    ath11k c000000.wifi: nss init soc nss if_num 203 userpd_id 0
+    ath11k b00a040.wifi: nss init soc nss if_num 215 userpd_id 1
+
+Both radios registered with the NSS at boot; wifili interface present in
+/sys/kernel/debug/qca-nss-drv/stats/.
+
+--- 2. THE GATE: ipv4_create_requests left 0 ---
+
+Client: Samsung A32 (SM_A325M) on 5 GHz ch36, BSSID xx:xx:xx:xx:xx:xx,
+associated at -20 dBm, address 192.168.1.228. Mobile data disabled so the
+default route is the Wi-Fi link. WAN server: tiny on the bench WAN port,
+192.168.77.1/24, dnsmasq + HTTP. Bench WAN lease 192.168.77.142.
+
+    baseline, no wifi client   : ipv4_create_requests = 0
+    after phone NAT traffic    : ipv4_create_requests = 19
+                                 ecm accelerated_count = 19
+
+Nineteen accelerated connections with a Wi-Fi station as the ONLY client on the
+box. Every previous measurement in this investigation read 0, because ath11k had
+no nss_offload parameter and ECM refuses a non-NSS ingress.
+
+--- 3. NEW AND IMPORTANT: the buffer pool is finally exercised ---
+
+    wired-only, no wifi offload : 9984 total, 9982 free ->     2 in flight
+    with wifi offload active    : 9984 total, 7884 free ->  2100 in flight
+
+    n2h_payload_alloc_fails: 5 -> 5   (unchanged)
+
+This changes what the v1.9 pool tuning evidence is worth. Every earlier load test
+peaked at 2 buffers in flight, which is why "4096 is enough" could not be
+supported by them - the datapath never touched the pool. Under Wi-Fi offload the
+peak is 2100, about 51% of the shrunken 4096 pool, with no allocation failures.
+That is a real capacity datapoint rather than a null result, and it is the first
+one this port has.
+
+It also means 4096 has roughly 2x headroom at this load, not the ~2000x the
+earlier numbers implied. A heavier or many-client workload should be watched.
+
+--- 4. Memory: offload is not free ---
+
+    no-offload image : SUnreclaim 37,816 kB   MemAvailable 34,940 kB
+    offload image    : SUnreclaim 40,428 kB   MemAvailable 34,352 kB
+    delta            : +2,612 kB slab, -588 kB MemAvailable
+
+So Wi-Fi offload spends about 2.6 MB of the ~6.3 MB the pool tuning returned.
+Net versus v1.8 is still positive, but the two changes should be quoted together
+rather than the 6.3 MB alone.
+
+--- 5. Crash recovery with offload on ---
+
+    echo stop > /sys/class/remoteproc/remoteproc2/state ; sleep 8 ; echo start
+
+    remoteproc remoteproc2: stopped remote processor pd-2
+    remoteproc remoteproc2: Booting fw image ath11k/IPQ5018/hw1.0/q6_fw.mdt
+    ath11k b00a040.wifi: pdev 1 successfully recovered
+
+    dmesg grep COREDUMP|NSS-FW logbuffer|peer delete failed|failed to free nss
+        -> 0   (must be empty; an NSS core fault takes the whole router down)
+
+Both radios alive afterwards, station still associated.
+
+--- Bench gotchas worth keeping ---
+
+* sysupgrade -n WIPES THE COUNTRY CODE. The box came up with regdomain
+  "country 00", which permits 2.4 GHz only, so a 5 GHz AP reports AP-ENABLED and
+  silently never beacons. `iw reg set BR` fixed it. Check this first whenever a
+  freshly flashed board's 5 GHz seems dead.
+* With NSS offload on, the AP's netdev tx_packets counter stays flat while the
+  radio transmits - beacons bypass it. Use `iw dev <vap> survey dump` and read
+  "channel transmit time" instead; that showed 99 ms while tx_packets read 7.
+* netifd/hostapd did not create VAPs on this default config; creating one by
+  hand (`iw phy phy1 interface add ... type __ap` + a minimal hostapd.conf +
+  `ip link set <vap> master br-lan`) works and is enough for a counter test.
+* The A32 needs mobile data disabled (`svc data disable`) or its default route
+  wins and no traffic crosses the bench.
