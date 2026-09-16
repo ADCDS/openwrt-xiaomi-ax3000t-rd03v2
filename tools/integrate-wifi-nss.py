@@ -150,6 +150,31 @@ endif
     # This board always uses smallbuffers. Name the provider explicitly to
     # avoid package metadata generating a self-referential virtual dependency.
     ath = replace_once(ath, "+kmod-ath11k +kmod-qrtr-smd", "+kmod-ath11k-smallbuffers +kmod-qrtr-smd")
+    # ...and the bus packages have to move to that variant too, or they break a
+    # KMODS=1 build. They carry no VARIANT line, so config_package falls back to
+    # $(firstword $(ALL_VARIANTS)) - "regular". With kmod-ath11k (regular)
+    # deselected by the line above, CPTCFG_ATH11K is unset in that variant, so
+    # ath11k_ahb.ko and ath11k_pci.ko are never compiled and mac80211 fails
+    # packaging them. Pinning both to smallbuffers puts them in the variant that
+    # actually has ATH11K, alongside ath11k-smallbuffers itself.
+    #
+    # This only bites with KMODS=1, which is why it survived the original
+    # validation: docs/nss-wifi-validation.md reproduces without it, and a
+    # non-KMODS build leaves kmod-ath11k unset in both variants.
+    for pkg, sym in (("ahb", "ATH11K_AHB"), ("pci", "ATH11K_PCI")):
+        ath = replace_once(
+            ath,
+            "config-$(call config_package,ath11k-%s) += %s" % (pkg, sym),
+            "config-$(call config_package,ath11k-%s,smallbuffers) += %s" % (pkg, sym),
+        )
+        ath = replace_once(
+            ath,
+            "  TITLE:=Qualcomm 802.11ax %s wireless chipset support\n"
+            "  URL:=https://wireless.wiki.kernel.org/en/users/drivers/ath11k\n" % pkg.upper(),
+            "  TITLE:=Qualcomm 802.11ax %s wireless chipset support\n"
+            "  URL:=https://wireless.wiki.kernel.org/en/users/drivers/ath11k\n"
+            "  VARIANT:=smallbuffers\n" % pkg.upper(),
+        )
     ath = replace_once(ath, "+kmod-qrtr-mhi +kmod-ath11k\n", "+kmod-qrtr-mhi +kmod-ath11k-smallbuffers\n")
     # All anchors validated before writing anything. Both donor ath11k memory
     # profiles stay off: 256M has no C consumers, and 512M would also compile
