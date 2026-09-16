@@ -135,18 +135,26 @@ MAKE_OPTS:= \\
 """)
     # mac80211's Makefile `include ath.mk` but declares no SCAN_DEPS, so
     # tmp/info/.packageinfo-kernel_mac80211 does NOT depend on ath.mk: editing
-    # ath.mk alone leaves stale package metadata, and .packagedeps - which is
-    # where ALL_VARIANTS comes from - is then regenerated from it. The build
-    # still works, because config_package is evaluated live at compile time
-    # rather than read back from .packageinfo, but that is evaluation-order
-    # luck, not design: an incremental build can mix new ath.mk with old
-    # metadata and compute a different ALL_VARIANTS than a clean one. Since
-    # this integration edits ath.mk, declare the dependency so a rescan is
-    # forced. package/kernel/linux/Makefile uses the same idiom.
+    # ath.mk alone leaves stale package metadata, and .packagedeps - where
+    # ALL_VARIANTS comes from - is then regenerated from it. The build still
+    # works, because config_package is evaluated live at compile time rather
+    # than read back from .packageinfo, but that is evaluation-order luck: an
+    # incremental build can mix a new ath.mk with old metadata. Since this
+    # integration edits ath.mk, declare the dependency so a rescan is forced.
+    #
+    # The glob MUST be relative. scan.mk greps this line out of the Makefile
+    # into a generated file that is expanded at TOP LEVEL (scan.mk:81), and
+    # scan.mk:48 then resolves each entry against $(SCAN_DIR)/$(2)/ only when
+    # it is NOT absolute. An earlier attempt used $(wildcard $(CURDIR)/*.mk),
+    # which expands against the openwrt topdir and captures rules.mk - not
+    # ath.mk - so it silently did nothing. Verified with scan.mk's own
+    # expression: "*.mk" -> 6 files (ath, broadcom, intel, marvell, ralink,
+    # realtek); "$(CURDIR)/*.mk" -> 1 file (rules.mk).
+    # package/firmware/linux-firmware/Makefile:20 uses this exact form.
     mk = replace_once(
         mk,
         "PKG_NAME:=mac80211\n",
-        "PKG_NAME:=mac80211\nSCAN_DEPS=$(wildcard $(CURDIR)/*.mk)\n",
+        "PKG_NAME:=mac80211\nSCAN_DEPS = *.mk\n",
     )
     anchor = "\t$(if $(QUILT),touch $(PKG_BUILD_DIR)/.quilt_used)"
     series = "ifdef CONFIG_ATH11K_NSS_SUPPORT\n" + "".join(
