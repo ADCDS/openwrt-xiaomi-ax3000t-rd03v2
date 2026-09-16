@@ -41,17 +41,19 @@ DONOR_REV = "92a2d104145c8d265851c4b388a41bd8e9c21cd9"
 # loop carries a BUG_ON if the very first atomic page fails — which interacts
 # badly with any proposal to shrink vm.min_free_kbytes on the same box.
 #
-# The intended direction is to decouple the two: keep MEDIUM's connection table
-# here and take LOW's smaller host pool at runtime via the n2hcfg sysctls.
-# Nothing in the driver binds table size to pool size, so the mechanism is
-# sound — the profile macro's only consumers are the connection counts and
-# LOW's pool clamp. But this is UNVERIFIED on hardware: writing
-# n2h_empty_pool_buf_core0 is not proof the memory comes back, and if SUnreclaim
-# does not drop then the pool is sized at init and the choice reverts to a
-# build-time MEDIUM-vs-LOW decision made right here. Run
-# stock-investigation/scripts/v19-nss-pool-experiment.sh before relying on it;
-# see notes/V1.9-TUNING.md finding #1. There is no n2hcfg write in build.sh's
-# rc.local block today — it sets only general/redirect and the two accel modes.
+# The two are decoupled, and v1.9 ships that split: MEDIUM's connection table is
+# selected here, while the smaller host pool is applied at runtime by
+# files/target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-bufpool
+# (START=96, one write of n2h_empty_pool_buf_core0=4096). Nothing in the driver
+# binds table size to pool size — the profile macro's only consumers are the
+# connection counts and LOW's pool clamp — and it is measured, not assumed:
+# SUnreclaim 44,576 -> ~38,200 kB on matched idle boots, about 6.3 MB.
+#
+# Note the init script sets ONLY the pool. It deliberately does not write
+# extra_pbuf_core0, for the reasons above: that knob costs host memory rather
+# than saving it, is write-once, and its GFP_ATOMIC allocator can BUG_ON at
+# boot. See stock-investigation/notes/V1.9-TUNING.md finding #1, and the script's
+# own header, before changing either knob.
 #
 # Note for anyone tempted to copy stock's /etc/sysctl.d/qca-nss-drv.conf: its
 # dev.nss.ipv4cfg.ipv4_conn=4096 line is dead. That sysctl does not exist at

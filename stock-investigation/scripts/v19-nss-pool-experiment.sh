@@ -1,6 +1,12 @@
 #!/bin/sh
 # v19-nss-pool-experiment.sh - does finding #1's runtime write actually free memory?
 #
+# SUPERSEDED: this question is answered. v1.9 ships the pool knob only, via
+# /etc/init.d/nss-bufpool; extra_pbuf_core0 was dropped. This script is kept
+# because it characterises BOTH knobs, which is how that decision was reached -
+# do not read a run of it as a preview of the shipped configuration.
+# See notes/V1.9-TUNING.md finding #1.
+#
 # Run ON the dev bench, on an NSS build:  ./bsh < v19-nss-pool-experiment.sh
 #
 # Finding #1 (stock-investigation/notes/V1.9-TUNING.md) proposes halving the NSS
@@ -131,7 +137,7 @@ the measurements gives 760-1,332 B, about kmalloc-1024 + skbuff_head_cache.
 The 2,304 B figure came from a stock-vs-port SUnreclaim difference that also
 contained ath11k and workload differences, so it was never a clean measurement.
 
-  ~5,200 kB lower -> the runtime write DOES free memory. Finding #1 ships as an
+  ~5,200 kB lower -> the runtime write DOES free memory. Finding #1 shipped as an
                    rc.local block (build.sh's current block sets only
                    general/redirect and the two accel modes; the n2hcfg writes
                    would be added next to them).

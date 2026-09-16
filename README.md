@@ -87,6 +87,7 @@ interchangeable: the NSS kernel differs, so its kmod tarball only matches its ow
 > This is exactly why v1.9's buffer-pool knobs are **not** in `rc.local` but in
 > `/etc/init.d/nss-bufpool`, which is not in any keep list and therefore always
 > comes from the image.
+
 The four initramfs artifacts are `…-initramfs-uImage{,-nss}{,-wifi}.itb` and likewise for
 `-initramfs-factory…ubi`; the kmod tarball for a flavour matches **both** of its initramfs
 variants, because they come from one build and differ only in `/etc/rc.local`.
