@@ -133,6 +133,21 @@ config-$(CONFIG_PACKAGE_MAC80211_NSS_SUPPORT) += MAC80211_NSS_SUPPORT
 
 MAKE_OPTS:= \\
 """)
+    # mac80211's Makefile `include ath.mk` but declares no SCAN_DEPS, so
+    # tmp/info/.packageinfo-kernel_mac80211 does NOT depend on ath.mk: editing
+    # ath.mk alone leaves stale package metadata, and .packagedeps - which is
+    # where ALL_VARIANTS comes from - is then regenerated from it. The build
+    # still works, because config_package is evaluated live at compile time
+    # rather than read back from .packageinfo, but that is evaluation-order
+    # luck, not design: an incremental build can mix new ath.mk with old
+    # metadata and compute a different ALL_VARIANTS than a clean one. Since
+    # this integration edits ath.mk, declare the dependency so a rescan is
+    # forced. package/kernel/linux/Makefile uses the same idiom.
+    mk = replace_once(
+        mk,
+        "PKG_NAME:=mac80211\n",
+        "PKG_NAME:=mac80211\nSCAN_DEPS=$(wildcard $(CURDIR)/*.mk)\n",
+    )
     anchor = "\t$(if $(QUILT),touch $(PKG_BUILD_DIR)/.quilt_used)"
     series = "ifdef CONFIG_ATH11K_NSS_SUPPORT\n" + "".join(
         f"\t$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/nss/{group},nss/{group}/)\n"

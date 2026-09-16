@@ -413,7 +413,13 @@ if [ -n "${WIFI_NSS_DONOR:-}" ]; then
 	# drops the package - but this path treats any cycle as fatal, so the
 	# package has to go before defconfig runs. Neither squeezelite nor
 	# librespeed is in either image; only feed *installation* is undone.
-	./scripts/feeds uninstall squeezelite squeezelite-custom 2>/dev/null || true
+	#
+	# Do NOT redirect this. `feeds uninstall` reports through warn(), i.e.
+	# stderr, for BOTH outcomes ("Uninstalling package ..." and "WARNING: ...
+	# not installed"), and it returns 0 either way - so `2>/dev/null || true`
+	# would make the step invisible in the build log AND unable to fail, which
+	# is exactly how you ship a fix that never ran.
+	./scripts/feeds uninstall squeezelite
 fi
 
 if [ -n "${WIFI_NSS_DONOR:-}" ]; then
