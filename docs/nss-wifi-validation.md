@@ -381,7 +381,10 @@ divergence guard passed (23 expected differing functions). The final installed
 configuration passed the integration checker. The cleaned build wrapper itself
 has not undergone another full image rebuild.
 
-Not covered: WAN/NAT, runtime IPv6 acceleration, long-duration or many-client
+Not covered: WAN/NAT **at line rate** (the routed-to-WAN row above is a
+functional check at ~85 Mbit/s, limited by the test client, not a throughput
+benchmark - nothing here establishes a NAT ceiling), runtime IPv6 acceleration,
+long-duration or many-client
 load, guest isolation, mesh and recovery under NSS Wi-Fi load (VLAN-aware
 bridges: see patch 0029 above). The original stock/NSS-without-Wi-Fi whole-router hang is not proven to
 have the same cause as the QCN6122 NSS peer-join crash diagnosed here.
