@@ -1,0 +1,67 @@
+=== 192.168.100.2 (ap-rd03v2) flashed with profile + Wi-Fi offload ===
+
+Image: v19c-ap, built from repo 7698ffe with
+    NSS=1 KMODS=1 PROFILE=.../nodes/ap-rd03v2 WIFI_NSS_DONOR=.../wifi-nss-donor
+
+Flashed by the sanctioned initramfs pivot: initramfs-factory.ubi written to
+mtd18 (read-back sha256 ea95b5f323f598e0d2710c12, byte-exact), RAM-booted and
+verified, then sysupgrade -n of the squashfs from that RAM system.
+
+--- Before / after ---
+
+                        before            after
+    nss_offload         ABSENT            1
+    ath11k->NSS         -                 2 radios registered
+    SUnreclaim          38,716 kB         39,976 kB
+    MemAvailable        36,652 kB         35,816 kB
+    clients             4                 (reassociating)
+
+The ~1.3 MB of extra slab is the Wi-Fi offload's own rings, consistent with the
++2.6 MB measured on the bench under load.
+
+--- Profile survived intact ---
+
+    hostname  rd03v2-ap
+    ip        192.168.100.2/24 on br-lan.1
+    ssids     <redacted-ssid> (2.4 ch11), <redacted-ssid> (5 ch149), <redacted-ssid>
+    vlan 20   lan4:t  - byte-identical to the pre-flash backup
+    ssh key   103 bytes, mode 600
+    all three VAPs oper=up and beaconing, regdomain country BR
+
+--- Health ---
+
+    backhaul to 192.168.100.1  0% loss, 0.8 ms
+    dmesg OVERLAP              0
+    crash grep                 0
+    nss-bufpool                pool 8704 -> 4096 at boot
+    lan4 trunk                 1790 rx / 668 tx - carrying traffic
+
+--- Two notes ---
+
+1. ipv4_create_requests stays 0 here and that is CORRECT: this node is a dumb
+   AP. It bridges, it does not route, so ECM has no NAT flow to accelerate. The
+   offload's value on this box is the Wi-Fi datapath itself, not connection
+   acceleration. The counter test belongs on the gateway.
+
+2. Clients came back slowly - 1 of 4 after eight minutes. Roaming is
+   client-driven (the node README says so), and the gateway carries the same
+   <redacted-ssid> SSID, so stations that moved there during the ~3 minute outage stay
+   until they have a reason to move back. Not a fault; worth knowing before
+   anyone reads the count as a regression.
+
+--- A build bug this flash exposed ---
+
+The first AP build FAILED at target/linux install:
+
+    openwrt-qualcommax-ipq50xx-/home/agiu/.../nodes/ap-rd03v2.manifest:
+        No such file or directory
+
+PROFILE is an OpenWrt build variable (include/target.mk:143,
+include/image.mk:137 -> PROFILE_SANITIZED -> the manifest filename). Exporting
+our profile path let make inherit it. build.sh now unsets PROFILE after copying
+files/ (commit 7698ffe).
+
+Worth keeping: the failure lands AFTER all four images are written, and the
+shipped squashfs was actually correct. Only the manifest step died. Reading the
+artifact list would have called this build good; reading the exit status is what
+caught it.
