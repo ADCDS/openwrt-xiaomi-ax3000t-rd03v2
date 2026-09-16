@@ -8,7 +8,7 @@ before acting; none was disputed.
 | # | Finding | Action |
 |---|---|---|
 | 1 | Artifacts built from a hand-patched tree; `ef1235b` never executed | Clean rebuild from a **fresh clone** of HEAD, both flavours, `KMODS=1` |
-| 5 | `ath.mk` not in `SCAN_DEPS` -> stale packageinfo, `ALL_VARIANTS` may differ clean vs incremental | Integration now sets `SCAN_DEPS=$(wildcard $(CURDIR)/*.mk)` |
+| 5 | `ath.mk` not in `SCAN_DEPS` -> stale packageinfo, `ALL_VARIANTS` may differ clean vs incremental | Integration sets `SCAN_DEPS`. **Correction:** the expression recorded here first was `$(wildcard $(CURDIR)/*.mk)`, which review 3 proved captures `rules.mk` and never `ath.mk` — it did nothing. Fixed in `362a968` to the relative form `*.mk`. |
 | 6 | `2>/dev/null \|\| true` made the step invisible AND unable to fail | Both removed; redundant `squeezelite-custom` arg dropped |
 | 7 | "no WAN benchmark" false; validation doc self-contradictory | `:384` now scopes it to "at line rate" and says why; release note reworded |
 | 8 | "201 ath11k_nss symbols" unreproducible (actual: 48) | No document quotes it; commit message left as-is (immutable) |

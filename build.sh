@@ -439,6 +439,12 @@ fi
 
 if [ -n "${WIFI_NSS_DONOR:-}" ]; then
 	python3 ../tools/integrate-wifi-nss.py --check-config "$PWD"
+	# The integration edits ath.mk. If ath.mk is not a scan dependency, an
+	# incremental build can pair a new ath.mk with stale metadata, and
+	# .packagedeps - the source of ALL_VARIANTS, which gates the ath11k bus
+	# packages - is regenerated from the stale copy. An absolute glob resolves
+	# against the wrong directory and fails silently; that shipped once.
+	../tools/check-scandeps.sh "$PWD"
 fi
 
 # A kconfig `select` beats "is not set" — that is exactly how the old nat46

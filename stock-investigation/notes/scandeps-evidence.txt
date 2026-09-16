@@ -1,16 +1,52 @@
-SCAN_DEPS expression, resolved with scan.mk's own line-48 expression:
+SCAN_DEPS for package/kernel/mac80211 — what is true, and one thing I got wrong
 
-  SCAN_DEPS = *.mk                  -> 6 files:
+THE EXPRESSION
+
+  SCAN_DEPS = *.mk                       -> 6 files:
         ath.mk broadcom.mk intel.mk marvell.mk ralink.mk realtek.mk
-  SCAN_DEPS = $(wildcard $(CURDIR)/*.mk)  -> 1 file:
+  SCAN_DEPS = $(wildcard $(CURDIR)/*.mk) -> 1 file:
         rules.mk        (the openwrt topdir, NOT the package dir)
 
-Mechanism: scan.mk:81 greps the literal SCAN_DEPS text into a generated
-makefile expanded at TOP LEVEL; scan.mk:48 then resolves each entry against
-$(SCAN_DIR)/$(2)/ ONLY when it is not absolute. An absolute $(CURDIR) form
-bypasses that resolution entirely.
+Mechanism: scan.mk:81 greps the literal SCAN_DEPS text into a generated makefile
+that is -include'd at scan.mk:101 and expanded at TOP LEVEL, where $(CURDIR) is
+the openwrt topdir. scan.mk:48 then rebases each entry onto $(SCAN_DIR)/$(2)/
+ONLY when it is not absolute. An absolute $(CURDIR) form bypasses that entirely,
+so ath.mk never became a prerequisite. The relative form is what
+package/firmware/linux-firmware/Makefile:20 uses.
 
-Caveat on the "touch ath.mk then make -n" test the reviewer proposed: under
-scan.mk the packageinfo target rescans unconditionally (its FILELIST
-prerequisite regenerates), so that test cannot distinguish the two forms. The
-expansion above can, and does.
+RETRACTION — an earlier version of this file was wrong
+
+It claimed the "touch ath.mk then make -n" check "cannot distinguish the two
+forms, because under scan.mk the packageinfo target rescans unconditionally".
+That mechanism does not exist, and the third adversarial review falsified it.
+Verified here in the real tree:
+
+  prime the scan, touch NOTHING, run it again:
+      .packageinfo-kernel_mac80211 md5 before 001629a9b419
+                                       after  001629a9b419   UNCHANGED
+
+No unconditional rescan. The check DOES discriminate, when run correctly:
+
+  write form -> PRIME the scan -> sleep 1 -> touch ath.mk -> make -n with the
+  ABSOLUTE target path:
+      SCAN_DEPS = *.mk                        -> 3 rescan lines   PASS
+      SCAN_DEPS = $(wildcard $(CURDIR)/*.mk)  -> 1 line           FAIL
+
+What actually produced my false result: I edited the Makefile to switch forms
+WITHOUT re-priming. scan.mk:48 lists $(SCAN_DIR)/$(2)/Makefile as an
+unconditional prerequisite, so the Makefile edit alone forces a rescan and both
+forms appear to pass. A relative goal path is a second way to get a uniform
+no-op, because the rule's target is absolute ($(TMP_DIR)=$(TOPDIR)/tmp).
+
+The lesson is the one I had already written down and then failed to apply: a
+test whose result cannot come out differently under the negated hypothesis
+proves nothing. When the check disagreed with my belief I should have looked for
+the procedural error, not invented a mechanism. Both forms were available to
+falsify in about a minute.
+
+TWO CHECKS THAT DISCRIMINATE
+
+ 1. Static, no build tree: resolve the SCAN_DEPS line through scan.mk's own
+    line-48 expression and assert ath.mk is present. 6 files vs 1.
+ 2. End-to-end, needs a primed tmp/info: the touch test above, re-primed after
+    any Makefile edit, with the absolute target path.
