@@ -40,13 +40,27 @@ if [ -z "$DEPS" ]; then
 fi
 
 # scan.mk:48 - absolute entries stand, relative ones rebase onto the package dir.
+# Expand each pattern INSIDE the directory it belongs to. Two traps here, both
+# hit during development:
+#   * `for dep in $DEPS` glob-expands against the CALLER's cwd. build.sh runs
+#     this from the openwrt tree, which has rules.mk, so "*.mk" silently became
+#     "rules.mk" and the check failed on a correct Makefile.
+#   * `$(cd "$dir" && ls -d $dep)` does not help: the expansion still happens in
+#     the caller before the subshell starts.
+# So: keep globbing off while iterating the patterns, and turn it back on only
+# inside the subshell that has already cd'd to the right place.
+set -f
 resolved=""
 for dep in $DEPS; do
 	case "$dep" in
-	/*)	resolved="$resolved $(cd "$TREE" 2>/dev/null && ls -d $dep 2>/dev/null || true)" ;;
-	*)	resolved="$resolved $(cd "$TREE/$PKG" 2>/dev/null && ls -d $dep 2>/dev/null || true)" ;;
+	/*)	dir="$TREE" ;;
+	*)	dir="$TREE/$PKG" ;;
 	esac
+	[ -d "$dir" ] || continue
+	hits=$(cd "$dir" && set +f && for m in $dep; do [ -e "$m" ] && echo "$m"; done)
+	resolved="$resolved $hits"
 done
+set +f
 
 for f in $resolved; do
 	if [ "$(basename "$f")" = "$WANT" ]; then
