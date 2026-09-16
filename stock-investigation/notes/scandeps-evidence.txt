@@ -1,0 +1,16 @@
+SCAN_DEPS expression, resolved with scan.mk's own line-48 expression:
+
+  SCAN_DEPS = *.mk                  -> 6 files:
+        ath.mk broadcom.mk intel.mk marvell.mk ralink.mk realtek.mk
+  SCAN_DEPS = $(wildcard $(CURDIR)/*.mk)  -> 1 file:
+        rules.mk        (the openwrt topdir, NOT the package dir)
+
+Mechanism: scan.mk:81 greps the literal SCAN_DEPS text into a generated
+makefile expanded at TOP LEVEL; scan.mk:48 then resolves each entry against
+$(SCAN_DIR)/$(2)/ ONLY when it is not absolute. An absolute $(CURDIR) form
+bypasses that resolution entirely.
+
+Caveat on the "touch ath.mk then make -n" test the reviewer proposed: under
+scan.mk the packageinfo target rescans unconditionally (its FILELIST
+prerequisite regenerates), so that test cannot distinguish the two forms. The
+expansion above can, and does.

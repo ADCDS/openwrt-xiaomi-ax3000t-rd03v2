@@ -382,8 +382,9 @@ configuration passed the integration checker. The cleaned build wrapper itself
 has not undergone another full image rebuild.
 
 Not covered: WAN/NAT **at line rate** (the routed-to-WAN row above is a
-functional check at ~85 Mbit/s, limited by the test client, not a throughput
-benchmark - nothing here establishes a NAT ceiling), runtime IPv6 acceleration,
+functional check, not a throughput benchmark - the three clients differ by
+2.4x on the same path (85.2 up / 86.9 down, 8.5 / 9.4, and 70.6 / 201 Mbit/s),
+which measures the clients, not a NAT ceiling), runtime IPv6 acceleration,
 long-duration or many-client
 load, guest isolation, mesh and recovery under NSS Wi-Fi load (VLAN-aware
 bridges: see patch 0029 above). The original stock/NSS-without-Wi-Fi whole-router hang is not proven to
