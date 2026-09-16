@@ -2,3 +2,7 @@ images/*.bin
 images/*.itb
 images/*.ubi
 /openwrt/
+
+# Python bytecode from tooling runs
+__pycache__/
+*.pyc

@@ -10,9 +10,57 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 DONOR_REV = "92a2d104145c8d265851c4b388a41bd8e9c21cd9"
-# The NSS build defaults to MEDIUM; LOW caps accelerated connections at 512
-# per family (1024 total), which is too few for the gateway this build is for.
-# WIFI_NSS_MEM_PROFILE=LOW keeps the smaller host buffer pool if RAM demands it.
+# The NSS build defaults to MEDIUM. This used to be justified here with "LOW
+# caps accelerated connections at 512 per family (1024 total), which is too few
+# for the gateway this build is for" — but the live stock investigation
+# contradicts the premise: stock RD03v2 (ROM 2.0.28) runs
+# qca_nss_drv.max_ipv4_conn=512 / max_ipv6_conn=512, exactly the LOW numbers, on
+# a consumer gateway. The numbers are in
+# stock-investigation/captures/phase3-wifi.txt (module-parameters section),
+# tabulated in notes/FINDINGS.md phase 4.
+#
+# That does not make LOW automatically right for us — a PPPoE gateway with many
+# clients is not stock's bench case, and 512 is a hard cap on *accelerated*
+# flows, with the rest falling back to the slow path. MEDIUM's 2048/2048 stays
+# (nss_hlos_if.h: LOW 512, MEDIUM 2048, neither 4096).
+#
+# The reason to keep MEDIUM is the connection table, NOT the buffer pool. The
+# profile ties the two together at build time, and the non-LOW default pool is
+# expensive: 8704 buffers observed on our build (LOW is the only profile that
+# clamps it, to NSS_LOW_MEM_EMPTY_POOL_BUF_SZ=4096) x CONFIG_SKB_RECYCLE_SIZE
+# (2304 B), sitting in Linux slab permanently as pure SUnreclaim.
+#
+# Stock asks Linux for half as many (4096) and sets extra_pbuf_core0=802816.
+# Do NOT read that as moving the buffering into the nss@40000000 carve-out: in
+# nss-drv the extra pbuf pages are kzalloc(GFP_ATOMIC) + dma_map_single from
+# HOST memory ("Add extra NSS bufs from host memory", nss_n2h.c; nss_core.h
+# calls the accounting field "size of bufs allocated from host"). It is ~784 KiB
+# of additional Linux memory, not a relocation out of Linux. Two further traps:
+# the knob is write-once per boot (the handler returns -EPERM once
+# buf_sz_allocated is set, so it is NOT runtime-reversible), and its allocation
+# loop carries a BUG_ON if the very first atomic page fails — which interacts
+# badly with any proposal to shrink vm.min_free_kbytes on the same box.
+#
+# The two are decoupled, and v1.9 ships that split: MEDIUM's connection table is
+# selected here, while the smaller host pool is applied at runtime by
+# files/target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-bufpool
+# (START=96, one write of n2h_empty_pool_buf_core0=4096). Nothing in the driver
+# binds table size to pool size — the profile macro's only consumers are the
+# connection counts and LOW's pool clamp — and it is measured, not assumed:
+# SUnreclaim 44,576 -> ~38,200 kB on matched idle boots, about 6.3 MB.
+#
+# Note the init script sets ONLY the pool. It deliberately does not write
+# extra_pbuf_core0, for the reasons above: that knob costs host memory rather
+# than saving it, is write-once, and its GFP_ATOMIC allocator can BUG_ON at
+# boot. See stock-investigation/notes/V1.9-TUNING.md finding #1, and the script's
+# own header, before changing either knob.
+#
+# Note for anyone tempted to copy stock's /etc/sysctl.d/qca-nss-drv.conf: its
+# dev.nss.ipv4cfg.ipv4_conn=4096 line is dead. That sysctl does not exist at
+# runtime (only ipv4_accel_mode and ipv4_dscp_map are present); the module
+# parameter max_ipv4_conn is what actually sizes the table.
+#
+# WIFI_NSS_MEM_PROFILE=LOW still switches the whole profile if RAM demands it.
 MEM_PROFILE = os.environ.get("WIFI_NSS_MEM_PROFILE", "MEDIUM").upper()
 if MEM_PROFILE not in ("LOW", "MEDIUM"):
     raise SystemExit("WIFI_NSS_MEM_PROFILE must be LOW or MEDIUM")
