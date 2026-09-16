@@ -67,10 +67,14 @@ QCA NSS hardware offload — see [`docs/nss-offload.md`](docs/nss-offload.md). T
 interchangeable: the NSS kernel differs, so its kmod tarball only matches its own image.
 
 As of v1.9 the `-nss` images also carry **NSS Wi-Fi offload**, so ECM can accelerate flows with a
-Wi-Fi end instead of only wired ones. It is built from a pinned external donor tree and is the
-newest and least-exercised part of this port — see
+Wi-Fi end instead of only wired ones. Confirmed on hardware: with a 5 GHz client routed through
+NAT, `ipv4_create_requests` climbs (0 → 19 in the release test) where earlier `-nss` images left it
+at 0 for any load. It is built from a pinned external donor tree and is the newest and
+least-exercised part of this port — see
 [`docs/nss-wifi-validation.md`](docs/nss-wifi-validation.md) for exactly what was and was not
-tested. If you hit Wi-Fi trouble, the plain image is the conservative choice.
+tested, and note that **no throughput ceiling has been established with offload on**. Offload also
+costs ~2.6 MB of the ~6 MB the memory tuning returns, so an `-nss` box nets roughly 3–4 MB. If you
+hit Wi-Fi trouble, the plain image contains none of this.
 
 > **`/etc/rc.local` survives every upgrade, so its NSS knobs can go stale.**
 > `rc.local` is listed in `/lib/upgrade/keep.d/base-files-essential`, and
