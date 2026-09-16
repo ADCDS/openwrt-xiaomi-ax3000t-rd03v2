@@ -449,7 +449,7 @@ in Linux slab as `SUnreclaim`, so halving them is a straight return: measured bo
 same image, idle, `SUnreclaim` **44,576 → 38,204 / 38,144 kB** across two boots and `MemAvailable` **37,088 → ~42,800 kB**. It ships
 as `/etc/init.d/nss-bufpool` (NSS builds only in effect — on a plain build the sysctl tree does not exist
 and the script is a no-op). See [`stock-investigation/`](stock-investigation/) for the full comparison, and
-note what v1.9 deliberately does **not** take from stock: `extra_pbuf_core0`, which *costs* ~784 kB of host
+Verified under load: with the NSS fast path genuinely accelerating (`ipv4_create_requests` climbing, 940 Mbit/s line rate on the 1 G WAN port), ~9 GB of NAT'd traffic left `n2h_payload_alloc_fails` untouched, and a control run at the old 8704 was 1 Mbit/s apart while costing 6.4 MB more. Note what v1.9 deliberately does **not** take from stock: `extra_pbuf_core0`, which *costs* ~784 kB of host
 memory and whose allocator can `BUG_ON` at boot on a fragmented buddy list — a reboot loop on a board with
 `panic_on_oops=1`. The ~66 MB of carve-outs, by contrast, are not the problem: stock reserves 65 MB.
 
