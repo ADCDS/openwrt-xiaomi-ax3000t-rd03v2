@@ -407,6 +407,13 @@ if [ -n "${WIFI_NSS_DONOR:-}" ]; then
 	# Current optional LibreSpeed virtual providers form a Kconfig cycle.
 	# They are not part of this prototype's image. Leave feed sources intact.
 	./scripts/feeds uninstall librespeed-cli librespeed-cli-rust librespeed-common luci-app-librespeed
+	# Same class of defect, found 2026-09: squeezelite-custom and its
+	# SQUEEZELITE_WMA_ALAC symbol select each other. The cycle is present in the
+	# default build too - `make defconfig` just resolves it silently there and
+	# drops the package - but this path treats any cycle as fatal, so the
+	# package has to go before defconfig runs. Neither squeezelite nor
+	# librespeed is in either image; only feed *installation* is undone.
+	./scripts/feeds uninstall squeezelite squeezelite-custom 2>/dev/null || true
 fi
 
 if [ -n "${WIFI_NSS_DONOR:-}" ]; then
