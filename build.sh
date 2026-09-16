@@ -163,6 +163,19 @@ if [ -n "$PROFILE" ]; then
 	# and locks SSH out of a fresh flash. The image preserves these modes.
 	find files -type d -exec chmod 755 {} +
 	find files -type f -exec chmod 644 {} +
+	# CRITICAL: stop exporting PROFILE before make runs. OpenWrt uses PROFILE
+	# as its own build variable for the DEVICE profile
+	# (include/target.mk:143 PROFILE?=$(CONFIG_TARGET_PROFILE)), and
+	# include/image.mk:137 derives PROFILE_SANITIZED from it, which lands in
+	# the .manifest filename. Inheriting our path turns that into
+	#   openwrt-...-ipq50xx-/home/you/ax3000t-profile/nodes/ap-rd03v2.manifest
+	# and target/linux install dies on the non-existent directory - AFTER the
+	# images are already written, so the tree looks almost complete. Every
+	# profile file has been copied by this point, so the variable has no
+	# further use here.
+	PROFILE_SRC="$PROFILE"
+	unset PROFILE
+	export -n PROFILE 2>/dev/null || true
 	# scripts (shebang) — init.d services, /usr/bin helpers — must stay executable
 	grep -rlIZ '^#!' files 2>/dev/null | xargs -0 -r chmod 755
 	[ -f files/etc/dropbear/authorized_keys ] && chmod 600 files/etc/dropbear/authorized_keys
