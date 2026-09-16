@@ -374,7 +374,7 @@ properly the bench needs a wired host on one of the RD03v2's LAN ports.
 | Finding | Follow-up |
 |---|---|
 | `min_free_kbytes` 2048 vs our 16384 | Ship a sysctl default. ~16 MB of `MemAvailable` on a 175 MB box. Test under load before committing — see Q1 note for the caveat. |
-| Host NSS pool 4096 vs our 8704, `extra_pbuf_core0` 802816 vs 0 | The numbers PR #17's memory profile asked for. Returns ~10 MB of Linux slab and spends ~0.8 MB of host memory on `extra_pbuf` (which is **not** the carve-out), so ~9.4 MB net. |
+| Host NSS pool 4096 vs our 8704, `extra_pbuf_core0` 802816 vs 0 | **Shipped in v1.9 as the pool knob only** - ~6.3 MB measured, `extra_pbuf` deliberately dropped (it *costs* ~784 kB of host memory and its allocator can `BUG_ON` at boot). The pre-measurement estimate that used to sit here was wrong in both terms. See `V1.9-TUNING.md` finding #1. |
 | `wifili` present on stock, absent on v1.8 | Q2 is settled in favour of finishing the NSS Wi-Fi work; it is also what buys stock the 1-ring DP layout. |
 | MAC flow control `0x6` vs our `0x4` | PR #19's RX pause matches stock's direction; consider TX pause too. |
 | `bdata` does not protect `boot_wait`/`uart_en` | README install warning needs the `bdata set` step spelled out. |
