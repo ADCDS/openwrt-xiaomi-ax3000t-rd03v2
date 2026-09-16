@@ -66,6 +66,12 @@ Each file also comes in an `-nss` variant (`…-sysupgrade-nss.bin`), built with
 QCA NSS hardware offload — see [`docs/nss-offload.md`](docs/nss-offload.md). The two are not
 interchangeable: the NSS kernel differs, so its kmod tarball only matches its own image.
 
+As of v1.9 the `-nss` images also carry **NSS Wi-Fi offload**, so ECM can accelerate flows with a
+Wi-Fi end instead of only wired ones. It is built from a pinned external donor tree and is the
+newest and least-exercised part of this port — see
+[`docs/nss-wifi-validation.md`](docs/nss-wifi-validation.md) for exactly what was and was not
+tested. If you hit Wi-Fi trouble, the plain image is the conservative choice.
+
 > **`/etc/rc.local` survives every upgrade, so its NSS knobs can go stale.**
 > `rc.local` is listed in `/lib/upgrade/keep.d/base-files-essential`, and
 > `sysupgrade` saves config by default (`SAVE_CONFIG=1`) — so a **plain
