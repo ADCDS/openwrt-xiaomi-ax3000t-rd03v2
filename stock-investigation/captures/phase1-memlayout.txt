@@ -1,0 +1,466 @@
+
+===== dmesg-memory-lines =====
+
+===== /proc/iomem =====
+00058000-00058fff : eud_base
+00059000-0005afff : eud_mode_mgr
+00088000-00088063 : /soc/mdio@88000
+00090000-00090063 : /soc/mdio@90000
+000a0000-000a0fff : /soc/qfprom@a0000
+000e3000-000e3fff : /soc/qrng@e1000
+004a1000-004a100f : mpm
+004ab000-004ab01f : rmb
+00704000-00723fff : /soc/dma@704000
+01000000-012fffff : /soc/pinctrl@1000000
+01800000-0187ffff : /soc/gcc@1800000
+01938000-01938007 : tcsr-msip
+0193d204-0193d207 : tcsr-q6-boot-trig
+01941010-0194102f : /soc/pwm
+01943008-0194300f : bt_warm_rst
+06002000-06002fff : stm-base
+06041000-06041fff : funnel-base
+06046000-06046fff : replicator-base
+06047000-06047fff : tmc-base
+06048000-06048fff : tmc-base
+06100000-06100fff : funnel-base
+06120000-06120fff : funnel-base
+06130000-06130fff : funnel-base
+0619c000-0619cfff : /soc/etm@619c000
+0619d000-0619dfff : /soc/etm@619d000
+061a1000-061a1fff : funnel-base
+07884000-078a0fff : /soc/dma@7884000
+078af000-078af1ff : msm_serial
+078b0000-078b01ff : msm_serial
+078b7000-078b75ff : /soc/i2c@78b5000
+07984000-0799ffff : /soc/dma@7984000
+079b0000-079bffff : /soc/qpic-nand@79b0000
+0b017000-0b017fff : kpss_wdt
+0b111000-0b116fff : /soc/qcom,apss_clk@b111000
+0c000000-0cffffff : /soc/wifi@c000000
+39c00000-39c0ffff : eth0
+39d00000-39d0ffff : eth1
+40800000-4a7fffff : System RAM
+  41208000-417c92a3 : Kernel code
+  417fa000-418a8aaf : Kernel data
+4e100000-4fffffff : System RAM
+
+===== /proc/meminfo =====
+MemTotal:         186664 kB
+MemFree:           48548 kB
+MemAvailable:      67820 kB
+Buffers:            5984 kB
+Cached:            29844 kB
+SwapCached:            0 kB
+Active:            25112 kB
+Inactive:          16292 kB
+Active(anon):       6652 kB
+Inactive(anon):      756 kB
+Active(file):      18460 kB
+Inactive(file):    15536 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                 0 kB
+Writeback:             0 kB
+AnonPages:          5612 kB
+Mapped:             9864 kB
+Shmem:              1832 kB
+Slab:              54152 kB
+SReclaimable:       3316 kB
+SUnreclaim:        50836 kB
+KernelStack:        1096 kB
+PageTables:          652 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:       93332 kB
+Committed_AS:      17320 kB
+VmallocTotal:    1818624 kB
+VmallocUsed:           0 kB
+VmallocChunk:          0 kB
+
+===== /proc/zoneinfo =====
+Node 0, zone   Normal
+  pages free     12137
+        min      512
+        low      1024
+        high     2560
+        scanned  0
+        spanned  65536
+        present  48896
+        managed  46666
+    nr_free_pages 12137
+    nr_alloc_batch 1278
+    nr_inactive_anon 189
+    nr_active_anon 1663
+    nr_inactive_file 3884
+    nr_active_file 4615
+    nr_unevictable 0
+    nr_mlock     0
+    nr_anon_pages 1394
+    nr_mapped    2466
+    nr_file_pages 8957
+    nr_dirty     0
+    nr_writeback 0
+    nr_slab_reclaimable 829
+    nr_slab_unreclaimable 12709
+    nr_page_table_pages 176
+    nr_kernel_stack 137
+    nr_unstable  0
+    nr_bounce    0
+    nr_vmscan_write 0
+    nr_vmscan_immediate_reclaim 0
+    nr_writeback_temp 0
+    nr_isolated_anon 0
+    nr_isolated_file 0
+    nr_shmem     458
+    nr_dirtied   503
+    nr_written   503
+    nr_pages_scanned 0
+    workingset_refault 0
+    workingset_activate 0
+    workingset_nodereclaim 0
+    nr_anon_transparent_hugepages 0
+    nr_free_cma  0
+    nr_indirectly_reclaimable 0
+        protection: (0, 0)
+  pagesets
+    cpu: 0
+              count: 40
+              high:  90
+              batch: 15
+  vm stats threshold: 8
+    cpu: 1
+              count: 55
+              high:  90
+              batch: 15
+  vm stats threshold: 8
+  all_unreclaimable: 0
+  start_pfn:         262144
+  inactive_ratio:    1
+
+===== vm-sysctls =====
+vm.min_free_kbytes = 2048
+vm.overcommit_memory = 0
+vm.overcommit_ratio = 50
+vm.lowmem_reserve_ratio = 32
+vm.swappiness = 60
+vm.vfs_cache_pressure = 100
+vm.page-cluster = 3
+vm.dirty_ratio = 20
+vm.dirty_background_ratio = 10
+vm.panic_on_oom = 2
+vm.oom_kill_allocating_task = 0
+
+===== etc-sysctl-conf =====
+net.ipv4.conf.default.arp_ignore=1
+net.ipv4.conf.all.arp_ignore=1
+net.ipv4.ip_forward=1
+net.ipv4.icmp_echo_ignore_broadcasts=1
+net.ipv4.icmp_ignore_bogus_error_responses=1
+net.ipv4.tcp_ecn=0
+net.ipv4.tcp_fin_timeout=10
+net.ipv4.tcp_keepalive_time=60
+net.ipv4.tcp_syncookies=1
+net.ipv4.tcp_timestamps=1
+net.ipv4.tcp_sack=1
+net.ipv4.tcp_dsack=1
+net.ipv4.tcp_mtu_probing=1
+net.ipv4.tcp_max_tw_buckets=40960
+net.ipv4.ip_local_port_range=1025 65530
+net.ipv4.tcp_tw_reuse=1
+
+#net.ipv4.netfilter.ip_conntrack_buckets=8192
+net.netfilter.nf_conntrack_udp_timeout_stream=180
+net.netfilter.nf_conntrack_tcp_timeout_syn_sent=60
+net.netfilter.nf_conntrack_tcp_timeout_syn_sent2=60
+net.netfilter.nf_conntrack_tcp_timeout_syn_recv=30
+net.netfilter.nf_conntrack_tcp_timeout_fin_wait=10
+net.netfilter.nf_conntrack_tcp_timeout_close_wait=30
+net.netfilter.nf_conntrack_tcp_timeout_last_ack=10
+net.netfilter.nf_conntrack_tcp_timeout_time_wait=10
+net.netfilter.nf_conntrack_tcp_timeout_max_retrans=30
+
+net.ipv6.conf.default.forwarding=1
+net.ipv6.conf.all.forwarding=1
+net.ipv6.route.max_size=16777216
+
+net.netfilter.nf_conntrack_acct=1
+net.netfilter.nf_conntrack_checksum=0
+net.netfilter.nf_conntrack_max=16384
+net.netfilter.nf_conntrack_tcp_timeout_established=3600
+net.netfilter.nf_conntrack_udp_timeout=60
+net.netfilter.nf_conntrack_udp_timeout_stream=180
+net.netfilter.nf_conntrack_skip_filter=1
+net.netfilter.nf_conntrack_helper=1
+
+kernel.randomize_va_space=2
+
+vm.min_free_kbytes=2048
+vm.panic_on_oom=2
+-- /etc/sysctl.d --
+## /etc/sysctl.d/10-default.conf
+# Do not edit, changes to this file will be lost on upgrades
+# /etc/sysctl.conf can be used to customize sysctl settings
+
+kernel.panic=3
+kernel.core_pattern=/tmp/%e.%t.%p.%s.core
+fs.suid_dumpable=2
+
+fs.protected_hardlinks=1
+fs.protected_symlinks=1
+
+net.ipv4.conf.default.arp_ignore=1
+net.ipv4.conf.all.arp_ignore=1
+net.ipv4.ip_forward=1
+net.ipv4.icmp_echo_ignore_broadcasts=1
+net.ipv4.icmp_ignore_bogus_error_responses=1
+net.ipv4.igmp_max_memberships=100
+net.ipv4.tcp_fin_timeout=30
+net.ipv4.tcp_keepalive_time=120
+net.ipv4.tcp_syncookies=1
+net.ipv4.tcp_timestamps=1
+net.ipv4.tcp_sack=1
+net.ipv4.tcp_dsack=1
+
+net.ipv6.conf.default.forwarding=1
+net.ipv6.conf.all.forwarding=1
+## /etc/sysctl.d/qca-nss-drv.conf
+# Default Number of connection configuration
+dev.nss.ipv4cfg.ipv4_conn=4096
+dev.nss.ipv6cfg.ipv6_conn=4096
+
+## /etc/sysctl.d/qca-nss-ecm.conf
+# nf_conntrack_tcp_no_window_check is 0 by default, set it to 1
+net.netfilter.nf_conntrack_tcp_no_window_check=1
+net.bridge.bridge-nf-call-iptables=1
+net.bridge.bridge-nf-call-ip6tables=1
+net.netfilter.nf_conntrack_max=16384
+
+===== memblock-reserved =====
+   0: 0x41204000..0x41207fff
+   1: 0x41208200..0x418a8aaf
+   2: 0x4a3ee000..0x4a3fcfff
+   3: 0x4fd50000..0x4fd93fff
+   4: 0x4fd941c0..0x4fd941fb
+   5: 0x4fd94200..0x4fd9423b
+   6: 0x4fd94240..0x4fd942b7
+   7: 0x4fd952c0..0x4fd962c7
+   8: 0x4fd962ec..0x4ff33fff
+   9: 0x4ffb2000..0x4fffc007
+  10: 0x4fffc040..0x4fffc043
+  11: 0x4fffc080..0x4fffc12d
+  12: 0x4fffc140..0x4fffc1ed
+  13: 0x4fffc200..0x4fffc2ad
+  14: 0x4fffc2c0..0x4fffc2c3
+  15: 0x4fffc2e0..0x4fffc2fc
+  16: 0x4fffc300..0x4fffc31b
+  17: 0x4fffc320..0x4fffc33c
+  18: 0x4fffc340..0x4fffc35b
+  19: 0x4fffc364..0x4fffc37e
+  20: 0x4fffc380..0x4fffcfba
+  21: 0x4fffcfbc..0x4fffcfd4
+  22: 0x4fffcfd8..0x4fffffff
+
+===== memblock-memory =====
+   0: 0x40800000..0x4a7fffff
+   1: 0x4e100000..0x4fffffff
+
+===== reserved-memory-dt =====
+-- /sys/firmware/devicetree/base/reserved-memory/bt@7000000
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/bt@7000000/compatible: no such file
+   compatible=
+   no-map=yes
+   reg=00000000 00000007 00000000 00800500 
+   size=
+   alignment=
+   status=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/bt@7000000/status: no such file
+-- /sys/firmware/devicetree/base/reserved-memory/m3_dump@4CD00000
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/m3_dump@4CD00000/compatible: no such file
+   compatible=
+   no-map=yes
+   reg=00000000 0000d04c 00000000 00001000 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/m3_dump@4CD00000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/m3_dump_qcn6122_1@4DE00000
+   compatible=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/m3_dump_qcn6122_1@4DE00000/compatible: no such file
+   no-map=yes
+   reg=00000000 0000e04d 00000000 00001000 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/m3_dump_qcn6122_1@4DE00000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/nss@40000000
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/nss@40000000/compatible: no such file   compatible=
+
+   no-map=yes
+   reg=00000000 00000040 00000000 00008000 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/nss@40000000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/q6_code_data@4B000000
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_code_data@4B000000/compatible: no such file
+   compatible=
+   no-map=yes
+   reg=00000000 0000004b 00000000 00000400 
+   size=
+   alignment=
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/q6_etr_dump@4CE00000
+   compatible=
+   no-map=yes
+   reg=00000000 0000e04c 00000000 00001000 sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_code_data@4B000000/status: no such file
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_etr_dump@4CE00000/compatible: no such file
+
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_etr_dump@4CE00000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/q6_ipq5018_data@4c000000
+   compatible=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_ipq5018_data@4c000000/compatible: no such file
+   no-map=yes
+   reg=00000000 0000004c 00000000 0000d000 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_ipq5018_data@4c000000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/q6_mem_regions@4B000000
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_mem_regions@4B000000/compatible: no such file
+   compatible=
+   no-map=yes
+   reg=00000000 0000004b 00000000 00000003 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_mem_regions@4B000000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_data1@4CF00000
+   compatible=
+   no-map=yes
+   reg=sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_data1@4CF00000/compatible: no such file
+00000000 0000f04c 00000000 0000f000 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_data1@4CF00000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_etr_1@4DF00000
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_etr_1@4DF00000/compatible: no such file
+   compatible=
+   no-map=yes
+   reg=00000000 0000f04d 00000000 00001000 
+   size=
+   alignment=
+   status=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_etr_1@4DF00000/status: no such file
+-- /sys/firmware/devicetree/base/reserved-memory/rsvd1@4E000000
+   compatible=
+   no-map=yes
+   reg=sh: can't open /sys/firmware/devicetree/base/reserved-memory/rsvd1@4E000000/compatible: no such file
+00000000 0000004e 00000000 00000800 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/rsvd1@4E000000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/rsvd2@4E080000
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/rsvd2@4E080000/compatible: no such file
+   compatible=
+   no-map=yes
+   reg=00000000 0000084e 00000000 00000800 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/rsvd2@4E080000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/sbl@4aa00000
+   compatible=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/sbl@4aa00000/compatible: no such file
+   no-map=yes
+   reg=00000000 0000a04a 00000000 00001000 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/sbl@4aa00000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/smem@4ab00000
+   compatible=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/smem@4ab00000/compatible: no such file
+   no-map=yes
+   reg=00000000 0000b04a 00000000 00001000 
+   size=
+   alignment=
+   status=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/smem@4ab00000/status: no such file
+-- /sys/firmware/devicetree/base/reserved-memory/tz@4ac00000
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/tz@4ac00000/compatible: no such file
+   compatible=
+   no-map=yes
+   reg=00000000 0000c04a 00000000 00004000 
+   size=
+   alignment=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/tz@4ac00000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/uboot@4a800000
+   compatible=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/uboot@4a800000/compatible: no such file
+   no-map=yes
+   reg=00000000 0000804a 00000000 00002000 
+   size=
+   alignment=
+   status=
+sh: can't open /sys/firmware/devicetree/base/reserved-memory/uboot@4a800000/status: no such file
+
+===== memory-node-dt =====
+-- /sys/firmware/devicetree/base/memory
+   reg=00000000 00000040 00000000 00000010 
+
+===== show_mem_notifier =====
+/sys/kernel/debug/show_mem_notifier
+
+===== vmallocinfo-top =====
+0xff7ec000-0xff800000   81920 pcpu_get_vm_areas+0x0/0x500 vmalloc
+0xff7d8000-0xff7ec000   81920 pcpu_get_vm_areas+0x0/0x500 vmalloc
+0xfee00000-0xff000000 2097152 pci_reserve_io+0x0/0x30 ioremap
+0x98d3e000-0x98d4c000   57344 xt_alloc_table_info+0x48/0x84 [x_tables] pages=13 vmalloc
+0x98a9f000-0x98adc000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98a62000-0x98a9f000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98a25000-0x98a62000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x989e8000-0x98a25000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x989ab000-0x989e8000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98981000-0x989ab000  172032 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98944000-0x98981000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98907000-0x98944000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x988c6000-0x98907000  266240 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x987c5000-0x988c6000 1052672 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x986c4000-0x987c5000 1052672 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x985c3000-0x986c4000 1052672 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x984c2000-0x985c3000 1052672 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x983c1000-0x984c2000 1052672 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98362000-0x98378000   90112 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98341000-0x98362000  135168 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x982e7000-0x982f8000   69632 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x982d6000-0x982e7000   69632 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x982d1000-0x982d6000   20480 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x982c8000-0x982d1000   36864 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x982a7000-0x982c8000  135168 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x982a2000-0x982a7000   20480 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98281000-0x982a2000  135168 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98063000-0x9807e000  110592 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x98022000-0x98063000  266240 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97ea2000-0x97edf000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97e65000-0x97ea2000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97e28000-0x97e65000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97deb000-0x97e28000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97dae000-0x97deb000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97d84000-0x97dae000  172032 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97d47000-0x97d84000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97d0a000-0x97d47000  249856 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97c09000-0x97d0a000 1052672 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97b88000-0x97c09000  528384 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+0x97b07000-0x97b88000  528384 __qdf_mem_alloc_consistent+0xd8/0x124 [qdf] user
+
+===== kernel-size-symbols =====
+817c92a4 T _etext

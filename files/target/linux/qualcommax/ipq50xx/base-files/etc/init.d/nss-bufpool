@@ -1,0 +1,101 @@
+#!/bin/sh /etc/rc.common
+# Host-side NSS buffer pool: take stock RD03v2's 4096 instead of the profile
+# default of 8704.
+#
+# Those buffers are empty skbs the host hands to the NSS. They sit in Linux slab
+# permanently as SUnreclaim, so halving the count is a straight return of
+# unreclaimable memory. Measured on matched idle boots of the same image,
+# differing only in whether this script ran: SUnreclaim 44,576 kB without it,
+# 38,204 / 38,144 kB with it over two boots - about 6.3 MB back, with
+# MemAvailable 37,088 -> ~42,800 kB. (Idle SUnreclaim drifts ~1 MB once clients
+# associate, so compare at idle.)
+#
+# WHAT THIS DELIBERATELY DOES NOT DO
+# Stock also sets extra_pbuf_core0=802816, which would grow the NSS descriptor
+# pool from 9,984 to 14,884. We do not. Note this is NOT a regression against
+# anything shipped: v1.8 ran pool=8704 with extra_pbuf=0, i.e. the same 9,984
+# descriptors this build has. The only change a user sees is 4,608 fewer host
+# skbs. The reasons not to take that knob:
+#   - It COSTS host memory rather than saving it. Despite the name it is not the
+#     nss@40000000 carve-out; nss_n2h_buf_pool_cfg() does
+#     kzalloc(PAGE_SIZE, GFP_ATOMIC) + dma_map_single per page, 802816 B = 196
+#     pages = ~784 kB of extra Linux memory.
+#   - That allocator can panic the box. It calls BUG_ON(!page_count) when a page
+#     fails, page_count restarts on every message, and 196 pages span 7 messages
+#     (MAX_PAGES_PER_MSG=32) - so seven chances. With panic_on_oops=1 and
+#     kernel.panic=3 on this board, a BUG at boot is a 3-second reboot, i.e. a
+#     reboot loop. GFP_ATOMIC cannot reclaim, and no cheap pre-check is sound:
+#     kzalloc(PAGE_SIZE) lands in kmalloc-4k, which refills from the buddy
+#     allocator at ORDER 3, so the real failure mode is fragmentation, which
+#     MemFree and MemAvailable cannot see.
+#   - It is write-once per boot (-EPERM once buf_sz_allocated is set), so it
+#     cannot be undone without a module reload.
+# Trading a reboot-loop tail risk for 4,900 extra descriptors - which cost
+# ~784 kB of host memory to obtain - is a bad deal. The pool write below
+# allocates nothing and has no BUG_ON path, so it carries none of that risk
+# while delivering the memory.
+# See stock-investigation/notes/V1.9-TUNING.md finding #1.
+#
+# WHY AN INIT SCRIPT AND NOT rc.local
+# /etc/rc.local is in /lib/upgrade/keep.d/base-files-essential, and sysupgrade
+# saves config by default - so a plain `sysupgrade <image>` restores the user's
+# old rc.local over the image's and any knob added there would silently never
+# run for anyone upgrading. /etc/init.d is in no keep list, so the image wins.
+# /etc/sysctl.d is not preserved either, but the sysctl service runs at START=11
+# and qca-nss-drv only at 94, long before these knobs exist.
+#
+# START=96, not 95: /etc/init.d/done is START=95 and procd walks /etc/rc.d in
+# glob order, so S95done (which runs rc.local) would sort before S95nss-bufpool.
+# Running after rc.local means this script has the last word even on a box whose
+# preserved rc.local still carries the old v1.9-era pool writes.
+START=96
+
+N2H=/proc/sys/dev/nss/n2hcfg
+POOL=$N2H/n2h_empty_pool_buf_core0
+WANT=4096
+
+boot() {
+	start "$@"
+}
+
+start() {
+	# Absent on a plain (non-NSS) build, and also if qca-nss-drv somehow has
+	# not registered its sysctls yet: do nothing rather than half-configure.
+	[ -r "$POOL" ] || return 0
+
+	local before after
+	before=$(cat "$POOL" 2>/dev/null)
+
+	if [ "$before" = "$WANT" ]; then
+		logger -t nss-bufpool "pool already $WANT, nothing to do"
+		return 0
+	fi
+
+	echo "$WANT" > "$POOL" 2>/dev/null
+	after=$(cat "$POOL" 2>/dev/null)
+
+	# Report what THIS invocation did, not just a read-back: a read-back looks
+	# identical whether we applied the value or someone else already had.
+	if [ "$after" = "$WANT" ]; then
+		logger -t nss-bufpool "pool $before -> $after"
+	else
+		logger -t nss-bufpool "FAILED to set pool: wanted $WANT, still $after"
+	fi
+
+	# Loud if a preserved rc.local from an older build set extra_pbuf_core0:
+	# that write is unguarded and carries the BUG_ON exposure described above.
+	local extra
+	extra=$(cat "$N2H/extra_pbuf_core0" 2>/dev/null)
+	case "$extra" in
+	''|0)	;;
+	*)	logger -t nss-bufpool \
+			"note: extra_pbuf_core0=$extra was set by something else (stale /etc/rc.local?); this build does not set it - see docs/nss-offload.md"
+		;;
+	esac
+}
+
+stop() {
+	[ -r "$POOL" ] || return 0
+	echo 8704 > "$POOL" 2>/dev/null
+	logger -t nss-bufpool "pool restored to $(cat "$POOL" 2>/dev/null)"
+}

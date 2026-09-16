@@ -1,0 +1,487 @@
+
+===== nvram-show =====
+CountryCode=CN
+Router_unconfigured=0
+SN=<redacted-serial>
+boot_wait=on
+bootargs=ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs cnss2.bdf_integrated=0x24 cnss2.bdf_pci0=0x60 cnss2.bdf_pci1=0x60 cnss2.skip_radio_bmap=4 rootwait
+bootcmd=bootmiwifi
+bootdelay=5
+color=101
+eth1addr=xx:xx:xx:xx:xx:xx
+ethact=eth1
+ethaddr=xx:xx:xx:xx:xx:xx
+ethprime=eth1
+fdt_high=0x4A400000
+fdtcontroladdr=4a9d4004
+flag_boot_rootfs=0
+flag_boot_success=1
+flag_boot_type=2
+flag_last_success=0
+flag_ota_reboot=0
+flag_try_sys1_failed=0
+flag_try_sys2_failed=0
+flash_type=11
+fsbootargs=ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs cnss2.bdf_integrated=0x24 cnss2.bdf_pci0=0x60 cnss2.bdf_pci1=0x60 cnss2.skip_radio_bmap=4
+ipaddr=192.168.31.1
+machid=8040002
+mode=Router
+model=RD03v2
+mtdids=nand0=nand0
+netmask=255.255.255.0
+no_wifi_dev_times=0
+rand_key=<redacted>
+rand_nonce=<redacted>
+restore_defaults=0
+serverip=192.168.31.100
+soc_hw_version=20180101
+soc_version_major=1
+soc_version_minor=1
+ssh_en=1
+stderr=serial@78AF000
+stdin=serial@78AF000
+stdout=serial@78AF000
+telnet_en=0
+uart_en=1
+wl0_radio=1
+wl0_ssid=<redacted-ssid>
+wl1_radio=1
+wl1_ssid=<redacted-ssid>
+
+===== bdata-usage =====
+usage: bdata [get name] [set name=value] [unset name] [show] [commit] [sync] ...
+
+===== bdata-show =====
+rand_key=<redacted>
+rand_nonce=<redacted>
+color=101
+CountryCode=CN
+SN=<redacted-serial>
+model=RD03v2
+miot_did=<redacted>
+miot_key=<redacted>
+wl1_ssid=<redacted-ssid>
+wl0_ssid=<redacted-ssid>
+telnet_en=0
+ssh_en=0
+uart_en=0
+
+===== bdata-individual =====
+bdata uart_en = 0
+bdata ssh_en = 0
+bdata telnet_en = 0
+bdata boot_wait = 
+bdata restore_defaults = 
+bdata SN = <redacted-serial>
+bdata CountryCode = CN
+
+===== key-nvram =====
+restore_defaults = 0
+boot_wait = on
+uart_en = 1
+ssh_en = 1
+telnet_en = 0
+flag_boot_success = 1
+flag_boot_rootfs = 0
+flag_last_success = 0
+flag_ota_reboot = 0
+flag_boot_recovery = 
+flag_try_sys1_failed = 0
+flag_try_sys2_failed = 0
+
+===== proc-xiaoqiang =====
+dr-xr-xr-x    2 root     root             0 Dec 24 14:04 .
+dr-xr-xr-x  141 root     root             0 Jan  1  1970 ..
+-rw-r--r--    1 root     root             0 Dec 24 14:04 boot_status
+-rw-r--r--    1 root     root             0 Dec 24 14:04 ft_mode
+-rw-r--r--    1 root     root             0 Dec 24 14:04 model
+-rw-r--r--    1 root     root             0 Dec 24 14:04 regdump
+-rw-r--r--    1 root     root             0 Dec 24 14:04 reset
+-rw-r--r--    1 root     root             0 Dec 24 14:04 xq_syslog
+## /proc/xiaoqiang/boot_status = 3
+## /proc/xiaoqiang/ft_mode = 0
+## /proc/xiaoqiang/model = RD03v2
+## /proc/xiaoqiang/regdump = 
+## /proc/xiaoqiang/reset = 38
+## /proc/xiaoqiang/xq_syslog = 
+
+===== restore-defaults-references =====
+/etc/init.d/boot_check
+/etc/init.d/key_services_boot_check
+/lib/preinit/31_restore_nvram
+/lib/preinit/39_mount_ubi_data
+/lib/preinit/90_mount_bind_etc
+/sbin/re_restore.sh
+/usr/sbin/bootinfo
+/usr/sbin/flashtestctl.sh
+/usr/sbin/restore_defaults.sh
+
+===== preinit-31_restore_nvram =====
+#!/bin/sh
+
+. /lib/functions.sh
+
+readonly RESTORE_DEF_FLAG_FILE="/tmp/restore_defaults_flag"
+
+do_xiaoqiang_defaults() {
+	cat /usr/share/xiaoqiang/xiaoqiang-defaults.txt | while read line
+	do
+		[ -n "$line" ] && nvram set "$line"
+	done
+}
+
+do_flag_override() {
+	local flag="$1"
+	local b_val=`bdata get $flag`
+	local n_val=`nvram get $flag`
+	
+	[ "$b_val" = "$n_val" ] && return 0
+	[ "$b_val" = "1" ] && nvram set "$flag"=1
+}
+
+flag_override() {
+	do_flag_override uart_en
+	do_flag_override ssh_en
+	do_flag_override telnet_en
+	do_flag_override boot_wait
+}
+
+do_set_default_ssid() {
+	local num=`nvram get wl1_ssid | cut -b 8-11`
+	local temp=0x"$num"
+	local newnum="000"`printf "%x\n" $((0xffff-$temp))`
+	local pos=`expr length $newnum - 4`
+	local suf="_5G"
+	local ssid2G=""
+	local result2G=""
+	local has5G=""
+	local ssid5G=""
+	local result5G=""
+
+	newnum=`echo ${newnum:$pos:4} | tr [a-z] [A-Z]`
+	ssid2G=`nvram get wl1_ssid`
+	result2G=`echo $ssid2G"_"$newnum`
+	nvram set wl1_ssid=$result2G
+
+	has5G=`uci get misc.wireless.if_5G 2>/dev/null`
+	if [ -n "$has5G" ]; then
+		ssid5G=`nvram get wl0_ssid | cut -b -11`
+		result5G=`echo ${ssid5G}"_"${newnum}${suf}`
+		nvram set wl0_ssid=$result5G
+	fi
+}
+
+do_bdata_sync(){
+
+	bdata sync
+
+	[ -x /usr/share/xiaoqiang/xiaoqiang-ignore.txt ] && {
+		cat /usr/share/xiaoqiang/xiaoqiang-ignore.txt | while read line
+		do
+			[ -n "$line" ] && nvram unset "$line"
+		done
+	}
+}
+
+set_restore_defaults_flag () {
+	touch "$RESTORE_DEF_FLAG_FILE"
+}
+
+restore_nvram () {
+	local restore=`nvram get restore_defaults`
+	local ft_mode=`cat /proc/xiaoqiang/ft_mode`
+	local nvram_corrupt=0
+	local need_commit=0
+	local wl0_val=""
+	local wl1_val=""
+	local wl2_val=""
+
+	# set restore_defaults flag, erase user config
+	if [ "$restore" = "1" ]; then
+		local flag_name=`uci get misc.mount_bind_etc.flag_name`
+		nvram set $flag_name=1
+		mtd erase overlay
+		need_commit=1
+		set_restore_defaults_flag
+
+		# try to log restore event
+		if which sp_log_info.sh >/dev/null; then
+			sp_log_info.sh -i -k "sys.reset.manual" -m "1"
+		fi
+	fi
+
+	if [ "$ft_mode" != "1" ]; then
+		local sn=`nvram get SN`
+		local wl1_ssid=`nvram get wl1_ssid`
+		local countrycode=`nvram get CountryCode`
+
+		if [ -z "$sn" -o -z "$wl1_ssid" -o -z "$countrycode" ]; then
+			nvram_corrupt=1
+		fi
+	fi
+
+	# skip restore wifi radio flag from defaults if factory mode
+	if [ "$ft_mode" = "1" ]; then
+		wl1_val=`nvram get wl1_radio`
+		wl0_val=`nvram get wl0_radio`
+		wl2_val=`nvram get wl2_radio`
+	fi
+
+	#restore: 1, 恢复出厂设置；2，ota升级
+	#nvram_corrupt: 1, nvram被破坏
+	if [ "$nvram_corrupt" = "1"  ]; then
+		echo "Nvram partition corrupt, restore nvram to default!"
+		do_xiaoqiang_defaults
+		do_bdata_sync
+		need_commit=1
+	fi
+
+	# restore to factory setting
+	if [ "$restore" = "1" ]; then
+		nvram clear /usr/share/xiaoqiang/xiaoqiang-reserved.txt
+		do_xiaoqiang_defaults
+		do_bdata_sync
+		need_commit=1
+	fi
+
+	# OTA upgrade
+	if [ "$restore" = "2" ]; then
+		do_xiaoqiang_defaults
+		flag_override
+		need_commit=1
+	fi
+
+	if [ "$ft_mode" = "1" ]; then
+		[  "$wl1_val" != "" -a -n "$wl1_val" ] && {
+			nvram set wl1_radio=$wl1_val
+			need_commit=1
+		}
+		[  "$wl0_val" != "" -a -n "$wl0_val" ] && {
+			nvram set wl0_radio=$wl0_val
+			need_commit=1
+		}
+		[  "$wl2_val" != "" -a -n "$wl2_val" ] && {
+			nvram set wl2_radio=$wl2_val
+			need_commit=1
+		}
+	fi
+
+	local countrycode=`nvram get CountryCode`
+	[ "$countrycode" = "EU" ] && {
+		nvram set CountryCode=DE
+		need_commit=1
+	}
+
+	[ "$need_commit" = "1" ] && nvram commit
+}
+
+boot_hook_add preinit_main restore_nvram
+
+===== xiaoqiang-defaults =====
+bootcmd=bootmiwifi
+bootdelay=5
+ipaddr=192.168.31.1
+serverip=192.168.31.100
+netmask=255.255.255.0
+stdin=serial
+stdout=serial
+stderr=serial
+uart_en=0
+telnet_en=0
+boot_wait=off
+restore_defaults=0
+wl0_ssid=<redacted-ssid>
+wl1_ssid=<redacted-ssid>
+wl0_radio=1
+wl1_radio=1
+model=RD03v2
+flag_boot_type=2
+mode=Router
+no_wifi_dev_times=0
+ethprime=eth1
+
+
+===== boot_check-init =====
+#!/bin/sh /etc/rc.common
+
+#this script will run by /etc/init.d/rcS after all rc script.
+START=99
+
+RCSTATFILE='/tmp/rc.timing'
+BOOTCHECKCODEFILE='/tmp/rc.done'
+
+
+dlog() {
+	local oneline
+	oneline="$@"
+	if [ -x /usr/bin/logger ]; then
+		logger -s -p 1 -t "$LOGTAG" -- "$oneline"
+	else
+		echo "`date` ${LOGTAG}[${$}]: $oneline"
+	fi
+}
+
+do_config_backup() {
+	# In case /data get trashed, backup config after a successful boot
+	local rec_mtd_name="cfg_bak"
+	local init_flag
+
+	init_flag=`uci -q get xiaoqiang.common.INITTED`
+	[ "$init_flag" = "YES" ] || return 0
+
+	rec_mtd=$(find_mtd_part "$rec_mtd_name")
+	[ -z "$rec_mtd" ] && return 0
+
+	tar -czf /tmp/cfg_bak.tgz /etc/config > /dev/null 2>&1
+	mtd erase $rec_mtd_name
+	mtd write /tmp/cfg_bak.tgz $rec_mtd_name
+	rm -f /tmp/cfg_bak.tgz
+}
+
+set_setup_flag(){
+	local flg=0
+	local flag_boot_rootfs=$(nvram get flag_boot_rootfs)
+	local flag_ota_root=$(nvram get flag_ota_reboot)
+	local flag_boot_success=$(nvram get flag_boot_success)
+	local flag_try_sys1_failed=$(nvram get flag_try_sys1_failed)
+	local flag_try_sys2_failed=$(nvram get flag_try_sys2_failed)
+	local flag_last_success=$(nvram get flag_last_success)
+
+	echo 0 > /tmp/upgraded_result
+	[ "$flag_ota_root" != "0" ] && {
+		flg=1
+		echo 1 > /tmp/upgraded_result
+		nvram set flag_ota_reboot=0
+	}
+	[ "$flag_boot_success" != "1" ] && {
+		flg=1
+		nvram set flag_boot_success=1
+	}
+	[ "$flag_try_sys1_failed" != "0" ] && {
+		flg=1
+		nvram set flag_try_sys1_failed=0
+	}
+	[ "$flag_try_sys2_failed" != "0" ] && {
+		flg=1
+		nvram set flag_try_sys2_failed=0
+	}
+
+	[ "$flag_boot_rootfs" = "0" -o "$flag_boot_rootfs" = "1" ] && [ "$flag_boot_rootfs" != "$flag_last_success" ] && {
+		flg=1
+		nvram set flag_last_success=$flag_boot_rootfs
+	}
+
+	[ "$flg" = "1" ] && nvram commit
+}
+
+upload_upgrade_info(){
+	local upgrad_flag=`nvram get flag_upgrade_push`
+
+	[ "$upgrad_flag" = "1" ] && {
+		nvram set flag_show_upgrade_info=1
+		nvram unset flag_upgrade_push
+		nvram commit
+		feedPush "{\"type\":3}"
+		/usr/sbin/vasinfo_fw.sh post_ota
+
+		elog "upload ugrade info"
+
+		if which sp_log_info.sh >/dev/null; then
+			cur_ver=$(uci -q -c /usr/share/xiaoqiang get xiaoqiang_version.version.ROM)
+			sp_log_info.sh -k sys.upgrade.info -m "success:${cur_ver}:${cur_ver}" -i
+		fi
+	}
+}
+
+cal_boot_time(){
+	eval "$(cat $RCSTATFILE | grep '^TOTALESP='| tail -n 1)"
+	test -z "$TOTALESP" && TOTALESP='FIXME:unknow'
+	local tmsg="INFO: rcS $@ timing $TOTALESP seconds."
+	logger stat_points_none gel_log_boot_time=$TOTALESP
+	dlog "$tmsg"
+}
+
+elog(){
+	tmsg="$@"
+	logger -p local0.warning -t boot_check "boot_check[${$}]: $tmsg"
+	echo "`date` boot_check[${$}]: $tmsg" >> /dev/console
+}
+
+boot_phy_start() {
+	/sbin/phyhelper start
+}
+
+start() {
+	# S10boot will stop all phy, then we start all phy at here
+	boot_phy_start
+
+	# init fan speed
+	[ -f /usr/sbin/fancycle ] && {
+		fancycle 10
+		i2cset -f -y 1 0x2f 0x38 0x18
+		i2cset -f -y 1 0x2f 0x2b 0x01
+	}
+
+	# when upgrade finish, send push: flag 1 is need push
+	upload_upgrade_info
+
+	# set bootup flag
+	set_setup_flag
+
+	# backup config
+	do_config_backup
+
+	# should led be turned off?
+	[ -x /usr/sbin/led_check ] && /usr/sbin/led_check
+
+	# process crashlog if any
+	[ -x /usr/sbin/upcrash ] && {
+		# wait for network stable
+		sleep 5
+		/usr/sbin/upcrash
+	}&
+
+	#cal total time
+	cal_boot_time
+
+	# boot finished
+	xqled sys_ok
+	xqled sys_ready
+	local init_flag
+	init_flag=$(uci -q get xiaoqiang.common.INITTED)
+	if [ "$init_flag" != "YES" ]; then
+		xqled sys_init
+	fi
+
+	echo "BOOTCHECKCODE=0;" > $BOOTCHECKCODEFILE
+	echo "boot_done" > /tmp/boot_check_done
+	elog "Booting up finished."
+}
+
+stop() {
+	echo "stop"
+}
+
+===== logread =====
+
+===== auto_upgrade-config =====
+config settings 'services'
+    option auto_upgrade '-1'
+
+config rule 'countrycode'
+    option auto_upgrade 'CN'
+
+config service 'invalid_page'
+    option on 'matool --method setKV --params invalid_page_status on; /etc/init.d/http_status_stat on'
+    option off 'matool --method setKV --params invalid_page_status off; /etc/init.d/http_status_stat off'
+    option status 'uci get http_status_stat.settings.enabled 2>/dev/null'
+
+config service 'security_page'
+    option on 'matool --method setKV --params security_page_status on;uci set security.common.malicious_url_firewall=1;uci commit security;touch /etc/config/securitypage/enable.tag; /etc/init.d/securitypage restart'
+    option off 'matool --method setKV --params security_page_status off;uci set security.common.malicious_url_firewall=0;uci commit security; /etc/init.d/securitypage restart'
+    option status ''
+
+config service 'auto_upgrade'
+    option on 'uci set otapred.settings.auto=1; uci commit otapred'
+    option off 'uci set otapred.settings.auto=0; uci commit otapred'
+    option status 'uci get otapred.settings.auto 2>/dev/null'

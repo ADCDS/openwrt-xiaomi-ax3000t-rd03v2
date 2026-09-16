@@ -1,0 +1,17 @@
+#!/bin/sh
+# psh - run a READ-ONLY command on the port-side reference AP (v1.8 of this
+# port) at 192.168.100.2.  That box is in service as backhaul: never write to
+# it, never restart anything on it.
+set -eu
+
+: "${PORT_HOST:=192.168.100.2}"
+: "${PORT_USER:=root}"
+: "${PORT_KEY:=$HOME/.ssh/id_router}"
+
+exec ssh -F /dev/null -i "$PORT_KEY" \
+  -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null \
+  -o LogLevel=ERROR \
+  -o ConnectTimeout=10 \
+  -o BatchMode=yes \
+  "$PORT_USER@$PORT_HOST" "$@"

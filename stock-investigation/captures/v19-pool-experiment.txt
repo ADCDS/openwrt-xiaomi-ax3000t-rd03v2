@@ -1,0 +1,106 @@
+
+=== 0. preconditions ===
+uptime:  11:02:36 up 1 min,  load average: 0.29, 0.14, 0.05
+nss modules:
+qca_nss_dp             45056  1 qca_nss_drv
+qca_nss_drv           405504  2 qca_nss_pppoe,ecm
+writability (both must be -rw- for the rc.local approach to be viable):
+-rw-r--r--    1 root     root             0 Jul  9 11:02 /proc/sys/dev/nss/n2hcfg/extra_pbuf_core0
+-rw-r--r--    1 root     root             0 Jul  9 11:02 /proc/sys/dev/nss/n2hcfg/n2h_empty_pool_buf_core0
+
+=== 1. BEFORE - memory ===
+MemFree:           40732 kB
+MemAvailable:      36884 kB
+Slab:              51916 kB
+SReclaimable:       7176 kB
+SUnreclaim:        44740 kB
+
+=== 1. BEFORE - pool config ===
+n2h_empty_pool_buf_core0         = 8704
+extra_pbuf_core0                 = 0
+n2h_high_water_core0             = 8704
+n2h_low_water_core0              = 4352
+n2h_queue_limit_core0            = 256
+
+=== 1. BEFORE - n2h stats ===
+ n2h_pbuf_def_total_count = 9984 special
+ n2h_pbuf_def_free_count = 9982 special
+ n2h_pbuf_def_alloc_fail_payload = 5 special
+ n2h_pbuf_def_alloc_fail_nopayload = 0 special
+ n2h_payload_alloc_fails = 5 special
+
+=== 2. WRITE extra_pbuf_core0 = 802816 (stock's value) ===
+  before: 0
+  write ok
+  readback: 802816  <- equals buf_sz_allocated, not necessarily what we just wrote
+
+=== 3. WRITE n2h_empty_pool_buf_core0 = 4096 (stock's value, ours is 8704) ===
+  before: 8704
+  write ok
+  readback: 4096
+
+=== 4. settle - sampling SUnreclaim every 10 s for 60 s ===
+(the pool may only shrink as buffers are consumed, so watch the trend)
+  t+0  s  SUnreclaim: 45400 kB
+  t+10 s  SUnreclaim: 39612 kB
+  t+20 s  SUnreclaim: 39540 kB
+  t+30 s  SUnreclaim: 39560 kB
+  t+40 s  SUnreclaim: 39524 kB
+  t+50 s  SUnreclaim: 39540 kB
+  t+60 s  SUnreclaim: 39528 kB
+
+=== 5. AFTER - memory ===
+MemFree:           45228 kB
+MemAvailable:      41400 kB
+Slab:              46740 kB
+SReclaimable:       7212 kB
+SUnreclaim:        39528 kB
+
+=== 5. AFTER - pool config ===
+n2h_empty_pool_buf_core0         = 4096
+extra_pbuf_core0                 = 802816
+n2h_high_water_core0             = 4096
+n2h_low_water_core0              = 2048
+n2h_queue_limit_core0            = 256
+
+=== 5. AFTER - n2h stats ===
+ n2h_pbuf_def_total_count = 14884 special
+ n2h_pbuf_def_free_count = 14882 special
+ n2h_pbuf_def_alloc_fail_payload = 5 special
+ n2h_pbuf_def_alloc_fail_nopayload = 0 special
+ n2h_payload_alloc_fails = 5 special
+
+=== 6. interpretation ===
+Compare SUnreclaim BEFORE vs AFTER.
+
+Expect the NET, not the gross. /proc/meminfo is in kB, so work in kB:
+    pool shrink : (8704 - 4096) x 2304 B = 10,368 kB returned
+    extra_pbuf  :               802,816 B =    784 kB spent (host pages)
+    NET                                   =  9,584 kB
+So a full success is SUnreclaim about 9,584 kB lower - NOT 10,368. Expecting the
+gross figure would make a correct result look like it fell ~800 kB short.
+
+  ~9,584 kB lower -> the runtime write DOES free memory. Finding #1 ships as an
+                   rc.local block (build.sh's current block sets only
+                   general/redirect and the two accel modes; the n2hcfg writes
+                   would be added next to them).
+  unchanged     -> the pool is sized at init only. The rc.local knob would be
+                   cosmetic; #1 must instead become a build-time change, i.e.
+                   the MEDIUM-vs-LOW profile decision of finding #4. Do NOT
+                   ship the sysctl write in that case.
+
+Also check pbuf_def_total_count: stock's extra_pbuf_core0=802816 grows the
+NSS-side pool to 14884 (ours is 9984 with extra_pbuf_core0=0). If that number
+does not move, the NSS core likely needs a restart to honour the new heap size,
+which again makes this a build-time change rather than an rc.local one.
+
+payload_alloc_fails is CUMULATIVE SINCE BOOT and does not advance at idle (it
+read a frozen 45864 on the v1.8 reference AP after 8 d uptime). Its absolute
+value is therefore NOT the pass/fail test and is not comparable to stock's "99"
+on stock's own firmware. What matters is the DELTA across a forwarded-traffic
+load run, measured after this change on our build.
+
+Neither write persists across a reboot - but "not persistent" is not the same as
+"reversible". n2h_empty_pool_buf_core0 can be written again freely;
+extra_pbuf_core0 CANNOT be lowered or re-set this boot (-EPERM), and the pages it
+allocated stay allocated until the module is reloaded. Reboot between runs.

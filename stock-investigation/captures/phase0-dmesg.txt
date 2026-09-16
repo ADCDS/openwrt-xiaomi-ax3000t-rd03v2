@@ -1,0 +1,178 @@
+[  141.932868] 8021q: adding VLAN 0 to HW filter on device wl13
+[  141.935960] device wl13 entered promiscuous mode
+[  141.938121] br-miot: port 1(wl13) entered forwarding state
+[  141.942368] br-miot: port 1(wl13) entered forwarding state
+[  141.948567] IPv6: ADDRCONF(NETDEV_CHANGE): br-miot: link becomes ready
+[  142.031785] wlan: [749:I:ANY] wlan_cfg80211_do_acs: vap-1(wl13):ACS Params
+[  142.031824] wlan: [749:I:ANY] wlan_cfg80211_do_acs: ht_enabled:1|ht40_enabled:0|vht_enabled:1|hw_mode:29|chwidth:20|
+[  142.037656] wlan: [749:I:ANY] vap-1(wl13): ACS result PCH 6 freq 2437, SCH 10 freq 2457, hw_mode 1 chwidth 40, vht_seg0 8 freq 2447, vht_seg1 0 freq 0
+[  142.050960] wlan: [749:I:ANY] DES SSID SET=<redacted-ssid>
+[  142.064739] wlan: [749:I:ANY] desired hw mode: 29
+[  142.067955] wlan: [749:I:ANY] ieee80211_ucfg_set_freq_internal: 
+[  142.067955]  Channel is configured already!!
+[  142.073346] wlan: [749:E:MBSSIE] ieee80211_ucfg_set_txvap: MBSSID is not enabled
+[  142.086438] wlan: [0:I:ANY] wlan_acs_start_scan_report: [EXT] Invoking ACS module for ACS report
+[  142.091690] all dfs channel is pre cac, skip dfs cac
+[  142.782871] wlan: [0:I:ANY] wlan_acs_start_scan_report: [EXT] Invoking ACS module for ACS report
+[  142.784243] all dfs channel is pre cac, skip dfs cac
+[  142.809099] wlan: [0:E:CMN_MLME] mlme_vdev_restart_is_allowed:  No multivdev restart
+[  142.810730] all dfs channel is pre cac, skip dfs cac
+[  142.823006] wlan: [2526:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:0|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:1|ul_mumimo:1|dl_muofdma_bfer:0
+[  142.823076] wlan: [2526:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x72
+[  142.838310] wlan: [0:E:CMN_MLME] mlme_vdev_restart_is_allowed:  No multivdev restart
+[  142.844254] all dfs channel is pre cac, skip dfs cac
+[  142.959740] wlan: [749:I:ANY] Skip bcast de-auth reason code 3, handled in VDEV down
+[  143.000880] device wl13 left promiscuous mode
+[  143.001040] br-miot: port 1(wl13) entered disabled state
+[  145.326884] wlan: [3222:I:ANY] ol_ath_wifi_ssr: ol_ath_wifi_ssr: SSR event 2 bus_type 1
+[  145.326941] remoteproc remoteproc2: powering up q6v5_wcss_userpd2
+[  145.338622] Subsystem error monitoring/handling services are up
+[  145.339976] remoteproc remoteproc2: remote processor q6v5_wcss_userpd2 is now up
+[  145.346785] wlan: [3222:I:ANY] ol_ath_wifi_ssr: ol_ath_wifi_ssr: SSR event 3 bus_type 1
+[  145.354008] wlan: [3222:I:ANY] ol_ath_target_start: subsystem_get success
+[  145.361763] cnss[41]: INFO: Waiting for FW ready. Device: 0xfffb, FW ready timeout: 15 seconds
+[  145.414256] cnss[41]: INFO: QMI WLFW service connected, state: 0x1
+[  145.414582] cnss[41]: INFO: device_id : 65531 mem mode : [2]
+[  145.419361] cnss[41]: INFO: platform name: Qualcomm Technologies, Inc. IPQ5018/AP-MP03.3
+[  145.426724] cnss[41]: INFO: Target capability: chip_id: 0x0, chip_family: 0x4, board_id: 0xff, soc_id: 0xffffffff, fw_version: 0x2504ffff, fw_build_timestamp: 2025-01-09 01:49, otp_version: 0x0 eeprom_caldata_read_timeout 0s
+[  145.433645] cnss[41]: INFO: Device BAR Info pa: 0x81e00000, va: 0x95300000, size: 0x200000
+[  145.453924] cnss[41]: INFO: Using Boardid from bootargs:0x60
+[  145.477283] cnss[41]: INFO: BDF location : 0x4cf00000
+[  145.477312] cnss[41]: INFO: BDF qcn6122/bdwlan.b60 size 131072
+[  145.482832] cnss[41]: INFO: per device BDF location : 0x4cf20000
+[  145.487232] cnss[41]: INFO: CALDATA qcn6122/caldata_1.bin size 131072 offset 0x20000
+[  145.580486] cnss[41]: INFO: FW ready received for device 0xfffb
+[  145.580675] wlan: [3222:I:ANY] pld_ahb_wlan_enable: cnss_mode: Mission mode 
+[  145.586615] cnss[41]: INFO: Sending mode message, mode: MISSION(0), state: 0x7
+[  145.604719] wlan: [3222:I:ANY] qca_napi_create: qca_napi_create: napi instance 0 created on pipe 4
+[  145.604794] wlan: [3222:I:ANY] htc_wmi_init: HT Create . 84970000
+[  145.612953] wlan: [3222:I:ANY] htc_wmi_init: Skipping BMI Done
+[  145.618731] wlan: [3222:I:ANY] htc_wmi_init: host_enable 0
+[  145.632942] wlan: [3222:I:ANY] ol_target_init_complete: CDP soc attach success
+[  145.632978] wlan: [3222:I:ANY] ol_target_init_complete: Soc attach success NSS config 0 
+[  145.639180] wlan: [3222:I:ANY] htc_set_async_ep: htc_set_async_ep: htc_handle 84970000, ep 2, value 1
+[  145.648901] wlan: [2063:I:TIF] HE_CAP Info = 9a08010d
+[  145.657645] wlan: [2063:I:TIF] Num HW modes = 1
+[  145.661612] wlan: [2063:I:TIF] Num PHY = 1
+[  145.666652] wlan: [2063:I:TIF] FW Build Version (Ext.) = 0
+[  145.670071] wlan: [2063:I:TIF] HDL Version: MajorVersion.MinorVersion = 0.0
+[  145.677137] wlan: [2063:I:TIF] Preferred HW Mode = 0 Num Radios = 1
+[  145.683301] wlan: [2063:W:TIF] add_11ax_mode_flags: 11AX wireless modes are not populated by the target in reg capabilities, adding 11AX wireless modes
+[  145.688624] wlan: [2063:I:TIF] init_deinit_add_11ax_modes: hw_mode_id = 0 phy_id = 0 wireless modes = 0
+[  145.703419] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: num_radios: 1
+[  145.712683] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: ema_max_vap_cnt: 0
+[  145.719096] wlan: [2063:I:TIF] init_deinit_get_total_num_vdevs_for_soc: num_vdevs: 9
+[  145.726930] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: num_radios: 1
+[  145.734671] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: ema_max_vap_cnt: 0
+[  145.742206] wlan: [2063:I:TIF] init_deinit_get_total_num_vdevs_for_soc: num_vdevs: 9
+[  145.749742] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: num_radios: 1
+[  145.757587] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: ema_max_vap_cnt: 0
+[  145.765027] wlan: [2063:I:TIF] init_deinit_get_total_num_vdevs_for_soc: num_vdevs: 9
+[  145.772692] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: num_radios: 1
+[  145.780540] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: ema_max_vap_cnt: 0
+[  145.787842] wlan: [2063:I:TIF] init_deinit_get_total_num_vdevs_for_soc: num_vdevs: 9
+[  145.795623] wlan: [2063:I:ANY] init_deinit_update_pdev_tgt_info: pdev id:0 wmi_handle:8941c200
+[  145.809646] wlan: [2063:I:ANY] init_deinit_update_pdev_tgt_info: Pdev = 0 Number of peers = 137 vdevs = 9
+[  145.811858] wlan: [2063:I:TIF] init_deinit_update_pdev_tgt_info: CDP PDEV INIT success
+[  145.921755] wlan: [2063:I:ANY] copy_fw_abi_version_tlv: copy_fw_abi_version_tlv: INIT_CMD version: 1, 0, 0x5f414351, 0x4c4d, 0x0, 0x0
+[  146.110743] wlan: [2063:I:ANY] ready_extract_init_status_tlv: ready_extract_init_status_tlv:0
+[  146.110784] wlan: [2063:I:ANY] dp_peer_map_attach_wifi3: dp_peer_map_attach_wifi3 max_peers 163, max_ast_index: 528
+[  146.110784] 
+[  146.118362] wlan: [3222:I:ANY] ol_ath_connect_htc: WMI is ready
+[  146.139928] wlan: [3222:E:NSS] [nss-wifili]: pdev:82ca0480 radio_ifnum:37 scheme_id:2 radio_priority:0 
+[  146.142983] wlan: [3222:E:TIF] target_if_lro_hash_config: pdev with id 0 is NULL
+[  146.148541] wlan: [3222:I:ANY] ol_ath_soc_start: Skip txrx_pdev_attach_target
+[  146.155947] wlan: [3222:I:ANY] ol_ath_soc_start: BURSTING enabled by default
+[  146.162991] wlan: [3222:I:ANY] ol_ath_stats_attach: periodic_chan_stats: 1
+[  146.163318] wlan: [0:I:ANY] ol_ath_twt_enable_complete_event_handler: twt enabled
+[  146.176955] wlan: [3222:I:ANY] ol_ath_ucfg_set_rx_pkt_protocol_tagging: Set RX packet type TAG, opcode : 0, pkt_type : 18, metadata : 0xca0,pdev_id = 0, REO dest ring = 5
+[  146.176955] 
+[  146.186235] wlan: [3222:I:ANY] wlan_scan_update_channel_list: num_chan: 25
+[  146.201064] wlan: [3222:I:ANY] ol_ath_configure_cong_ctrl_max_msdus: pdev_idx = 0 tx_desc_limit = 8192
+[  146.207622] wlan: [3222:I:ANY] dp_lag_pdev_set_primary_radio: pdev(820e1c08) is_primary 0 
+[  146.217027] wlan: [3222:I:Dynamic Mode Change] ol_ath_check_and_reconfig_hw_mode: Running with HW mode = 0
+[  146.231223] wlan: [3222:I:ANY] wlan_scan_update_channel_list: num_chan: 13
+[  146.235017] ieee80211_dfs_deliver_event: dfs PRECAC_COMPLETED event delivered on chan freq 5180.
+[  146.241624] ieee80211_dfs_deliver_event: dfs PRECAC_COMPLETED event delivered on chan freq 5200.
+[  146.250560] ieee80211_dfs_deliver_event: dfs PRECAC_COMPLETED event delivered on chan freq 5220.
+[  146.259328] ieee80211_dfs_deliver_event: dfs PRECAC_COMPLETED event delivered on chan freq 5240.
+[  146.269554] wlan: [3222:I:ANY] wlan_scan_update_channel_list: num_chan: 13
+[  146.277307] ieee80211_dfs_deliver_event: dfs PRECAC_COMPLETED event delivered on chan freq 5180.
+[  146.283569] ieee80211_dfs_deliver_event: dfs PRECAC_COMPLETED event delivered on chan freq 5200.
+[  146.292506] ieee80211_dfs_deliver_event: dfs PRECAC_COMPLETED event delivered on chan freq 5220.
+[  146.301281] ieee80211_dfs_deliver_event: dfs PRECAC_COMPLETED event delivered on chan freq 5240.
+[  146.310266] wlan: [3222:I:ANY] ieee80211_setctry_tryretaining_curchan: [442] Skipping current channel retention during set_country operation
+[  146.318881] wlan: [3222:I:ANY] number of channels: 2G = 0 5G = 13, 6G = 0
+[  146.332121] wlan: [3222:I:ANY] wlan_cfg80211_set_country: wlan_cfg80211_set_country: Country: CN ret: 0 
+[  146.733103] wlan: [3326:I:ANY] wlan_cfg80211_set_hwaddr: wlan_cfg80211_set_hwaddr :xx:xx:xx:xx:xx:xx ret: 0 
+[  146.778890] wlan: [3329:I:ANY] ol_ath_set_config_param: set TXBF_SND_PERIOD: val 100 stat 0
+[  146.914120] wlan: [0:I:ANY] ol_ath_set_config_param: Disconnect_timeout value: 10
+[  146.957262] wlan: [0:I:ANY] ol_ath_set_config_param: Reconfiguration_timeout value:60
+[  147.431434] wlan: [3447:I:ANY] wlan_cfg80211_add_virtual_intf: proprietary mode 6 for interface: wl0 : clone params: 0x00000001 
+[  147.431514] wlan: [3447:I:MBSSIE] osif_mbssid_sanity_check: mbssid_sanity_ok: YES
+[  147.442347] wlan: [3447:I:ANY] osifp_create_wlan_vap: VDEV Create xx:xx:xx:xx:xx:xx
+[  147.450064] wlan: [3447:I:ANY] ol_ath_vap_set_param: Setting SGI value: 1
+[  147.458045] wlan: [3447:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:1|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:1|ul_mumimo:0|dl_muofdma_bfer:0
+[  147.463959] wlan: [3447:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x33
+[  147.478640] wlan: [3447:I:ANY] ol_ath_vap_set_param: VDEV params: AC/VHT sounding mode:HE|SU/MU sounding mode:SU|Trig/Non-Trig sounding mode:Non-Trigged
+[  147.500412] wlan: [3447:I:ANY] osif_create_vap_complete: TX Checksum:1|SG:1|TSO:1|LRO:0
+[  147.500444] wlan: [3447:I:ANY] WLAN-NSS: VAP NSS ops initialized 
+[  147.511839] wlan: [3447:I:ANY] VAP device wl0 created osifp: (84a78480) os_if: (83ee8000)
+[  148.775434] wlan: [3545:I:ANY] ieee80211_ucfg_setparam: Setting Max Stations:64
+[  148.860015] wlan: [3552:I:ANY] wlan_set_param:  HE MU BFER setting not supported in this target 
+[  148.924984] wlan: [3557:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:1|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:1|ul_mumimo:1|dl_muofdma_bfer:0
+[  148.925026] wlan: [3557:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x73
+[  149.005175] wlan: [3560:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:1|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:0|ul_mumimo:1|dl_muofdma_bfer:0
+[  149.005218] wlan: [3560:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x53
+[  149.678363] 8021q: adding VLAN 0 to HW filter on device wl0
+[  149.681499] device wl0 entered promiscuous mode
+[  149.683039] br-lan: port 6(wl0) entered forwarding state
+[  149.687312] br-lan: port 6(wl0) entered forwarding state
+[  149.751594] wlan: [749:I:ANY] wlan_cfg80211_do_acs: vap-0(wl0):ACS Params
+[  149.751629] wlan: [749:I:ANY] wlan_cfg80211_do_acs: ht_enabled:1|ht40_enabled:0|vht_enabled:1|hw_mode:31|chwidth:20|
+[  151.680395] br-lan: port 6(wl0) entered forwarding state
+[  152.274273] wlan: [413:E:ANY] ol_ath_get_chan_grade_info: RF characterization entries is empty
+[  152.274663] wlan: [413:I:ANY] vap-0(wl0): ACS result PCH 48 freq 5240, SCH 28 freq 5140, hw_mode 2 chwidth 160, vht_seg0 50 freq 5250, vht_seg1 0 freq 0
+[  152.290456] wlan: [413:I:ANY] ieee80211_acs_scan_evhandler: [EXT] lock held duration (8ms)
+[  152.353095] wlan: [749:I:ANY] DES SSID SET=<redacted-ssid>
+[  152.353136] wlan: [749:I:ANY] desired hw mode: 31
+[  152.357679] wlan: [749:I:ANY] ieee80211_ucfg_set_freq_internal: 
+[  152.357679]  Channel is configured already!!
+[  152.364743] wlan: [749:E:MBSSIE] ieee80211_ucfg_set_txvap: MBSSID is not enabled
+[  152.374072] wlan: [0:I:ANY] wlan_acs_start_scan_report: [EXT] Invoking ACS module for ACS report
+[  152.395444] dfs channel(64) is not pre cac channel, break
+[  153.543967] wlan: [0:E:CMN_MLME] mlme_vdev_restart_is_allowed:  No multivdev restart
+[  153.560149] dfs channel(64) is not pre cac channel, break
+[  153.696873] wlan: [3808:I:ANY] wlan_cfg80211_add_virtual_intf: proprietary mode 6 for interface: wl5 : clone params: 0x00000000 
+[  153.696959] wlan: [3808:I:MBSSIE] osif_mbssid_sanity_check: mbssid_sanity_ok: YES
+[  153.708228] wlan: [3808:I:ANY] osifp_create_wlan_vap: No cloning
+[  153.715219] wlan: [3808:I:ANY] osifp_create_wlan_vap: VDEV Create xx:xx:xx:xx:xx:xx
+[  153.721755] wlan: [3808:I:ANY] ol_ath_vap_set_param: Setting SGI value: 1
+[  153.728963] wlan: [3808:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:1|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:1|ul_mumimo:0|dl_muofdma_bfer:0
+[  153.735891] wlan: [3808:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x33
+[  153.749936] wlan: [3808:I:ANY] ol_ath_vap_set_param: VDEV params: AC/VHT sounding mode:HE|SU/MU sounding mode:SU|Trig/Non-Trig sounding mode:Non-Trigged
+[  153.770432] wlan: [3808:I:ANY] osif_create_vap_complete: TX Checksum:1|SG:1|TSO:1|LRO:0
+[  153.770472] wlan: [3808:I:ANY] WLAN-NSS: VAP NSS ops initialized 
+[  153.778114] wlan: [3808:I:ANY] osif_create_vap_complete: Updating VAP1 channel for mode 31 as per parent VAP0
+[  153.790017] wlan: [3808:I:ANY] VAP device wl5 created osifp: (89b17480) os_if: (84628000)
+[  154.881126] ifname [wl5], event[6:NETDEV_UNREGISTER]
+[  154.884537] wlan: [3899:I:ANY] osif_nss_ol_vap_delete: vap detach 89b17480: if_num 39 
+[  154.885248] wlan: [3899:I:ANY] osif_nss_vdev_detach: Dealloc Dynamic interface Node :39 of type:6
+[  154.899524] wlan: [3899:I:ANY] ieee80211_mbo_vdetach: MBO terminated
+[  154.899524] 
+[  154.902395] wlan: [0:I:ANY] osif_nss_wifili_vdev_get_mpsta_vdevid: Get MPSTA: vdev is NULL
+[  154.909780] wlan: [0:E:ANY] ol_peer_delete_response_event_handler: peer_del_resp: mac: xx:xx:xx:xx:xx:xx vdevid: 1 Unable to find vdev
+[  154.917989] wlan: [3899:I:ANY] ieee80211_oce_vdetach: OCE terminated
+[  154.917989] 
+[  155.735467] wlan: [4020:I:ANY] son_enable_disable_vdev_events: son_enable_disable_vdev_events,765: wlan son is not enable
+[  155.735467] 
+[  155.736861] wlan: [4020:I:ANY] son_enable_disable_vdev_events: son_enable_disable_vdev_events,765: wlan son is not enable
+[  155.736861] 
+[  156.423379] wifi (3541): drop_caches: 3
+[  236.538332] wifi_log: [Class 1 - RECV AUTH] - if="wl1", sta_mac="xx:xx:xx:xx:xx:xx", bssid="xx:xx:xx:xx:xx:xx", action="recv-auth", rssi="-11", status="0", algorithm="0x0000", seq_num="1"
+[  236.545528] wifi_log: [Class 1 - RECV AUTH] - if="wl1", sta_mac="xx:xx:xx:xx:xx:xx", bssid="xx:xx:xx:xx:xx:xx", action="recv-auth", rssi="-11", status="0", algorithm="0x0000", seq_num="1"
+[  236.565335] wifi_log: [Class 1 - SEND AUTH] - if="wl1", sta_mac="xx:xx:xx:xx:xx:xx", bssid="xx:xx:xx:xx:xx:xx", action="mlme-auth", status="0", seq_num="2"
+[  236.578763] wifi_log: [Class 2 - RECV ASSOC] - if="wl1", sta_mac="xx:xx:xx:xx:xx:xx", bssid="xx:xx:xx:xx:xx:xx", action="recv-assoc", snr="86"
+[  236.595887] wifi_log: [Class 2 - SEND ASSOC RSP] - if="wl1", sta_mac="xx:xx:xx:xx:xx:xx", bssid="xx:xx:xx:xx:xx:xx", action="mlme-assoc", reason="0"
+[  236.629359] SON_EVENT_BSTEERING_NODE_ASSOCIATED BSS:f3:3f:5e CLIENT:23:9a:f1
+[  243.095660] wlan: [2045:D:dfs] WLAN_DEBUG_DFS_ALWAYS : dfs_control: enable detects, ignore_dfs 0

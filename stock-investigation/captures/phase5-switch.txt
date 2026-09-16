@@ -1,0 +1,415 @@
+
+===== links =====
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1\    link/loopback xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+3: eth1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+4: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN mode DEFAULT group default qlen 1\    link/tunnel6 :: brd ::
+5: gre0@NONE: <NOARP> mtu 1476 qdisc noop state DOWN mode DEFAULT group default qlen 1\    link/gre 0.0.0.0 brd 0.0.0.0
+6: gretap0@NONE: <BROADCAST,MULTICAST> mtu 1462 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+7: ip6gre0@NONE: <NOARP> mtu 1448 qdisc noop state DOWN mode DEFAULT group default qlen 1\    link/gre6 :: brd ::
+8: bond0: <BROADCAST,MULTICAST,MASTER> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+9: br-lan: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+10: eth0.1@eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue master br-lan state LOWERLAYERDOWN mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+11: eth1.2@eth1: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue master br-lan state LOWERLAYERDOWN mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+12: eth1.3@eth1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-lan state UP mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+13: eth1.4@eth1: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue master br-lan state LOWERLAYERDOWN mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+14: wifi0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UNKNOWN mode DEFAULT group default qlen 2699\    link/ieee802.11 xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+15: soc0: <> mtu 0 qdisc noop state DOWN mode DEFAULT group default qlen 1\    link/ieee802.11 
+16: wifi1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UNKNOWN mode DEFAULT group default qlen 2699\    link/ieee802.11 xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+17: soc1: <> mtu 0 qdisc noop state DOWN mode DEFAULT group default qlen 1\    link/ieee802.11 
+24: br-miot: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default qlen 1000\    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+25: wl1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-lan state UP mode DEFAULT group default \    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+26: wl13: <BROADCAST,MULTICAST> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default \    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+27: wl0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-lan state UP mode DEFAULT group default \    link/ether xx:xx:xx:xx:xx:xx brd xx:xx:xx:xx:xx:xx
+
+===== ethtool-pause =====
+== eth0
+Pause parameters for eth0:
+Autonegotiate:	on
+RX:		off
+TX:		off
+RX negotiated:	on
+TX negotiated:	on
+
+== eth1
+Pause parameters for eth1:
+Cannot get device settings: I/O error
+
+===== ethtool-info =====
+== eth0
+Settings for eth0:
+	Supported ports: [ TP AUI BNC MII FIBRE ]
+	Supported link modes:   10baseT/Half 10baseT/Full 
+	                        100baseT/Half 100baseT/Full 
+	                        1000baseT/Full 
+	Supported pause frame use: Symmetric Receive-only
+	Supports auto-negotiation: Yes
+	Supported FEC modes: Not reported
+	Advertised link modes:  10baseT/Half 10baseT/Full 
+	                        100baseT/Half 100baseT/Full 
+	                        1000baseT/Full 
+	Advertised pause frame use: Symmetric Receive-only
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: Not reported
+	Link partner advertised link modes:  10baseT/Half 10baseT/Full 
+	                                     100baseT/Half 100baseT/Full 
+	                                     1000baseT/Full 
+	Link partner advertised pause frame use: Symmetric Receive-only
+	Link partner advertised auto-negotiation: Yes
+	Link partner advertised FEC modes: Not reported
+	Speed: 1000Mb/s
+	Duplex: Full
+	Port: MII
+	PHYAD: 7
+	Transceiver: external
+	Auto-negotiation: on
+	Link detected: yes
+driver: nss-dp
+version: 
+firmware-version: 
+expansion-rom-version: 
+bus-info: 39c00000.dp1
+supports-statistics: yes
+supports-test: no
+supports-eeprom-access: no
+supports-register-dump: no
+supports-priv-flags: no
+== eth1
+Settings for eth1:
+Cannot get device settings: I/O error
+	Link detected: yes
+Cannot get driver information: Not supported
+
+===== ethtool-stats =====
+== eth0
+NIC statistics:
+     rx_bytes: 0
+     rx_packets: 0
+     rx_errors: 0
+     rx_receive_errors: 0
+     rx_descriptor_errors: 0
+     rx_late_collision_errors: 0
+     rx_dribble_bit_errors: 0
+     rx_length_errors: 0
+     rx_ip_header_errors: 0
+     rx_ip_payload_errors: 0
+     rx_no_buffer_errors: 1
+     rx_transport_csum_bypassed: 0
+     tx_bytes: 1746
+     tx_packets: 15
+     tx_collisions: 0
+     tx_errors: 0
+     tx_jabber_timeout_errors: 0
+     tx_frame_flushed_errors: 0
+     tx_loss_of_carrier_errors: 0
+     tx_no_carrier_errors: 0
+     tx_late_collision_errors: 0
+     tx_excessive_collision_errors: 0
+     tx_excessive_deferral_errors: 0
+     tx_underflow_errors: 0
+     tx_ip_header_errors: 0
+     tx_ip_payload_errors: 0
+     tx_dropped: 0
+     rx_missed: 0
+     fifo_overflows: 0
+     rx_scatter_errors: 0
+     tx_ts_create_errors: 0
+     pmt_interrupts: 0
+     mmc_interrupts: 0
+     line_interface_interrupts: 0
+     fatal_bus_error_interrupts: 0
+     rx_buffer_unavailable_interrupts: 1
+     rx_process_stopped_interrupts: 0
+     tx_underflow_interrupts: 0
+     rx_overflow_interrupts: 0
+     tx_jabber_timeout_interrutps: 0
+     tx_process_stopped_interrutps: 0
+     gmac_total_ticks: 0
+     gmac_worst_case_ticks: 0
+     gmac_iterations: 0
+     tx_pause_frames: 0
+     mmc_rx_overflow_errors: 0
+     mmc_rx_watchdog_timeout_errors: 0
+     mmc_rx_crc_errors: 0
+     mmc_rx_ip_header_errors: 0
+     mmc_rx_octets_g: 0
+     mmc_rx_ucast_frames: 0
+     mmc_rx_bcast_frames: 0
+     mmc_rx_mcast_frames: 0
+     mmc_rx_undersize: 0
+     mmc_rx_oversize: 0
+     mmc_rx_jabber: 0
+     mmc_rx_octets_gb: 0
+     mmc_rx_frag_frames_g: 0
+     mmc_tx_octets_g: 1806
+     mmc_tx_ucast_frames: 0
+     mmc_tx_bcast_frames: 0
+     mmc_tx_mcast_frames: 15
+     mmc_tx_deferred: 0
+     mmc_tx_single_col: 0
+     mmc_tx_multiple_col: 0
+     mmc_tx_octets_gb: 1806
+== eth1
+NIC statistics:
+     rx_bytes: 188
+     rx_packets: 2
+     rx_errors: 0
+     rx_receive_errors: 0
+     rx_descriptor_errors: 0
+     rx_late_collision_errors: 0
+     rx_dribble_bit_errors: 0
+     rx_length_errors: 0
+     rx_ip_header_errors: 0
+     rx_ip_payload_errors: 0
+     rx_no_buffer_errors: 1
+     rx_transport_csum_bypassed: 0
+     tx_bytes: 573950
+     tx_packets: 1183
+     tx_collisions: 0
+     tx_errors: 0
+     tx_jabber_timeout_errors: 0
+     tx_frame_flushed_errors: 0
+     tx_loss_of_carrier_errors: 0
+     tx_no_carrier_errors: 0
+     tx_late_collision_errors: 0
+     tx_excessive_collision_errors: 0
+     tx_excessive_deferral_errors: 0
+     tx_underflow_errors: 0
+     tx_ip_header_errors: 0
+     tx_ip_payload_errors: 0
+     tx_dropped: 0
+     rx_missed: 0
+     fifo_overflows: 0
+     rx_scatter_errors: 0
+     tx_ts_create_errors: 0
+     pmt_interrupts: 0
+     mmc_interrupts: 0
+     line_interface_interrupts: 0
+     fatal_bus_error_interrupts: 0
+     rx_buffer_unavailable_interrupts: 1
+     rx_process_stopped_interrupts: 0
+     tx_underflow_interrupts: 0
+     rx_overflow_interrupts: 0
+     tx_jabber_timeout_interrutps: 0
+     tx_process_stopped_interrutps: 0
+     gmac_total_ticks: 0
+     gmac_worst_case_ticks: 0
+     gmac_iterations: 0
+     tx_pause_frames: 0
+     mmc_rx_overflow_errors: 0
+     mmc_rx_watchdog_timeout_errors: 1
+     mmc_rx_crc_errors: 1
+     mmc_rx_ip_header_errors: 0
+     mmc_rx_octets_g: 196
+     mmc_rx_ucast_frames: 0
+     mmc_rx_bcast_frames: 0
+     mmc_rx_mcast_frames: 2
+     mmc_rx_undersize: 0
+     mmc_rx_oversize: 0
+     mmc_rx_jabber: 0
+     mmc_rx_octets_gb: 1722
+     mmc_rx_frag_frames_g: 0
+     mmc_tx_octets_g: 579454
+     mmc_tx_ucast_frames: 7
+     mmc_tx_bcast_frames: 955
+     mmc_tx_mcast_frames: 221
+     mmc_tx_deferred: 0
+     mmc_tx_single_col: 0
+     mmc_tx_multiple_col: 0
+     mmc_tx_octets_gb: 579454
+
+===== ssdk =====
+
+ SSDK Init OK!
+Value is out of range 
+
+-- port 0
+
+ SSDK Init OK!
+Value is out of range 
+
+-- port 1
+
+ SSDK Init OK![Flow control]:ENABLE
+operation done.
+
+-- port 2
+
+ SSDK Init OK![Flow control]:ENABLE
+operation done.
+
+-- port 3
+
+ SSDK Init OK!
+Value is out of range 
+
+-- port 4
+
+ SSDK Init OK!
+Value is out of range 
+
+-- port 5
+
+ SSDK Init OK!
+Value is out of range 
+
+
+ SSDK Init OK!
+Illegal parameter(s) 
+
+usage: debug phy dump <ph_id> <group id> <0-4>
+
+
+===== an8855-module =====
+
+===== dmesg-switch =====
+
+===== devmem-mac-flowctrl =====
+== base 0x39c00000
+   0x39c00000 = 0x00700C0C
+   0x39c00004 = 0x80000011
+   0x39c00008 = 0x00000000
+   0x39c0000c = 0x00000000
+   0x39c00010 = 0x00000000
+   0x39c00014 = 0x00000000
+   0x39c00018 = 0xFFFF0006
+   0x39c0001c = 0x00000000
+== base 0x39d00000
+   0x39d00000 = 0x00700C0C
+   0x39d00004 = 0x80000011
+   0x39d00008 = 0x00000000
+   0x39d0000c = 0x00000000
+   0x39d00010 = 0x00000000
+   0x39d00014 = 0x00000000
+   0x39d00018 = 0xFFFF0006
+   0x39d0001c = 0x00000000
+
+===== devmem-gmac-flow-explicit =====
+0xFFFF0006
+0xFFFF0006
+
+===== netdev-features =====
+== eth0
+Features for eth0:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: off [fixed]
+	tx-checksum-ip-generic: on
+	tx-checksum-ipv6: off [fixed]
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: off [fixed]
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: on
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp6-segmentation: on
+udp-fragmentation-offload: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: off [fixed]
+tx-vlan-offload: off [fixed]
+ntuple-filters: off [fixed]
+receive-hashing: off [fixed]
+highdma: on
+rx-vlan-filter: off [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+== eth1
+Features for eth1:
+rx-checksumming: on
+tx-checksumming: on
+	tx-checksum-ipv4: off [fixed]
+	tx-checksum-ip-generic: on
+	tx-checksum-ipv6: off [fixed]
+	tx-checksum-fcoe-crc: off [fixed]
+	tx-checksum-sctp: off [fixed]
+scatter-gather: on
+	tx-scatter-gather: on
+	tx-scatter-gather-fraglist: on
+tcp-segmentation-offload: on
+	tx-tcp-segmentation: on
+	tx-tcp-ecn-segmentation: off [fixed]
+	tx-tcp6-segmentation: on
+udp-fragmentation-offload: on
+generic-segmentation-offload: on
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: off [fixed]
+tx-vlan-offload: off [fixed]
+ntuple-filters: off [fixed]
+receive-hashing: off [fixed]
+highdma: on
+rx-vlan-filter: off [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+
+===== interface-uci =====
+network.@device[0]=device
+network.@device[0].name='eth0'
+network.@device[0].macaddr='xx:xx:xx:xx:xx:xx'
+network.@device[1]=device
+network.@device[1].name='eth1'
+network.@device[1].macaddr='xx:xx:xx:xx:xx:xx'
+network.loopback=interface
+network.loopback.ifname='lo'
+network.loopback.proto='static'
+network.loopback.ipaddr='127.0.0.1'
+network.loopback.netmask='255.0.0.0'
+network.switch0=switch
+network.switch0.name='switch0'
+network.switch1=switch
+network.switch1.name='switch1'
+network.switch1.enable_vlan='1'
+network.lan=interface
+network.lan.ifname='eth0.1 eth1.2 eth1.3 eth1.4'
+network.lan.force_link='1'
+network.lan.type='bridge'
+network.lan.proto='static'
+network.lan.ipaddr='192.168.31.1'
+network.lan.netmask='255.255.255.0'
+network.lan.multicast_querier='0'
+network.lan.igmp_snooping='0'
+network.lan.ip6assign='64'
+network.lan.macaddr='xx:xx:xx:xx:xx:xx'
+network.lan_ipv6_alias=alias
+network.lan_ipv6_alias.interface='lan'
+network.lan_ipv6_alias.proto='static'
+network.lan_ipv6_alias.ip6addr='fd00:6969:6969::1'
+network.@interface[2]=interface
+network.@interface[2].ifname='eth0'
+network.@interface[2].keepup='1'
+network.@interface[3]=interface
+network.@interface[3].ifname='eth1'
+network.wan=interface
+network.wan.proto='dhcp'
+network.wan.ipv6='1'
+network.wan.wantype='eth'
+network.wan.macaddr='xx:xx:xx:xx:xx:xx'
+network.wan_2=interface
+network.wan_2.disabled='1'
+network.wan_2.proto='dhcp'
+network.wan_2.ipv6='0'
+network.wan_2.wantype='eth'
+network.wan_2.macaddr='xx:xx:xx:xx:xx:xx'
+network.miot=interface
+network.miot.ifname='wl13'
+network.miot.type='bridge'
+network.miot.proto='static'
+network.miot.ipaddr='192.168.32.1'
+network.miot.netmask='255.255.255.0'
+network.vlan1=switch_vlan
+network.vlan1.device='switch1'
+network.vlan1.ports='3 4t'
+network.vlan1.vlan='1'
+network.vlan1.vid='1'
+network.eth0_1=interface
+network.eth0_1.ifname='eth0.1'

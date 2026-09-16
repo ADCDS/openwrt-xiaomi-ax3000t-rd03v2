@@ -1,0 +1,230 @@
+
+===== subsystem_restart-params =====
+disable_restart_work = 0
+enable_debug = 0
+enable_mini_ramdumps = 0
+enable_ramdumps = 0
+max_history_time = 3600
+max_restarts = 0
+qcom_q6v5_adsp
+qcom_q6v5_wcss
+subsystem_restart
+
+===== msm_subsys-devices =====
+subsys0
+subsys1
+subsys2
+/sys/bus/msm_subsys/devices/subsys0 name=qcom_q6v5_wcss restart_level=RELATED crash_count=0 firmware_name=qcom_q6v5_wcss
+/sys/bus/msm_subsys/devices/subsys1 name=q6v5_wcss_userpd1 restart_level=RELATED crash_count=0 firmware_name=q6v5_wcss_userpd1
+/sys/bus/msm_subsys/devices/subsys2 name=q6v5_wcss_userpd2 restart_level=RELATED crash_count=0 firmware_name=q6v5_wcss_userpd2
+
+===== remoteproc-state =====
+-- remoteproc0
+   state = running
+   firmware = IPQ5018/q6_fw.mdt
+-- remoteproc1
+   state = running
+   firmware = (null)
+-- remoteproc2
+   state = running
+   firmware = (null)
+remoteproc0
+remoteproc1
+remoteproc2
+
+===== dt-auto-restart =====
+/sys/firmware/devicetree/base/soc/q6v5_m3
+/sys/firmware/devicetree/base/soc/wifi4@f00000
+/sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/q6v5_wcss_userpd1
+/sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/q6v5_wcss_userpd2
+/sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000
+/sys/firmware/devicetree/base/soc/wifi3@f00000
+/sys/firmware/devicetree/base/soc/q6v5_wcss@CD00000
+
+===== dt-cd00000-nodes =====
+-- /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000
+   compatible=qcom,ipq5018-wcss-pil 
+/tmp/.dsh-phase.4.sh: line 37: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/soc/q6v5_wcss@CD00000
+   compatible=qca,q6v5-wcss-rproc-ipq50xx 
+/tmp/.dsh-phase.4.sh: line 37: can't open /sys/firmware/devicetree/base/soc/q6v5_wcss@CD00000/status: no such file
+   status=
+-- /sys/firmware/devicetree/base/reserved-memory/m3_dump@4CD00000
+/tmp/.dsh-phase.4.sh: line 36: can't open /sys/firmware/devicetree/base/reserved-memory/m3_dump@4CD00000/compatible: no such file
+   compatible=
+/tmp/.dsh-phase.4.sh: line 37: can't open /sys/firmware/devicetree/base/reserved-memory/m3_dump@4CD00000/status: no such file
+   status=
+
+===== dt-q6-wcss =====
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/smp2p-wcss/status: no such file
+-- /sys/firmware/devicetree/base/soc/smp2p-wcss compatible=qcom,smp2p  status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/q6v5_m3/status: no such file
+-- /sys/firmware/devicetree/base/soc/q6v5_m3 compatible=qca,q6v5-m3-rproc  status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/status: no such file
+-- /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000 compatible=qcom,ipq5018-wcss-pil  status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/qcom,q6v6/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/qcom,q6v6/status: no such file
+-- /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/qcom,q6v6 compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/q6v5_wcss_userpd1/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/q6v5_wcss_userpd1/status: no such file
+-- /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/q6v5_wcss_userpd1 compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/q6v5_wcss_userpd2/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/q6v5_wcss_userpd2/status: no such file
+-- /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/q6v5_wcss_userpd2 compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/qca,wcss-aon-reset-seq/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/qca,wcss-aon-reset-seq/status: no such file
+-- /sys/firmware/devicetree/base/soc/qcom_q6v5_wcss@CD00000/qca,wcss-aon-reset-seq compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/q6v5_wcss@CD00000/status: no such file
+-- /sys/firmware/devicetree/base/soc/q6v5_wcss@CD00000 compatible=qca,q6v5-wcss-rproc-ipq50xx  status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/q6v5_wcss@CD00000/qca,dump-q6-reg/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/soc/q6v5_wcss@CD00000/qca,dump-q6-reg/status: no such file
+-- /sys/firmware/devicetree/base/soc/q6v5_wcss@CD00000/qca,dump-q6-reg compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_code_data@4B000000/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_code_data@4B000000/status: no such file
+-- /sys/firmware/devicetree/base/reserved-memory/q6_code_data@4B000000 compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_etr_1@4DF00000/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_etr_1@4DF00000/status: no such file
+-- /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_etr_1@4DF00000 compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_etr_dump@4CE00000/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_etr_dump@4CE00000/status: no such file
+-- /sys/firmware/devicetree/base/reserved-memory/q6_etr_dump@4CE00000 compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_data1@4CF00000/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_data1@4CF00000/status: no such file
+-- /sys/firmware/devicetree/base/reserved-memory/q6_qcn6122_data1@4CF00000 compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_mem_regions@4B000000/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_mem_regions@4B000000/status: no such file
+-- /sys/firmware/devicetree/base/reserved-memory/q6_mem_regions@4B000000 compatible= status=
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_ipq5018_data@4c000000/compatible: no such file
+/tmp/.dsh-phase.4.sh: line 42: can't open /sys/firmware/devicetree/base/reserved-memory/q6_ipq5018_data@4c000000/status: no such file
+-- /sys/firmware/devicetree/base/reserved-memory/q6_ipq5018_data@4c000000 compatible= status=
+
+===== fw_recovery =====
+wifi0 get_fw_recovery -> wifi0	get_fw_recovery:0
+wifi0 get_fw_dump -> cfg80211tool.1: unrecognized option: get_fw_dump
+parseCmdinputs:1132 Unsupported Command 
+wifi1 get_fw_recovery -> wifi1	get_fw_recovery:0
+wifi1 get_fw_dump -> cfg80211tool.1: unrecognized option: get_fw_dump
+parseCmdinputs:1132 Unsupported Command 
+
+===== qca_ol-params =====
+ar900b_20_targ_clk = -1
+dfs_disable = 0
+frac = -1
+intval = -1
+ipq4019_20_targ_clk = -1
+ol_dual_band_2g_radios = 0
+ol_dual_band_5g_radios = 0
+ol_scan_freqlist = 
+polledmode = 0
+qca9888_20_targ_clk = -1
+testmode = 0
+war1 = 1
+war1_allow_sleep = 0
+
+===== panic-settings =====
+kernel.panic = 3
+kernel.panic_on_oops = 1
+vm.panic_on_oom = 2
+
+===== interrupts-q6 =====
+ 34:         18          0       GIC 209 Edge      smp2p
+178:          0          2     smp2p   1 Edge      q6v5 ready
+179:          0          2     smp2p   2 Edge      q6v5 handover
+180:          0          0     smp2p   0 Edge      err_fatal_interrupt
+181:          0          0     smp2p   3 Edge      stop_ack_interrupt
+182:          0          0     smp2p   8 Edge      q6v5_wcss_userpd1_fatal
+183:          0          2     smp2p   9 Edge      q6v5_wcss_userpd1_ready
+184:          0          2     smp2p  12 Edge      q6v5_wcss_userpd1_spawn_ack
+185:          0          1     smp2p  11 Edge      q6v5_wcss_userpd1_stop_ack
+186:          0          0     smp2p  16 Edge      q6v5_wcss_userpd2_fatal
+187:          0          2     smp2p  17 Edge      q6v5_wcss_userpd2_ready
+188:          0          2     smp2p  20 Edge      q6v5_wcss_userpd2_spawn_ack
+189:          0          1     smp2p  19 Edge      q6v5_wcss_userpd2_stop_ack
+
+===== interrupts-all =====
+           CPU0       CPU1       
+ 18:     430929     430942       GIC  20 Edge      arch_timer
+ 21:          2        320       GIC 139 Level     msm_serial0
+ 22:         27          0       GIC 270 Level     bam_dma
+ 23:          0          0       GIC 239 Level     bam_dma
+ 24:     146616          0       GIC 178 Level     bam_dma
+ 25:      65859          0       GIC 434 Edge      nss_empty_buf_sos
+ 26:       5615          0       GIC 433 Edge      nss_empty_buf_queue
+ 27:          0          0       GIC 432 Edge      nss-tx-unblock
+ 28:    4404523          0       GIC 431 Edge      nss_queue0
+ 29:          0       1339       GIC 430 Edge      nss_queue1
+ 30:          0          0       GIC 429 Edge      nss_coredump_complete
+ 31:          0          0       GIC 428 Edge      nss_paged_empty_buf_sos
+ 32:          0          0       GIC 427 Edge      nss_profile_dma
+ 33:          0          0       GIC  35 Level     watchdog bark
+ 34:         18          0       GIC 209 Edge      smp2p
+ 35:          0          0       GIC 323 Edge      q6_wdog_interrupt
+ 39:          6          0       GIC 324 Edge      ce0
+ 40:      54142          0       GIC 325 Edge      ce1
+ 41:      61902          0       GIC 326 Edge      ce2
+ 42:       6222          0       GIC 327 Edge      ce3
+ 44:         34          0       GIC 329 Edge      ce5
+ 56:          0          0       GIC 341 Edge      host2rxdma-monitor-ring1
+ 58:          0          0       GIC 343 Edge      wbm2host-rx-release
+ 59:          0          0       GIC 344 Edge      reo2host-status
+ 66:          0          0       GIC 351 Edge      rxdma2host-monitor-destination-mac1
+ 69:      56938          0       GIC 354 Edge      ppdu-end-interrupts-mac1
+ 72:          9          0       GIC 357 Edge      rxdma2host-monitor-status-ring-mac1
+ 78:      52312          0       GIC 363 Edge      rxdma2host-destination-ring-mac1
+ 87:        240          0       GIC 129 Level     i2c_qup
+ 91:         34          0       GIC 448 Edge      pci0_wlan_ce_0, pci0_wlan_ce_5
+ 92:      41233          0       GIC 449 Edge      pci0_wlan_ce_1
+ 93:      54918          0       GIC 450 Edge      pci0_wlan_ce_2
+ 94:       4653          0       GIC 451 Edge      pci0_wlan_ce_3
+ 99:      13429          0       GIC 456 Edge      pci0_wlan_grp_dp_3
+123:          0          0       GIC 299 Edge      tzerror
+124:          0          0       GIC 186 Level     eud_irq
+125:          0          0       GIC 194 Edge      bt_ipc_irq
+127:          0          0       GIC 216 Edge      tsens_interrupt
+159:          1          0   msmgpio  28 Edge      soc:gpio_keys
+169:          1          0   msmgpio  38 Edge      soc:gpio_keys
+178:          0          2     smp2p   1 Edge      q6v5 ready
+179:          0          2     smp2p   2 Edge      q6v5 handover
+180:          0          0     smp2p   0 Edge      err_fatal_interrupt
+181:          0          0     smp2p   3 Edge      stop_ack_interrupt
+182:          0          0     smp2p   8 Edge      q6v5_wcss_userpd1_fatal
+183:          0          2     smp2p   9 Edge      q6v5_wcss_userpd1_ready
+184:          0          2     smp2p  12 Edge      q6v5_wcss_userpd1_spawn_ack
+185:          0          1     smp2p  11 Edge      q6v5_wcss_userpd1_stop_ack
+186:          0          0     smp2p  16 Edge      q6v5_wcss_userpd2_fatal
+187:          0          2     smp2p  17 Edge      q6v5_wcss_userpd2_ready
+188:          0          2     smp2p  20 Edge      q6v5_wcss_userpd2_spawn_ack
+189:          0          1     smp2p  19 Edge      q6v5_wcss_userpd2_stop_ack
+190:        138          0       GIC 211 Edge      glink-native
+IPI0:          0          0  CPU wakeup interrupts
+IPI1:          0          0  Timer broadcast interrupts
+IPI2:      95893     183903  Rescheduling interrupts
+IPI3:          0          0  Function call interrupts
+IPI4:         30         25  Single function call interrupts
+IPI5:          0          0  CPU stop interrupts
+IPI6:          0          0  IRQ work interrupts
+IPI7:          0          0  completion interrupts
+Err:          0
+
+===== crash-partitions =====
+mtd16: 00080000 00020000 "crash"
+mtd17: 00080000 00020000 "crash_syslog"
+drwxr-xr-x    2 root     root             0 Jan  1  1970 .
+drwx------   27 root     root             0 Jan  1  1970 ..
+-r--r--r--    1 root     root             0 Jan  1  1970 tz_log
+## /sys/kernel/debug/qcom_debug_logs/tz_log
+
+===== dynamic_debug-current =====
+5558
+drivers/soc/qcom/subsystem_restart.c:1633 [subsystem_restart]subsys_register =_ "Reading instance-id for %s failed\012"
+drivers/soc/qcom/subsystem_restart.c:1639 [subsystem_restart]subsys_register =_ "Reading qcom,edge for %s failed\012"
+drivers/soc/qcom/subsystem_restart.c:981 [subsystem_restart]__subsystem_restart_dev =_ "Restarting %s [level=%s]!\012"
+drivers/soc/qcom/subsystem_restart.c:427 [subsystem_restart]do_epoch_check =_ "Deleted node with restart_time = %ld\012"
+drivers/soc/qcom/subsystem_restart.c:434 [subsystem_restart]do_epoch_check =_ "Time_first: %ld\012"
+drivers/soc/qcom/subsystem_restart.c:437 [subsystem_restart]do_epoch_check =_ "Restart_time: %ld\012"
+drivers/soc/qcom/subsystem_restart.c:901 [subsystem_restart]subsystem_restart_wq_func =_ "[%s:%d]: Starting restart sequence for %s\012"
+drivers/remoteproc/qcom_q6v5_wcss.c:1878 [qcom_q6v5_wcss]q6v5_wcss_userpd_load =_ "%s:p:%p-p->name:%s-c:%p-c->name:%s-\012"
+
+===== ramoops-pstore =====
+(pstore listing above, if any)

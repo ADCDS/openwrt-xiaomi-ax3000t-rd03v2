@@ -1,0 +1,612 @@
+
+===== date =====
+Wed Dec 24 13:56:33 CST 2025
+uptime: 3560.88 6647.62
+
+===== xiaoqiang_version =====
+config core 'version'
+	# ROM ver
+	option ROM '2.0.28'
+	# channel
+	option CHANNEL 'release'
+	# hardware platform.
+	option HARDWARE 'RD03v2'
+	# CFE ver
+	option UBOOT '1.0.2'
+	# Linux Kernel ver
+	option LINUX '4.4.16'
+	# RAMFS ver
+	option RAMFS '0.0.1'
+	# SQUASHFS ver
+	option SQAFS '0.0.1'
+	# ROOTFS ver
+	option ROOTFS '0.0.1'
+	#build time
+	option BUILDTIME 'Wed, 24 Dec 2025 04:37:16 +0000'
+	#build timestamp
+	option BUILDTS '1766551036'
+	#build git tag
+	option GTAG 'commit d40e7037e28d2ea2b1c0a1ca5b1c2f96a75c8542'
+
+===== uname =====
+Linux XiaoQiang 4.4.60 #0 SMP PREEMPT Wed Dec 24 02:43:56 2025 armv7l GNU/Linux
+machine=armv7l
+
+===== /proc/version =====
+Linux version 4.4.60 (jenkins@f73474480ab2) (gcc version 7.5.0 (OpenWrt GCC 7.5.0 unknown) ) #0 SMP PREEMPT Wed Dec 24 02:43:56 2025
+
+===== /proc/cmdline =====
+ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs cnss2.bdf_integrated=0x24 cnss2.bdf_pci0=0x60 cnss2.bdf_pci1=0x60 cnss2.skip_radio_bmap=4 rootwait uart_en=1 swiotlb=1
+
+===== /proc/cpuinfo =====
+processor	: 0
+model name	: ARMv7 Processor rev 4 (v7l)
+BogoMIPS	: 48.00
+Features	: half thumb fastmult vfp edsp neon vfpv3 tls vfpv4 idiva idivt vfpd32 lpae evtstrm aes pmull sha1 sha2 crc32 
+CPU implementer	: 0x51
+CPU architecture: 7
+CPU variant	: 0xa
+CPU part	: 0x801
+CPU revision	: 4
+
+processor	: 1
+model name	: ARMv7 Processor rev 4 (v7l)
+BogoMIPS	: 48.00
+Features	: half thumb fastmult vfp edsp neon vfpv3 tls vfpv4 idiva idivt vfpd32 lpae evtstrm aes pmull sha1 sha2 crc32 
+CPU implementer	: 0x51
+CPU architecture: 7
+CPU variant	: 0xa
+CPU part	: 0x801
+CPU revision	: 4
+
+Hardware	: Generic DT based system
+Revision	: 0000
+Serial		: 0000000000000000
+
+===== uptime-loadavg =====
+ 13:56:33 up 59 min,  load average: 1.14, 1.06, 1.04
+1.14 1.07 1.05 1/139 1527
+
+===== /proc/mtd =====
+dev:    size   erasesize  name
+mtd0: 00080000 00020000 "0:SBL1"
+mtd1: 00080000 00020000 "0:MIBIB"
+mtd2: 00040000 00020000 "0:BOOTCONFIG"
+mtd3: 00040000 00020000 "0:BOOTCONFIG1"
+mtd4: 00100000 00020000 "0:QSEE"
+mtd5: 00100000 00020000 "0:QSEE_1"
+mtd6: 00040000 00020000 "0:DEVCFG"
+mtd7: 00040000 00020000 "0:DEVCFG_1"
+mtd8: 00040000 00020000 "0:CDT"
+mtd9: 00040000 00020000 "0:CDT_1"
+mtd10: 00080000 00020000 "0:APPSBLENV"
+mtd11: 00140000 00020000 "0:APPSBL"
+mtd12: 00140000 00020000 "0:APPSBL_1"
+mtd13: 00100000 00020000 "0:ART"
+mtd14: 00080000 00020000 "0:TRAINING"
+mtd15: 00080000 00020000 "bdata"
+mtd16: 00080000 00020000 "crash"
+mtd17: 00080000 00020000 "crash_syslog"
+mtd18: 01e00000 00020000 "rootfs"
+mtd19: 01e00000 00020000 "rootfs_1"
+mtd20: 03980000 00020000 "overlay"
+mtd21: 00383000 0001f000 "kernel"
+mtd22: 0120b000 0001f000 "ubi_rootfs"
+mtd23: 00706000 0001f000 "cfg"
+mtd24: 0120b000 0001f000 "user"
+mtd25: 01bbb000 0001f000 "plugin"
+
+===== ubinfo-a =====
+UBI version:                    1
+Count of UBI devices:           2
+UBI control device major/minor: 10:59
+Present UBI devices:            ubi0, ubi1
+
+ubi0
+Volumes count:                           2
+Logical eraseblock size:                 126976 bytes, 124.0 KiB
+Total amount of logical eraseblocks:     240 (30474240 bytes, 29.0 MiB)
+Amount of available logical eraseblocks: 38 (4825088 bytes, 4.6 MiB)
+Maximum count of volumes                 128
+Count of bad physical eraseblocks:       0
+Count of reserved physical eraseblocks:  20
+Current maximum erase counter value:     154
+Minimum input/output unit size:          2048 bytes
+Character device major/minor:            244:0
+Present volumes:                         0, 1
+
+Volume ID:   0 (on ubi0)
+Type:        dynamic
+Alignment:   1
+Size:        29 LEBs (3682304 bytes, 3.5 MiB)
+State:       OK
+Name:        kernel
+Character device major/minor: 244:1
+-----------------------------------
+Volume ID:   1 (on ubi0)
+Type:        dynamic
+Alignment:   1
+Size:        149 LEBs (18919424 bytes, 18.0 MiB)
+State:       OK
+Name:        ubi_rootfs
+Character device major/minor: 244:2
+
+===================================
+
+ubi1
+Volumes count:                           3
+Logical eraseblock size:                 126976 bytes, 124.0 KiB
+Total amount of logical eraseblocks:     460 (58408960 bytes, 55.7 MiB)
+Amount of available logical eraseblocks: 0 (0 bytes)
+Maximum count of volumes                 128
+Count of bad physical eraseblocks:       0
+Count of reserved physical eraseblocks:  20
+Current maximum erase counter value:     2
+Minimum input/output unit size:          2048 bytes
+Character device major/minor:            242:0
+Present volumes:                         1, 2, 3
+
+Volume ID:   1 (on ubi1)
+Type:        dynamic
+Alignment:   1
+Size:        58 LEBs (7364608 bytes, 7.0 MiB)
+State:       OK
+Name:        cfg
+Character device major/minor: 242:2
+-----------------------------------
+Volume ID:   2 (on ubi1)
+Type:        dynamic
+Alignment:   1
+Size:        149 LEBs (18919424 bytes, 18.0 MiB)
+State:       OK
+Name:        user
+Character device major/minor: 242:3
+-----------------------------------
+Volume ID:   3 (on ubi1)
+Type:        dynamic
+Alignment:   1
+Size:        229 LEBs (29077504 bytes, 27.7 MiB)
+State:       OK
+Name:        plugin
+Character device major/minor: 242:4
+
+===== nvram-flash_type =====
+11
+
+===== lsmod =====
+AN8855                 91337  0 
+aes_enc                 5310  0 
+arp_tables              9577  1 arptable_filter
+arpt_mangle             1243  0 
+arptable_filter         1098  1 
+asf                     5212  2 qca_ol,umac
+ath_pktlog             11510  0 
+bonding               132408  3 linkcheck,ecm,qca_nss_pppoe
+bootconfig              3231  0 
+button_hotplug          3400  0 
+cfg80211              240087  2 umac,qdf
+cls_fw                  4133  0 
+cls_u32                 7243  0 
+compat_xtables           830  0 
+connattr_haohan         2658  0 
+connattr_label         10393  0 
+connattr_statistic     13981  0 
+conntrack_attr          9843  4 connattr_statistic,connattr_label,connattr_haohan,miwifi_xthostset
+crc_ccitt               1169  1 ppp_async
+crc32c_generic          1657  1 
+dbm                     7745  1 dwc3_qcom
+dwc3_qcom              10206  0 
+ecb                     2015  0 
+ecm                   674480  0 
+enid                    7663  0 
+gpio_button_hotplug     7860  0 
+gre                     1696  2 pptp,ip_gre
+i2c_dev                 6060  0 
+input_core             27635  1 button_hotplug
+ip_account             17197  0 
+ip_gre                 10045  0 
+ip_set                 26914 16 xt_set,ip_set_list_set,ip_set_hash_netiface,ip_set_hash_netport,ip_set_hash_netnet,ip_set_hash_net,ip_set_hash_netportnet,ip_set_hash_mac,ip_set_hash_ipportnet,ip_set_hash_ipportip,ip_set_hash_ipport,ip_set_hash_ipmark,ip_set_hash_ip,ip_set_bitmap_port,ip_set_bitmap_ipmac,ip_set_bitmap_ip
+ip_set_bitmap_ip        7116  0 
+ip_set_bitmap_ipmac     6704  0 
+ip_set_bitmap_port      6052  0 
+ip_set_hash_ip         20701  0 
+ip_set_hash_ipmark     20937  0 
+ip_set_hash_ipport     21513  0 
+ip_set_hash_ipportip   22335  0 
+ip_set_hash_ipportnet   26842  0 
+ip_set_hash_mac        11197  0 
+ip_set_hash_net        23928  2 
+ip_set_hash_netiface   25087  0 
+ip_set_hash_netnet     26697  0 
+ip_set_hash_netport    25508  0 
+ip_set_hash_netportnet   27893  0 
+ip_set_list_set         7029  2 
+ip_tables              11518  4 iptable_nat,iptable_raw,iptable_mangle,iptable_filter
+ip_tunnel              12226  1 ip_gre
+ip6_gre                16937  0 
+ip6_tables             10684  4 ip6table_nat,ip6table_raw,ip6table_mangle,ip6table_filter
+ip6_tunnel             21009  1 ip6_gre
+ip6_udp_tunnel          1891  1 l2tp_core
+ip6t_MASQUERADE          946  0 
+ip6t_NPT                1901  0 
+ip6t_REJECT             1393  2 
+ip6t_ah                 2582  0 
+ip6t_eui64              1174  0 
+ip6t_frag               3226  0 
+ip6t_hbh                3160  0 
+ip6t_ipv6header         1510  0 
+ip6t_mh                 1456  0 
+ip6t_rpfilter           1629  0 
+ip6t_rt                 4604  0 
+ip6table_filter         1098  1 
+ip6table_mangle         1565  0 
+ip6table_nat            1492  1 
+ip6table_raw            1092  1 
+ipt_ECN                 1814  0 
+ipt_MASQUERADE          1444  1 
+ipt_REJECT              1327  2 
+ipt_rpfilter            1693  0 
+iptable_filter          1160  1 
+iptable_mangle          1288  0 
+iptable_nat             1506  1 
+iptable_raw             1154  1 
+l2tp_core              18855  3 l2tp_ppp,qca_nss_l2tpv2,l2tp_netlink
+l2tp_netlink            8448  1 l2tp_ppp
+l2tp_ppp               17352  1 ecm
+leds_gpio               3395  0 
+libcrc32c               1021  1 nf_nat_proto_sctp
+linkcheck               9118  0 
+macvlan                12925  0 
+mem_manager             7716  2 qca_ol,umac
+miwifi_xtcounter        8779  0 
+miwifi_xthostlog        1208  0 
+miwifi_xthostset       26186  1 miwifi_xthostlog
+nf_conntrack_amanda     2072  5 nf_nat_amanda
+nf_conntrack_broadcast    1104  1 nf_conntrack_snmp
+nf_conntrack_ftp        8317  5 nf_nat_ftp
+nf_conntrack_h323      40423  9 nf_nat_h323
+nf_conntrack_ipv4       8586 35 
+nf_conntrack_ipv6       9090 21 
+nf_conntrack_irc        3729  3 nf_nat_irc
+nf_conntrack_pptp       6986  3 nf_nat_pptp
+nf_conntrack_proto_gre    5810  1 nf_conntrack_pptp
+nf_conntrack_proto_sctp    9488  0 
+nf_conntrack_rtcache    4131  0 
+nf_conntrack_rtsp       6458  3 nf_nat_rtsp
+nf_conntrack_sip       19107  9 nf_nat_sip
+nf_conntrack_snmp       1124  3 nf_nat_snmp_basic
+nf_conntrack_tftp       3639  5 nf_nat_tftp
+nf_defrag_ipv4          1288  1 nf_conntrack_ipv4
+nf_defrag_ipv6         16748  1 nf_conntrack_ipv6
+nf_log_common           2810  2 nf_log_ipv4,nf_log_ipv6
+nf_log_ipv4             3508  0 
+nf_log_ipv6             3663  0 
+nf_nat                 12007 16 nf_nat_pptp,nf_nat_ipv6,nf_nat_ipv4,xt_nat,nf_nat_tftp,nf_nat_sip,nf_nat_rtsp,nf_nat_redirect,nf_nat_proto_gre,nf_nat_masquerade_ipv4,nf_nat_irc,nf_nat_h323,nf_nat_ftp,nf_nat_amanda,nf_nat_masquerade_ipv6,nf_nat_proto_sctp
+nf_nat_amanda           1233  0 
+nf_nat_ftp              2120  0 
+nf_nat_h323             7023  0 
+nf_nat_ipv4             4866  1 iptable_nat
+nf_nat_ipv6             5296  1 ip6table_nat
+nf_nat_irc              1552  0 
+nf_nat_masquerade_ipv4    1995  1 ipt_MASQUERADE
+nf_nat_masquerade_ipv6    2266  1 ip6t_MASQUERADE
+nf_nat_pptp             3350  0 
+nf_nat_proto_gre        1733  1 nf_nat_pptp
+nf_nat_proto_sctp       1386  0 
+nf_nat_redirect         1383  1 xt_REDIRECT
+nf_nat_rtsp             4934  0 
+nf_nat_sip              7823  0 
+nf_nat_snmp_basic       7805  0 
+nf_nat_tftp              913  0 
+nf_reject_ipv4          2338  1 ipt_REJECT
+nf_reject_ipv6          3616  1 ip6t_REJECT
+nfnlq_extension         2119  2 connattr_haohan,miwifi_xthostset
+nls_base                5624  2 nls_iso8859_1,nls_cp437
+nls_cp437               4884  0 
+nls_iso8859_1           3348  0 
+ppp_async               6970  0 
+ppp_generic            24821 10 ecm,ppp_mppe,ppp_async,l2tp_ppp,qca_nss_pptp,pptp,qca_nss_pppoe,pppoe,pppox,qca_nss_l2tpv2
+ppp_mppe                5677  0 
+pppoe                  10022  2 ecm,qca_nss_pppoe
+pppox                   1682  3 l2tp_ppp,pptp,pppoe
+pptp                   16880  3 ecm,nf_conntrack_proto_gre,qca_nss_pptp
+pwm_rgb                 2942  0 
+qca_mcs                43299  1 ecm
+qca_nss_dp             36358  1 qca_nss_drv
+qca_nss_drv           829449  8 wifi_3_0,qca_ol,umac,ecm,qca_nss_pptp,qca_nss_pppoe,qca_nss_l2tpv2,qca_nss_gre
+qca_nss_gre            31644  0 
+qca_nss_l2tpv2         13118  0 
+qca_nss_macsec        148768  0 
+qca_nss_pppoe           6657  0 
+qca_nss_pptp           12678  0 
+qca_ol               1318033  1 wifi_3_0
+qca_ssdk              661948  1 qca_nss_dp
+qdf                   118577  5 ath_pktlog,wifi_3_0,qca_ol,umac,asf
+sch_htb                13289  0 
+sch_prio                3911  0 
+sch_sfq                 8980  0 
+sha1_generic            2228  0 
+slhc                    4413  1 ppp_generic
+ts_bm                   1876  1 
+ts_fsm                  3006  0 
+ts_kmp                  1752  5 
+tunnel6                 2234  1 ip6_tunnel
+udp_tunnel              2101  1 l2tp_core
+umac                 2981193  4 ath_pktlog,wifi_3_0,qca_ol
+usb_common              2711  1 dwc3_qcom
+wan_check               1657  0 
+wandt_filter            2060  0 
+wifi_3_0              697480  0 
+x_tables               12672 74 ipt_REJECT,ipt_MASQUERADE,xt_u32,xt_time,xt_tcpudp,xt_tcpmss,xt_string,xt_statistic,xt_state,xt_recent,xt_quota,xt_pkttype,xt_physdev,xt_owner,xt_nat,xt_multiport,xt_mark,xt_mac,xt_limit,xt_length,xt_hl,xt_helper,xt_hashlimit,xt_flowMARK,xt_ecn,xt_dscp,xt_conntrack,xt_connmark,xt_connlimit,xt_connbytes,xt_comment,xt_cgroup_MARK,xt_bpf,xt_addrtype,xt_TCPMSS,xt_REDIRECT,xt_NFQUEUE,xt_LOG,xt_IP4MARK,xt_HL,xt_DSCP,xt_CT,xt_CLASSIFY,iptable_raw,iptable_mangle,iptable_filter,ipt_rpfilter,ipt_ECN,ip6table_raw,ip6t_rpfilter,ip_tables,arptable_filter,arpt_mangle,arp_tables,ip6t_NPT,ip6t_MASQUERADE,ip6t_rt,ip6t_frag,ip6t_hbh,ip6t_eui64,ip6t_mh,ip6t_ah,ip6t_ipv6header,connattr_statistic,connattr_label,connattr_haohan,miwifi_xthostlog,miwifi_xthostset,miwifi_xtcounter,xt_set,ip6t_REJECT,ip6table_mangle,ip6table_filter,ip6_tables
+xt_CLASSIFY              965  0 
+xt_CT                   3461 36 
+xt_DSCP                 1850  0 
+xt_HL                   1757  0 
+xt_IP4MARK               964  0 
+xt_LOG                  1589  0 
+xt_NFQUEUE              2462  0 
+xt_REDIRECT             1409  1 
+xt_TCPMSS               3129  0 
+xt_addrtype             2653  0 
+xt_bpf                  1167  0 
+xt_cgroup_MARK          1032  0 
+xt_comment               900160 
+xt_connbytes            1716  0 
+xt_connlimit            5087  0 
+xt_connmark             1638  0 
+xt_conntrack            2762 18 
+xt_dscp                 1506  0 
+xt_ecn                  1927  0 
+xt_flowMARK             9871  0 
+xt_hashlimit            7292  0 
+xt_helper               1259  0 
+xt_hl                   1315  0 
+xt_length               1118  0 
+xt_limit                1509 18 
+xt_mac                  1747  0 
+xt_mark                 1049  0 
+xt_multiport            2208  0 
+xt_nat                  1781  0 
+xt_owner                1182  0 
+xt_physdev              1784  2 
+xt_pkttype              1028  0 
+xt_quota                1173  0 
+xt_recent               7401  0 
+xt_set                  7555  0 
+xt_state                1173  0 
+xt_statistic            1268  0 
+xt_string               1195  1 
+xt_tcpmss               1366  0 
+xt_tcpudp               2826 43 
+xt_time                 2072  0 
+xt_u32                  1375  0 
+
+===== devicetree-root =====
+#address-cells
+#size-cells
+MP_256
+aliases
+boot_version
+chosen
+clk_test
+clocks
+compatible
+cpu_type
+cpus
+firmware
+flash_type
+gsw@0
+interrupt-parent
+machid
+memory
+model
+name
+pmu
+psci
+reserved-memory
+soc
+soc_version_major
+soc_version_minor
+thermal-zones
+tz_version
+
+===== dt-model-compatible =====
+model: Qualcomm Technologies, Inc. IPQ5018/AP-MP03.3
+compatible: qcom,ipq5018-mp03.3 qcom,ipq5018 
+
+===== bootinfo =====
+
+ROM    ver: config core 'version'
+	# ROM ver
+	option ROM '2.0.28'
+	# channel
+	option CHANNEL 'release'
+	# hardware platform.
+	option HARDWARE 'RD03v2'
+	# CFE ver
+	option UBOOT '1.0.2'
+	# Linux Kernel ver
+	option LINUX '4.4.16'
+	# RAMFS ver
+	option RAMFS '0.0.1'
+	# SQUASHFS ver
+	option SQAFS '0.0.1'
+	# ROOTFS ver
+	option ROOTFS '0.0.1'
+	#build time
+	option BUILDTIME 'Wed, 24 Dec 2025 04:37:16 +0000'
+	#build timestamp
+	option BUILDTS '1766551036'
+	#build git tag
+	option GTAG 'commit d40e7037e28d2ea2b1c0a1ca5b1c2f96a75c8542'
+Hardware  : Ver. A
+ROM    sum: 
+System    : Dual - 1
+KERNEL    : ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs cnss2.bdf_integrated=0x24 cnss2.bdf_pci0=0x60 cnss2.bdf_pci1=0x60 cnss2.skip_radio_bmap=4 rootwait uart_en=1 swiotlb=1
+
+MTD  table:
+dev:    size   erasesize  name
+mtd0: 00080000 00020000 "0:SBL1"
+mtd1: 00080000 00020000 "0:MIBIB"
+mtd2: 00040000 00020000 "0:BOOTCONFIG"
+mtd3: 00040000 00020000 "0:BOOTCONFIG1"
+mtd4: 00100000 00020000 "0:QSEE"
+mtd5: 00100000 00020000 "0:QSEE_1"
+mtd6: 00040000 00020000 "0:DEVCFG"
+mtd7: 00040000 00020000 "0:DEVCFG_1"
+mtd8: 00040000 00020000 "0:CDT"
+mtd9: 00040000 00020000 "0:CDT_1"
+mtd10: 00080000 00020000 "0:APPSBLENV"
+mtd11: 00140000 00020000 "0:APPSBL"
+mtd12: 00140000 00020000 "0:APPSBL_1"
+mtd13: 00100000 00020000 "0:ART"
+mtd14: 00080000 00020000 "0:TRAINING"
+mtd15: 00080000 00020000 "bdata"
+mtd16: 00080000 00020000 "crash"
+mtd17: 00080000 00020000 "crash_syslog"
+mtd18: 01e00000 00020000 "rootfs"
+mtd19: 01e00000 00020000 "rootfs_1"
+mtd20: 03980000 00020000 "overlay"
+mtd21: 00383000 0001f000 "kernel"
+mtd22: 0120b000 0001f000 "ubi_rootfs"
+mtd23: 00706000 0001f000 "cfg"
+mtd24: 0120b000 0001f000 "user"
+mtd25: 01bbb000 0001f000 "plugin"
+
+
+===== boot-flags =====
+flag_boot_rootfs=0
+flag_last_success=0
+flag_try_sys1_failed=0
+flag_try_sys2_failed=0
+flag_boot_success=1
+flag_ota_reboot=0
+flag_boot_recovery=
+uart_en=1
+boot_wait=on
+restore_defaults=0
+ssh_en=1
+telnet_en=0
+
+===== bdata-flags =====
+bdata uart_en=0
+bdata ssh_en=0
+bdata telnet_en=0
+bdata boot_wait=
+
+===== proc-xiaoqiang =====
+boot_status
+ft_mode
+model
+regdump
+reset
+xq_syslog
+-- /proc/xiaoqiang/boot_status: 3
+-- /proc/xiaoqiang/ft_mode: 0
+-- /proc/xiaoqiang/model: RD03v2
+-- /proc/xiaoqiang/regdump: 
+-- /proc/xiaoqiang/reset: 38
+-- /proc/xiaoqiang/xq_syslog: 
+
+===== partitions =====
+major minor  #blocks  name
+
+  31        0        512 mtdblock0
+  31        1        512 mtdblock1
+  31        2        256 mtdblock2
+  31        3        256 mtdblock3
+  31        4       1024 mtdblock4
+  31        5       1024 mtdblock5
+  31        6        256 mtdblock6
+  31        7        256 mtdblock7
+  31        8        256 mtdblock8
+  31        9        256 mtdblock9
+  31       10        512 mtdblock10
+  31       11       1280 mtdblock11
+  31       12       1280 mtdblock12
+  31       13       1024 mtdblock13
+  31       14        512 mtdblock14
+  31       15        512 mtdblock15
+  31       16        512 mtdblock16
+  31       17        512 mtdblock17
+  31       18      30720 mtdblock18
+  31       19      30720 mtdblock19
+  31       20      58880 mtdblock20
+  31       21       3596 mtdblock21
+  31       22      18476 mtdblock22
+  31       23       7192 mtdblock23
+  31       24      18476 mtdblock24
+  31       25      28396 mtdblock25
+
+===== mounts =====
+mtd:ubi_rootfs on / type squashfs (ro,noatime)
+proc on /proc type proc (rw,nosuid,nodev,noexec,noatime)
+sysfs on /sys type sysfs (rw,nosuid,nodev,noexec,noatime)
+cgroup on /sys/fs/cgroup type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset,cpu,cpuacct,blkio,memory,devices,freezer,net_cls,pids)
+tmpfs on /tmp type tmpfs (rw,nosuid,nodev,noatime)
+none on /etc type ramfs (rw,relatime)
+none on /lib/wifi type ramfs (rw,relatime)
+ubi1:cfg on /data type ubifs (rw,sync,relatime)
+ubi1:user on /data/usr type ubifs (rw,relatime)
+ubi1:plugin on /data/userdisk type ubifs (rw,relatime)
+ubi1:plugin on /userdisk type ubifs (rw,relatime)
+mtd:ubi_rootfs on /userdisk/data type squashfs (ro,noatime)
+ubi1:cfg on /etc/config type ubifs (rw,sync,relatime)
+ubi1:cfg on /etc/datacenterconfig type ubifs (rw,sync,relatime)
+ubi1:cfg on /etc/smartcontroller type ubifs (rw,sync,relatime)
+ubi1:cfg on /etc/parentalctl type ubifs (rw,sync,relatime)
+ubi1:cfg on /etc/smartvpn type ubifs (rw,sync,relatime)
+ubi1:cfg on /etc/ppp type ubifs (rw,sync,relatime)
+ubi1:cfg on /etc/crontabs type ubifs (rw,sync,relatime)
+ubi1:cfg on /etc/mipctl type ubifs (rw,sync,relatime)
+ubi1:cfg on /ini type ubifs (rw,sync,relatime)
+tmpfs on /dev type tmpfs (rw,nosuid,relatime,size=512k,mode=755)
+devpts on /dev/pts type devpts (rw,nosuid,noexec,relatime,mode=600,ptmxmode=000)
+debugfs on /sys/kernel/debug type debugfs (rw,noatime)
+
+===== df =====
+Filesystem                Size      Used Available Use% Mounted on
+mtd:ubi_rootfs           18.0M     18.0M         0 100% /
+tmpfs                    91.1M      1.8M     89.4M   2% /tmp
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /data
+ubi1:user                14.9M    120.0K     14.0M   1% /data/usr
+ubi1:plugin              23.9M     28.0K     22.6M   0% /data/userdisk
+ubi1:plugin              23.9M     28.0K     22.6M   0% /userdisk
+mtd:ubi_rootfs           18.0M     18.0M         0 100% /userdisk/data
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /etc/config
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /etc/datacenterconfig
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /etc/smartcontroller
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /etc/parentalctl
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /etc/smartvpn
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /etc/ppp
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /etc/crontabs
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /etc/mipctl
+ubi1:cfg                  4.7M    600.0K      3.8M  13% /ini
+tmpfs                   512.0K         0    512.0K   0% /dev
+
+===== os-release-etc =====
+DISTRIB_ID='OpenWrt'
+DISTRIB_RELEASE='18.06-SNAPSHOT'
+DISTRIB_REVISION='unknown'
+DISTRIB_TARGET='ipq/ipq50xx'
+DISTRIB_ARCH='arm_cortex-a7'
+DISTRIB_DESCRIPTION='OpenWrt 18.06-SNAPSHOT unknown'
+DISTRIB_TAINTS='no-all busybox override'
+NAME="OpenWrt"
+VERSION="18.06-SNAPSHOT"
+ID="openwrt"
+ID_LIKE="lede openwrt"
+PRETTY_NAME="OpenWrt 18.06-SNAPSHOT"
+VERSION_ID="18.06-snapshot"
+HOME_URL="http://openwrt.org/"
+BUG_URL="http://bugs.openwrt.org/"
+SUPPORT_URL="http://forum.lede-project.org/"
+BUILD_ID="unknown"
+LEDE_BOARD="ipq/ipq50xx"
+LEDE_ARCH="arm_cortex-a7"
+LEDE_TAINTS="no-all busybox override"
+LEDE_DEVICE_MANUFACTURER="OpenWrt"
+LEDE_DEVICE_MANUFACTURER_URL="http://openwrt.org/"
+LEDE_DEVICE_PRODUCT="Generic"
+LEDE_DEVICE_REVISION="v0"
+LEDE_RELEASE="OpenWrt 18.06-SNAPSHOT unknown"

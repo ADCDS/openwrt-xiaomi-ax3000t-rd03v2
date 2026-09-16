@@ -1,0 +1,1409 @@
+
+===== nss-sysctl-tree =====
+/proc/sys/dev/nss/clock/auto_scale = 1
+/proc/sys/dev/nss/clock/current_freq = 
+/proc/sys/dev/nss/clock/freq_table = 
+/proc/sys/dev/nss/clock/inst_per_sec = 
+/proc/sys/dev/nss/general/coredump = 0
+/proc/sys/dev/nss/general/jumbo_mru = 0
+/proc/sys/dev/nss/general/logbuf = 0
+/proc/sys/dev/nss/general/paged_mode = 0
+/proc/sys/dev/nss/general/redirect = 1
+/proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode = 1
+/proc/sys/dev/nss/ipv4cfg/ipv4_dscp_map = priority: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+action:   0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+/proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode = 1
+/proc/sys/dev/nss/ipv6cfg/ipv6_dscp_map = priority: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+action:   0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+/proc/sys/dev/nss/n2hcfg/extra_pbuf_core0 = 802816
+/proc/sys/dev/nss/n2hcfg/host_bp_enable0 = 0
+/proc/sys/dev/nss/n2hcfg/mitigation_core0 = 1
+/proc/sys/dev/nss/n2hcfg/n2h_empty_paged_pool_buf_core0 = 0
+/proc/sys/dev/nss/n2hcfg/n2h_empty_pool_buf_core0 = 4096
+/proc/sys/dev/nss/n2hcfg/n2h_high_water_core0 = 16336
+/proc/sys/dev/nss/n2hcfg/n2h_low_water_core0 = 2048
+/proc/sys/dev/nss/n2hcfg/n2h_paged_high_water_core0 = 0
+/proc/sys/dev/nss/n2hcfg/n2h_paged_low_water_core0 = 0
+/proc/sys/dev/nss/n2hcfg/n2h_queue_limit_core0 = 256
+/proc/sys/dev/nss/n2hcfg/n2h_wifi_pool_buf = 0
+/proc/sys/dev/nss/pppoe/br_accel_mode = 1
+/proc/sys/dev/nss/project/wt_stats = 0
+/proc/sys/dev/nss/rps/enable = 1
+/proc/sys/dev/nss/rps/hash_bitmap = 3
+/proc/sys/dev/nss/rps/pri_map = Cores: -1 -1 -1 -1 
+/proc/sys/dev/nss/skb_reuse/max_size = 4096
+/proc/sys/dev/nss/skb_reuse/min_sizes = 
+/proc/sys/dev/nss/stats/non_zero_stats = 0
+
+===== nss-n2hcfg =====
+extra_pbuf_core0 = 802816
+host_bp_enable0 = 0
+mitigation_core0 = 1
+n2h_empty_paged_pool_buf_core0 = 0
+n2h_empty_pool_buf_core0 = 4096
+n2h_high_water_core0 = 16336
+n2h_low_water_core0 = 2048
+n2h_paged_high_water_core0 = 0
+n2h_paged_low_water_core0 = 0
+n2h_queue_limit_core0 = 256
+n2h_wifi_pool_buf = 0
+
+===== nss-stats-idle =====
+== /sys/kernel/debug/qca-nss-drv/stats/cpu_load_ubi
+CPU Utilization:
+Note: Averaged over 1 second
+
+Core 0:
+Min	Avg	Max
+ 1%	 4%	 4%
+
+== /sys/kernel/debug/qca-nss-drv/stats/drv
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< DRV >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	drv_nbuf_alloc_errors         = 0               error
+	drv_paged_buf_alloc_errors    = 0               error
+	drv_tx_queue_full[0]          = 0               error
+	drv_tx_queue_full[1]          = 0               error
+	drv_tx_buffers_empty          = 45572           special
+	drv_tx_paged_buffers_empty    = 0               special
+	drv_tx_buffer_pkt             = 9075            special
+	drv_tx_buffers_cmd            = 285             special
+	drv_tx_buffers_crypto         = 0               special
+	drv_tx_buffers_reuse          = 303             special
+	drv_rx_buffers_empty          = 9057            special
+	drv_rx_buffers_pkt            = 6113            special
+	drv_rx_buffers_ext_pkt        = 0               special
+	drv_rx_buffers_cmd_resp       = 0               special
+	drv_rx_buffers_status_sync    = 5686327         special
+	drv_rx_buffers_crypto         = 0               special
+	drv_rx_buffers_virtual        = 0               special
+	drv_tx_skb_simple             = 8915            special
+	drv_tx_skb_nr_frags           = 142             special
+	drv_tx_skb_fraglist           = 0               special
+	drv_rx_skb_simple             = 5692440         special
+	drv_rx_skb_nr_frags           = 0               special
+	drv_rx_skb_fraglist           = 0               special
+	drv_rx_bad_desciptor          = 0               error
+	drv_invalid_interface         = 0               error
+	drv_invalid_core_id           = 0               error
+	drv_invalid_buffer_type       = 0               error
+	drv_nss_skb_count             = 10663           special
+	drv_rx_chain_seg_processed    = 0               special
+	drv_rx_frag_seg_processed     = 0               special
+	drv_tx_buffers_cmd_queue_full = 0               error
+	drv_tx_buffers_data_queue[0]  = 871             special
+	drv_tx_buffers_data_queue[1]  = 3688            special
+	drv_tx_buffers_data_queue[2]  = 1196            special
+	drv_tx_buffers_data_queue[3]  = 3320            special
+	drv_tx_buffers_data_queue[4]  = 0               special
+	drv_tx_buffers_data_queue[5]  = 0               special
+	drv_tx_buffers_data_queue[6]  = 0               special
+	drv_tx_buffers_data_queue[7]  = 0               special
+== /sys/kernel/debug/qca-nss-drv/stats/eth_rx
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ETH_RX >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	eth_rx_rx_pkts           = 6009            common
+	eth_rx_rx_byts           = 546386          common
+	eth_rx_tx_pkts           = 6009            common
+	eth_rx_tx_byts           = 546386          common
+	eth_rx_rx_queue[0]_drops = 0               drop
+	eth_rx_rx_queue[1]_drops = 0               drop
+	eth_rx_rx_queue[2]_drops = 0               drop
+	eth_rx_rx_queue[3]_drops = 0               drop
+
+#eth_rx node stats
+
+	eth_rx_ticks       = 0               special
+	eth_rx_worst_ticks = 0               special
+	eth_rx_iterations  = 0               special
+
+#eth_rx exception stats
+
+	eth_rx_unknown_l3_protocol  = 102             exception
+	eth_rx_eth_hdr_missing      = 0               exception
+	eth_rx_vlan_missing         = 0               exception
+	eth_rx_trustsec_hdr_missing = 0               exception
+== /sys/kernel/debug/qca-nss-drv/stats/gmac
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< GMAC >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+
+#gmac stats
+
+	gmac[0]_ticks       = 0               special
+	gmac[0]_worst_ticks = 0               special
+	gmac[0]_iterations  = 0               special
+
+#gmac stats
+
+	gmac[1]_ticks       = 0               special
+	gmac[1]_worst_ticks = 0               special
+	gmac[1]_iterations  = 0               special
+
+#gmac stats
+
+	gmac[2]_ticks       = 0               special
+	gmac[2]_worst_ticks = 0               special
+	gmac[2]_iterations  = 0               special
+
+#gmac stats
+
+	gmac[3]_ticks       = 0               special
+	gmac[3]_worst_ticks = 0               special
+	gmac[3]_iterations  = 0               special
+
+#gmac stats
+
+	gmac[4]_ticks       = 0               special
+	gmac[4]_worst_ticks = 0               special
+	gmac[4]_iterations  = 0               special
+
+#gmac stats
+
+	gmac[5]_ticks       = 0               special
+	gmac[5]_worst_ticks = 0               special
+	gmac[5]_iterations  = 0               special
+
+#gmac stats
+
+	gmac[6]_ticks       = 0               special
+	gmac[6]_worst_ticks = 0               special
+	gmac[6]_iterations  = 0               special
+
+#gmac stats
+
+	gmac[7]_ticks       = 0               special
+	gmac[7]_worst_ticks = 0               special
+	gmac[7]_iterations  = 0               special
+
+gmac stats end
+
+== /sys/kernel/debug/qca-nss-drv/stats/gre
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< GRE >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	gre_base_rx_pkts                    = 0               common
+	gre_base_rx_drops                   = 0               drop
+	gre_base_exp_eth_hdr_missing        = 0               exception
+	gre_base_exp_eth_type_non_ip        = 0               exception
+	gre_base_exp_ip_unknown_protocol    = 0               exception
+	gre_base_exp_ip_header_incomplete   = 0               exception
+	gre_base_exp_ip_bad_total_length    = 0               exception
+	gre_base_exp_ip_bad_checksum        = 0               exception
+	gre_base_exp_ip_datagram_incomplete = 0               exception
+	gre_base_exp_ip_fragment            = 0               exception
+	gre_base_exp_ip_options_incomplete  = 0               exception
+	gre_base_exp_ip_with_options        = 0               exception
+	gre_base_exp_ipv6_unknown_protocol  = 0               exception
+	gre_base_exp_ipv6_header_incomplete = 0               exception
+	gre_base_exp_unknown_session        = 0               exception
+	gre_base_exp_node_inactive          = 0               exception
+== /sys/kernel/debug/qca-nss-drv/stats/ipv4
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< IPV4 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	ipv4_rx_pkts           = 5982            common
+	ipv4_rx_byts           = 459346          common
+	ipv4_tx_pkts           = 0               common
+	ipv4_tx_byts           = 0               common
+	ipv4_rx_queue[0]_drops = 0               drop
+	ipv4_rx_queue[1]_drops = 0               drop
+	ipv4_rx_queue[2]_drops = 0               drop
+	ipv4_rx_queue[3]_drops = 0               drop
+
+#ipv4 special stats
+
+	ipv4_rx_pkts                               = 0               special
+	ipv4_rx_bytes                              = 0               special
+	ipv4_tx_pkts                               = 0               special
+	ipv4_tx_bytes                              = 0               special
+	ipv4_create_requests                       = 0               special
+	ipv4_create_collisions                     = 0               special
+	ipv4_create_invalid_interface              = 0               special
+	ipv4_destroy_requests                      = 0               special
+	ipv4_destroy_misses                        = 0               special
+	ipv4_hash_hits                             = 0               special
+	ipv4_hash_reorders                         = 0               special
+	ipv4_flushes                               = 0               special
+	ipv4_evictions                             = 0               special
+	ipv4_fragmentations                        = 0               special
+	ipv4_by_rule_drops                         = 0               drop
+	ipv4_mc_create_requests                    = 0               special
+	ipv4_mc_update_requests                    = 0               special
+	ipv4_mc_create_invalid_interface           = 0               special
+	ipv4_mc_destroy_requests                   = 0               special
+	ipv4_mc_destroy_misses                     = 0               special
+	ipv4_mc_flushes                            = 0               special
+	ipv4_mirror_invalid_ifnum_conn_create_req  = 0               special
+	ipv4_mirror_invalid_iftype_conn_create_req = 0               special
+	ipv4_mirror_failures                       = 0               special
+
+#ipv4 exception stats
+
+	ipv4_icmp_hdr_incomplete                 = 0               exception
+	ipv4_icmp_unhandled_type                 = 2               exception
+	ipv4_icmp_ipv4_hdr_incomplete            = 0               exception
+	ipv4_icmp_ipv4_udp_hdr_incomplete        = 0               exception
+	ipv4_icmp_ipv4_tcp_header_incomplete     = 0               exception
+	ipv4_icmp_sipv4_unknown_protocol         = 0               exception
+	ipv4_icmp_no_icme                        = 1               exception
+	ipv4_icmp_flush_to_host                  = 0               exception
+	ipv4_tcp_header_incomplete               = 0               exception
+	ipv4_tcp_no_icme                         = 5811            exception
+	ipv4_tcp_ip_option                       = 0               exception
+	ipv4_tcp_ip_fragment                     = 0               exception
+	ipv4_tcp_small_ttl                       = 0               exception
+	ipv4_tcp_needs_fragmentation             = 0               exception
+	ipv4_tcp_flags                           = 0               exception
+	ipv4_tcp_seq_exceeds_right_edge          = 0               exception
+	ipv4_tcp_small_data_offs                 = 0               exception
+	ipv4_tcp_bad_sack                        = 0               exception
+	ipv4_tcp_big_data_offs                   = 0               exception
+	ipv4_tcp_seq_before_left_edge            = 0               exception
+	ipv4_tcp_ack_exceeds_right_edge          = 0               exception
+	ipv4_tcp_ack_before_left_edge            = 0               exception
+	ipv4_udp_header_incomplete               = 0               exception
+	ipv4_udp_no_icme                         = 162             exception
+	ipv4_udp_ip_option                       = 0               exception
+	ipv4_udp_ip_fragment                     = 0               exception
+	ipv4_udp_small_ttl                       = 0               exception
+	ipv4_udp_needs_fragmentation             = 0               exception
+	ipv4_wrong_target_mac                    = 0               exception
+	ipv4_header_incomplete                   = 0               exception
+	ipv4_bad_total_length                    = 0               exception
+	ipv4_bad_checksum                        = 0               exception
+	ipv4_non_initial_fragment                = 0               exception
+	ipv4_datagram_incomplete                 = 0               exception
+	ipv4_options_incomplete                  = 0               exception
+	ipv4_unknown_protocol                    = 6               exception
+	ipv4_esp_header_incomplete               = 0               exception
+	ipv4_esp_no_icme                         = 0               exception
+	ipv4_esp_ip_option                       = 0               exception
+	ipv4_esp_ip_fragment                     = 0               exception
+	ipv4_esp_small_ttl                       = 0               exception
+	ipv4_esp_needs_fragmentation             = 0               exception
+	ipv4_ingress_vid_mismatch                = 0               exception
+	ipv4_ingress_vid_missing                 = 0               exception
+	ipv4_6rd_no_icme                         = 0               exception
+	ipv4_6rd_ip_option                       = 0               exception
+	ipv4_6rd_ip_fragment                     = 0               exception
+	ipv4_6rd_needs_fragmentation             = 0               exception
+	ipv4_dscp_marking_mismatch               = 0               exception
+	ipv4_vlan_marking_mismatch               = 0               exception
+	ipv4_interface_mismatch                  = 0               exception
+	ipv4_gre_header_incomplete               = 0               exception
+	ipv4_gre_no_icme                         = 0               exception
+	ipv4_gre_ip_option                       = 0               exception
+	ipv4_gre_ip_fragment                     = 0               exception
+	ipv4_gre_small_ttl                       = 0               exception
+	ipv4_gre_needs_fragmentation             = 0               exception
+	ipv4_pptp_gre_session_match_fail         = 0               exception
+	ipv4_pptp_gre_invalid_proto              = 0               exception
+	ipv4_pptp_gre_no_cme                     = 0               exception
+	ipv4_pptp_gre_ip_option                  = 0               exception
+	ipv4_pptp_gre_ip_fragment                = 0               exception
+	ipv4_pptp_gre_small_ttl                  = 0               exception
+	ipv4_pptp_gre_needs_fragmentation        = 0               exception
+	ipv4_destroy                             = 0               exception
+	ipv4_frag_df_set                         = 0               exception
+	ipv4_frag_fail                           = 0               exception
+	ipv4_icmp_ipv4_udplite_header_incomplete = 0               exception
+	ipv4_udplite_header_incomplete           = 0               exception
+	ipv4_udplite_no_icme                     = 0               exception
+	ipv4_udplite_ip_option                   = 0               exception
+	ipv4_udplite_ip_fragment                 = 0               exception
+	ipv4_udplite_small_ttl                   = 0               exception
+	ipv4_udplite_needs_fragmentation         = 0               exception
+	ipv4_mc_udp_no_icme                      = 0               exception
+	ipv4_mc_mem_alloc_failure                = 0               exception
+	ipv4_mc_update_failure                   = 0               exception
+	ipv4_mc_pbuf_alloc_failure               = 0               exception
+	ipv4_pppoe_bridge_no_icme                = 0               exception
+	ipv4_pppoe_no_session                    = 0               drop
+	ipv4_icmp_ipv4_gre_hdr_incomplete        = 0               exception
+	ipv4_icmp_ipv4_esp_hdr_incomplete        = 0               exception
+	ipv4_emesh_prio_mismatch                 = 0               exception
+== /sys/kernel/debug/qca-nss-drv/stats/ipv4_reasm
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< IPV4_REASM >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	ipv4_reasm_rx_pkts           = 0               common
+	ipv4_reasm_rx_byts           = 0               common
+	ipv4_reasm_tx_pkts           = 0               common
+	ipv4_reasm_tx_byts           = 0               common
+	ipv4_reasm_rx_queue[0]_drops = 0               drop
+	ipv4_reasm_rx_queue[1]_drops = 0               drop
+	ipv4_reasm_rx_queue[2]_drops = 0               drop
+	ipv4_reasm_rx_queue[3]_drops = 0               drop
+	ipv4_reasm_evictions   = 0               drop
+	ipv4_reasm_alloc_fails = 0               drop
+	ipv4_reasm_timeouts    = 0               drop
+== /sys/kernel/debug/qca-nss-drv/stats/ipv6
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< IPV6 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	ipv6_rx_pkts           = 31              common
+	ipv6_rx_byts           = 3114            common
+	ipv6_tx_pkts           = 0               common
+	ipv6_tx_byts           = 0               common
+	ipv6_rx_queue[0]_drops = 0               drop
+	ipv6_rx_queue[1]_drops = 0               drop
+	ipv6_rx_queue[2]_drops = 0               drop
+	ipv6_rx_queue[3]_drops = 0               drop
+
+#ipv6 node stats
+
+	ipv6_rx_pkts                               = 0               special
+	ipv6_rx_bytes                              = 0               special
+	ipv6_tx_pkts                               = 0               special
+	ipv6_tx_bytes                              = 0               special
+	ipv6_create_requests                       = 0               special
+	ipv6_create_collisions                     = 0               special
+	ipv6_create_invalid_interface              = 0               special
+	ipv6_destroy_requests                      = 0               special
+	ipv6_destroy_misses                        = 0               special
+	ipv6_hash_hits                             = 0               special
+	ipv6_hash_reorders                         = 0               special
+	ipv6_flushes                               = 0               special
+	ipv6_evictions                             = 0               special
+	ipv6_fragmentations                        = 0               special
+	ipv6_frag_fails                            = 0               special
+	ipv6_by_rule_drops                         = 0               drop
+	ipv6_mc_create_requests                    = 0               special
+	ipv6_mc_update_requests                    = 0               special
+	ipv6_mc_create_invalid_interface           = 0               special
+	ipv6_mc_destroy_requests                   = 0               special
+	ipv6_mc_destroy_misses                     = 0               special
+	ipv6_mc_flushes                            = 0               special
+	ipv6_mirror_invalid_ifnum_conn_create_req  = 0               special
+	ipv6_mirror_invalid_iftype_conn_create_req = 0               special
+	ipv6_mirror_failures                       = 0               special
+
+#ipv6 exception stats
+
+	ipv6_icmp_header_incomplete         = 0               exception
+	ipv6_icmp_unhandled_type            = 16              exception
+	ipv6_icmp_header_incomplete         = 0               exception
+	ipv6_icmp_udp_header_incomplete     = 0               exception
+	ipv6_icmp_tcp_header_incomplete     = 0               exception
+	ipv6_icmp_unknown_protocol          = 0               exception
+	ipv6_icmp_no_icme                   = 0               exception
+	ipv6_icmp_flush_to_host             = 0               exception
+	ipv6_tcp_header_incomplete          = 0               exception
+	ipv6_tcp_no_icme                    = 0               exception
+	ipv6_tcp_small_hop_limit            = 0               exception
+	ipv6_tcp_needs_fragmentation        = 0               exception
+	ipv6_tcp_flags                      = 0               exception
+	ipv6_tcp_seq_exceeds_right_edge     = 0               exception
+	ipv6_tcp_small_data_offs            = 0               exception
+	ipv6_tcp_bad_sack                   = 0               exception
+	ipv6_tcp_big_data_offs              = 0               exception
+	ipv6_tcp_seq_before_left_edge       = 0               exception
+	ipv6_tcp_ack_exceeds_right_edge     = 0               exception
+	ipv6_tcp_ack_before_left_edge       = 0               exception
+	ipv6_udp_header_incomplete          = 0               exception
+	ipv6_udp_no_icme                    = 2               exception
+	ipv6_udp_small_hop_limit            = 0               exception
+	ipv6_udp_needs_fragmentation        = 0               exception
+	ipv6_wrong_target_mac               = 0               exception
+	ipv6_header_incomplete              = 0               exception
+	ipv6_unknown_protocol               = 13              exception
+	ipv6_ingress_vid_mismatch           = 0               exception
+	ipv6_ingress_vid_missing            = 0               exception
+	ipv6_dscp_marking_mismatch          = 0               exception
+	ipv6_vlan_marking_mismatch          = 0               exception
+	ipv6_interface_mismatch             = 0               exception
+	ipv6_gre_no_icme                    = 0               exception
+	ipv6_gre_needs_fragmentation        = 0               exception
+	ipv6_gre_small_hop_limit            = 0               exception
+	ipv6_destroy                        = 0               exception
+	ipv6_icmp_udplite_header_incomplete = 0               exception
+	ipv6_udplite_header_incomplete      = 0               exception
+	ipv6_udplite_no_icme                = 0               exception
+	ipv6_udplite_small_hop_limit        = 0               exception
+	ipv6_udplite_needs_fragmentation    = 0               exception
+	ipv6_mc_udp_no_icme                 = 0               exception
+	ipv6_mc_mem_alloc_failure           = 0               exception
+	ipv6_mc_update_failure              = 0               exception
+	ipv6_mc_pbuf_alloc_failure          = 0               exception
+	ipv6_esp_header_incomplete          = 0               exception
+	ipv6_esp_no_icme                    = 0               exception
+	ipv6_esp_ip_fragment                = 0               exception
+	ipv6_esp_small_hop_limit            = 0               exception
+	ipv6_esp_needs_fragmentation        = 0               exception
+	ipv6_tunipip6_no_icme               = 0               exception
+	ipv6_tunipip6_small_hop_limit       = 0               exception
+	ipv6_tunipip6_needs_fragmentation   = 0               exception
+	ipv6_pppoe_bridge_no_icme           = 0               exception
+	ipv6_dont_frag_set                  = 0               exception
+	ipv6_reassembly_not_supported       = 0               exception
+	ipv6_pppoe_no_session               = 0               drop
+	ipv6_icmp_gre_header_incomplete     = 0               exception
+	ipv6_icmp_esp_header_incomplete     = 0               exception
+	ipv6_emesh_prio_mismatch            = 0               exception
+== /sys/kernel/debug/qca-nss-drv/stats/ipv6_reasm
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< IPV6_REASM >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	ipv6_reasm_rx_pkts           = 0               common
+	ipv6_reasm_rx_byts           = 0               common
+	ipv6_reasm_tx_pkts           = 0               common
+	ipv6_reasm_tx_byts           = 0               common
+	ipv6_reasm_rx_queue[0]_drops = 0               drop
+	ipv6_reasm_rx_queue[1]_drops = 0               drop
+	ipv6_reasm_rx_queue[2]_drops = 0               drop
+	ipv6_reasm_rx_queue[3]_drops = 0               drop
+	ipv6_reasm_alloc_fails = 0               drop
+	ipv6_reasm_timeouts    = 0               drop
+	ipv6_reasm_discards    = 0               drop
+== /sys/kernel/debug/qca-nss-drv/stats/l2tpv2
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< L2TPV2 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+
+l2tp v2 session stats start:
+
+== /sys/kernel/debug/qca-nss-drv/stats/lso_rx
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< LSO_RX >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	lso_rx_rx_pkts           = 0               common
+	lso_rx_rx_byts           = 0               common
+	lso_rx_tx_pkts           = 0               common
+	lso_rx_tx_byts           = 0               common
+	lso_rx_rx_queue[0]_drops = 0               drop
+	lso_rx_rx_queue[1]_drops = 0               drop
+	lso_rx_rx_queue[2]_drops = 0               drop
+	lso_rx_rx_queue[3]_drops = 0               drop
+
+#lso_rx node stats
+
+	lso_rx_tx_drops            = 0               drop
+	lso_rx_drops               = 0               drop
+	lso_rx_pbuf_alloc_fail     = 0               error
+	lso_rx_pbuf_reference_fail = 0               error
+== /sys/kernel/debug/qca-nss-drv/stats/n2h
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< N2H >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	n2h_rx_pkts                       = 5692546         common
+	n2h_rx_byts                       = 1388660466      common
+	n2h_tx_pkts                       = 9387            common
+	n2h_tx_byts                       = 3287490         common
+	n2h_rx_queue[0]_drops             = 0               drop
+	n2h_rx_queue[1]_drops             = 0               drop
+	n2h_rx_queue[2]_drops             = 0               drop
+	n2h_rx_queue[3]_drops             = 0               drop
+	n2h_queue_drops                   = 0               drop
+	n2h_ticks                         = 0               special
+	n2h_worst_ticks                   = 0               special
+	n2h_iterations                    = 0               special
+	n2h_pbuf_ocm_total_count          = 1500            special
+	n2h_pbuf_ocm_free_count           = 1212            special
+	n2h_pbuf_ocm_alloc_fail_payload   = 0               special
+	n2h_pbuf_ocm_alloc_fail_nopayload = 0               special
+	n2h_pbuf_def_total_count          = 14884           special
+	n2h_pbuf_def_free_count           = 6692            special
+	n2h_pbuf_def_alloc_fail_payload   = 99              special
+	n2h_pbuf_def_alloc_fail_nopayload = 0               special
+	n2h_payload_alloc_fails           = 99              special
+	n2h_payload_free_count            = 2057            special
+	n2h_h2n_control_pkts              = 285             special
+	n2h_h2n_control_byts              = 510720          special
+	n2h_n2h_control_pkts              = 5686420         special
+	n2h_n2h_control_byts              = 1388108642      special
+	n2h_h2n_data_pkts                 = 9102            special
+	n2h_h2n_data_byts                 = 2776770         special
+	n2h_n2h_data_pkts                 = 6126            special
+	n2h_n2h_data_byts                 = 551824          special
+	n2h_n2h_tot_payloads              = 10557           special
+	n2h_n2h_data_interface_invalid    = 0               special
+	n2h_n2h_enqueue_retries           = 0               special
+== /sys/kernel/debug/qca-nss-drv/stats/pppoe
+
+#pppoe base node stats start
+
+	pppoe_rx_packets               = 0               common
+	pppoe_rx_bytes                 = 0               common
+	pppoe_tx_packets               = 0               common
+	pppoe_tx_bytes                 = 0               common
+	pppoe_rx_dropped[0]            = 0               drop
+	pppoe_rx_dropped[1]            = 0               drop
+	pppoe_rx_dropped[2]            = 0               drop
+	pppoe_rx_dropped[3]            = 0               drop
+	pppoe_short_pppoe_hdr_length   = 0               exception
+	pppoe_short_packet_length      = 0               exception
+	pppoe_wrong_version_or_type    = 0               exception
+	pppoe_wrong_code               = 0               exception
+	pppoe_unsupported_ppp_protocol = 0               exception
+	pppoe_disabled_bridge_packet   = 0               exception
+== /sys/kernel/debug/qca-nss-drv/stats/pptp
+
+pptp session stats start:
+
+
+pptp session stats end
+== /sys/kernel/debug/qca-nss-drv/stats/udp_st
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< UDP_ST >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	udp_st_rx_pkts           = 0               common
+	udp_st_rx_byts           = 0               common
+	udp_st_tx_pkts           = 0               common
+	udp_st_tx_byts           = 0               common
+	udp_st_rx_queue[0]_drops = 0               drop
+	udp_st_rx_queue[1]_drops = 0               drop
+	udp_st_rx_queue[2]_drops = 0               drop
+	udp_st_rx_queue[3]_drops = 0               drop
+
+#udp_st error stats
+
+	udp_st_error_none            = 0               special
+	udp_st_incorrect_rate        = 0               drop
+	udp_st_incorrect_buffer_size = 0               drop
+	udp_st_memory_failure        = 0               drop
+	udp_st_incorrect_state       = 0               drop
+	udp_st_incorrect_flags       = 0               drop
+	udp_st_entry_exist           = 0               drop
+	udp_st_entry_add_failed      = 0               drop
+	udp_st_entry_not_exist       = 0               drop
+	udp_st_wrong_start_msg_type  = 0               drop
+	udp_st_wrong_stop_msg_type   = 0               drop
+	udp_st_too_many_users        = 0               drop
+	udp_st_unknown_msg_type      = 0               drop
+	udp_st_pb_alloc_failure      = 0               drop
+	udp_st_pb_size_failure       = 0               drop
+	udp_st_drop_queue_failure    = 0               drop
+	udp_st_timer call is missed  = 0               special
+
+#udp_st Rx time stats (ms)
+
+	udp_st_rx_start_time   = 0               special
+	udp_st_rx_current_time = 0               special
+	udp_st_rx_elapsed_time = 0               special
+
+#udp_st Tx time stats (ms)
+
+	udp_st_tx_start_time   = 0               special
+	udp_st_tx_current_time = 0               special
+	udp_st_tx_elapsed_time = 0               special
+== /sys/kernel/debug/qca-nss-drv/stats/unaligned
+core: 0, total unaligned traps: 0
+core: 1, total unaligned traps: 0
+== /sys/kernel/debug/qca-nss-drv/stats/wifi
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< WIFI >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+	wifi[0]_rx_pkts                       = 0               common
+	wifi[0]_rx_queue[0]_drops             = 0               drop
+	wifi[0]_rx_queue[1]_drops             = 0               drop
+	wifi[0]_rx_queue[2]_drops             = 0               drop
+	wifi[0]_rx_queue[3]_drops             = 0               drop
+	wifi[0]_tx_pkts                       = 0               common
+	wifi[0]_tx_drops                      = 0               drop
+	wifi[0]_tx_transmit_completed         = 0               special
+	wifi[0]_tx_mgmt_received              = 0               special
+	wifi[0]_tx_mgmt_transmitted           = 0               special
+	wifi[0]_tx_mgmt_drops                 = 0               drop
+	wifi[0]_tx_mgmt_completed             = 0               special
+	wifi[0]_tx_inv_peer_enq_cnt           = 0               special
+	wifi[0]_rx_inv_peer_rcv_cnt           = 0               special
+	wifi[0]_rx_pn_check_failed            = 0               drop
+	wifi[0]_rx_pkts_deliverd              = 0               special
+	wifi[0]_rx_bytes_delivered            = 0               special
+	wifi[0]_tx_bytes_completed            = 0               special
+	wifi[0]_rx_deliver_unaligned_drop_cnt = 0               drop
+	wifi[0]_tidq_enqueue_cnt_0            = 0               special
+	wifi[0]_tidq_enqueue_cnt_1            = 0               special
+	wifi[0]_tidq_enqueue_cnt_2            = 0               special
+	wifi[0]_tidq_enqueue_cnt_3            = 0               special
+	wifi[0]_tidq_enqueue_cnt_4            = 0               special
+	wifi[0]_tidq_enqueue_cnt_5            = 0               special
+	wifi[0]_tidq_enqueue_cnt_6            = 0               special
+	wifi[0]_tidq_enqueue_cnt_7            = 0               special
+	wifi[0]_tidq_dequeue_cnt_0            = 0               special
+	wifi[0]_tidq_dequeue_cnt_1            = 0               special
+	wifi[0]_tidq_dequeue_cnt_2            = 0               special
+	wifi[0]_tidq_dequeue_cnt_3            = 0               special
+	wifi[0]_tidq_dequeue_cnt_4            = 0               special
+	wifi[0]_tidq_dequeue_cnt_5            = 0               special
+	wifi[0]_tidq_dequeue_cnt_6            = 0               special
+	wifi[0]_tidq_dequeue_cnt_7            = 0               special
+	wifi[0]_tidq_enqueue_fail_cnt_0       = 0               drop
+	wifi[0]_tidq_enqueue_fail_cnt_1       = 0               drop
+	wifi[0]_tidq_enqueue_fail_cnt_2       = 0               drop
+	wifi[0]_tidq_enqueue_fail_cnt_3       = 0               drop
+	wifi[0]_tidq_enqueue_fail_cnt_4       = 0               drop
+	wifi[0]_tidq_enqueue_fail_cnt_5       = 0               drop
+	wifi[0]_tidq_enqueue_fail_cnt_6       = 0               drop
+	wifi[0]_tidq_enqueue_fail_cnt_7       = 0               drop
+	wifi[0]_tidq_ttl_expire_cnt_0         = 0               drop
+	wifi[0]_tidq_ttl_expire_cnt_1         = 0               drop
+	wifi[0]_tidq_ttl_expire_cnt_2         = 0               drop
+	wifi[0]_tidq_ttl_expire_cnt_3         = 0               drop
+	wifi[0]_tidq_ttl_expire_cnt_4         = 0               drop
+	wifi[0]_tidq_ttl_expire_cnt_5         = 0               drop
+	wifi[0]_tidq_ttl_expire_cnt_6         = 0               drop
+	wifi[0]_tidq_ttl_expire_cnt_7         = 0               drop
+	wifi[0]_tidq_dequeue_req_cnt_0        = 0               special
+	wifi[0]_tidq_dequeue_req_cnt_1        = 0               special
+	wifi[0]_tidq_dequeue_req_cnt_2        = 0               special
+	wifi[0]_tidq_dequeue_req_cnt_3        = 0               special
+	wifi[0]_tidq_dequeue_req_cnt_4        = 0               special
+	wifi[0]_tidq_dequeue_req_cnt_5        = 0               special
+	wifi[0]_tidq_dequeue_req_cnt_6        = 0               special
+	wifi[0]_tidq_dequeue_req_cnt_7        = 0               special
+	wifi[0]_total_tidq_depth              = 0               special
+	wifi[0]_rx_htt_fetch_cnt              = 0               special
+	wifi[0]_total_tidq_bypass_cnt         = 0               special
+	wifi[0]_global_q_full_cnt             = 0               special
+	wifi[0]_tidq_full_cnt                 = 0               special
+	wifi[0]_peer_unauth_rx_pkt_drop       = 0               drop
+
+	wifi[1]_rx_pkts                       = 0               common
+	wifi[1]_rx_queue[0]_drops             = 0               drop
+	wifi[1]_rx_queue[1]_drops             = 0               drop
+	wifi[1]_rx_queue[2]_drops             = 0               drop
+	wifi[1]_rx_queue[3]_drops             = 0               drop
+	wifi[1]_tx_pkts                       = 0               common
+	wifi[1]_tx_drops                      = 0               drop
+	wifi[1]_tx_transmit_completed         = 0               special
+	wifi[1]_tx_mgmt_received              = 0               special
+	wifi[1]_tx_mgmt_transmitted           = 0               special
+	wifi[1]_tx_mgmt_drops                 = 0               drop
+	wifi[1]_tx_mgmt_completed             = 0               special
+	wifi[1]_tx_inv_peer_enq_cnt           = 0               special
+	wifi[1]_rx_inv_peer_rcv_cnt           = 0               special
+	wifi[1]_rx_pn_check_failed            = 0               drop
+	wifi[1]_rx_pkts_deliverd              = 0               special
+	wifi[1]_rx_bytes_delivered            = 0               special
+	wifi[1]_tx_bytes_completed            = 0               special
+	wifi[1]_rx_deliver_unaligned_drop_cnt = 0               drop
+	wifi[1]_tidq_enqueue_cnt_0            = 0               special
+	wifi[1]_tidq_enqueue_cnt_1            = 0               special
+	wifi[1]_tidq_enqueue_cnt_2            = 0               special
+	wifi[1]_tidq_enqueue_cnt_3            = 0               special
+	wifi[1]_tidq_enqueue_cnt_4            = 0               special
+	wifi[1]_tidq_enqueue_cnt_5            = 0               special
+	wifi[1]_tidq_enqueue_cnt_6            = 0               special
+	wifi[1]_tidq_enqueue_cnt_7            = 0               special
+	wifi[1]_tidq_dequeue_cnt_0            = 0               special
+	wifi[1]_tidq_dequeue_cnt_1            = 0               special
+	wifi[1]_tidq_dequeue_cnt_2            = 0               special
+	wifi[1]_tidq_dequeue_cnt_3            = 0               special
+	wifi[1]_tidq_dequeue_cnt_4            = 0               special
+	wifi[1]_tidq_dequeue_cnt_5            = 0               special
+	wifi[1]_tidq_dequeue_cnt_6            = 0               special
+	wifi[1]_tidq_dequeue_cnt_7            = 0               special
+	wifi[1]_tidq_enqueue_fail_cnt_0       = 0               drop
+	wifi[1]_tidq_enqueue_fail_cnt_1       = 0               drop
+	wifi[1]_tidq_enqueue_fail_cnt_2       = 0               drop
+	wifi[1]_tidq_enqueue_fail_cnt_3       = 0               drop
+	wifi[1]_tidq_enqueue_fail_cnt_4       = 0               drop
+	wifi[1]_tidq_enqueue_fail_cnt_5       = 0               drop
+	wifi[1]_tidq_enqueue_fail_cnt_6       = 0               drop
+	wifi[1]_tidq_enqueue_fail_cnt_7       = 0               drop
+	wifi[1]_tidq_ttl_expire_cnt_0         = 0               drop
+	wifi[1]_tidq_ttl_expire_cnt_1         = 0               drop
+	wifi[1]_tidq_ttl_expire_cnt_2         = 0               drop
+	wifi[1]_tidq_ttl_expire_cnt_3         = 0               drop
+	wifi[1]_tidq_ttl_expire_cnt_4         = 0               drop
+	wifi[1]_tidq_ttl_expire_cnt_5         = 0               drop
+	wifi[1]_tidq_ttl_expire_cnt_6         = 0               drop
+	wifi[1]_tidq_ttl_expire_cnt_7         = 0               drop
+	wifi[1]_tidq_dequeue_req_cnt_0        = 0               special
+	wifi[1]_tidq_dequeue_req_cnt_1        = 0               special
+	wifi[1]_tidq_dequeue_req_cnt_2        = 0               special
+	wifi[1]_tidq_dequeue_req_cnt_3        = 0               special
+	wifi[1]_tidq_dequeue_req_cnt_4        = 0               special
+	wifi[1]_tidq_dequeue_req_cnt_5        = 0               special
+	wifi[1]_tidq_dequeue_req_cnt_6        = 0               special
+	wifi[1]_tidq_dequeue_req_cnt_7        = 0               special
+	wifi[1]_total_tidq_depth              = 0               special
+	wifi[1]_rx_htt_fetch_cnt              = 0               special
+	wifi[1]_total_tidq_bypass_cnt         = 0               special
+	wifi[1]_global_q_full_cnt             = 0               special
+	wifi[1]_tidq_full_cnt                 = 0               special
+	wifi[1]_peer_unauth_rx_pkt_drop       = 0               drop
+
+	wifi[2]_rx_pkts                       = 0               common
+	wifi[2]_rx_queue[0]_drops             = 0               drop
+	wifi[2]_rx_queue[1]_drops             = 0               drop
+	wifi[2]_rx_queue[2]_drops             = 0               drop
+	wifi[2]_rx_queue[3]_drops             = 0               drop
+	wifi[2]_tx_pkts                       = 0               common
+	wifi[2]_tx_drops                      = 0               drop
+	wifi[2]_tx_transmit_completed         = 0               special
+	wifi[2]_tx_mgmt_received              = 0               special
+	wifi[2]_tx_mgmt_transmitted           = 0               special
+	wifi[2]_tx_mgmt_drops                 = 0               drop
+	wifi[2]_tx_mgmt_completed             = 0               special
+	wifi[2]_tx_inv_peer_enq_cnt           = 0               special
+	wifi[2]_rx_inv_peer_rcv_cnt           = 0               special
+	wifi[2]_rx_pn_check_failed            = 0               drop
+	wifi[2]_rx_pkts_deliverd              = 0               special
+	wifi[2]_rx_bytes_delivered            = 0               special
+	wifi[2]_tx_bytes_completed            = 0               special
+	wifi[2]_rx_deliver_unaligned_drop_cnt = 0               drop
+	wifi[2]_tidq_enqueue_cnt_0            = 0               special
+	wifi[2]_tidq_enqueue_cnt_1            = 0               special
+	wifi[2]_tidq_enqueue_cnt_2            = 0               special
+	wifi[2]_tidq_enqueue_cnt_3            = 0               special
+	wifi[2]_tidq_enqueue_cnt_4            = 0               special
+	wifi[2]_tidq_enqueue_cnt_5            = 0               special
+	wifi[2]_tidq_enqueue_cnt_6            = 0               special
+	wifi[2]_tidq_enqueue_cnt_7            = 0               special
+	wifi[2]_tidq_dequeue_cnt_0            = 0               special
+	wifi[2]_tidq_dequeue_cnt_1            = 0               special
+	wifi[2]_tidq_dequeue_cnt_2            = 0               special
+	wifi[2]_tidq_dequeue_cnt_3            = 0               special
+	wifi[2]_tidq_dequeue_cnt_4            = 0               special
+	wifi[2]_tidq_dequeue_cnt_5            = 0               special
+	wifi[2]_tidq_dequeue_cnt_6            = 0               special
+	wifi[2]_tidq_dequeue_cnt_7            = 0               special
+	wifi[2]_tidq_enqueue_fail_cnt_0       = 0               drop
+	wifi[2]_tidq_enqueue_fail_cnt_1       = 0               drop
+	wifi[2]_tidq_enqueue_fail_cnt_2       = 0               drop
+	wifi[2]_tidq_enqueue_fail_cnt_3       = 0               drop
+	wifi[2]_tidq_enqueue_fail_cnt_4       = 0               drop
+	wifi[2]_tidq_enqueue_fail_cnt_5       = 0               drop
+	wifi[2]_tidq_enqueue_fail_cnt_6       = 0               drop
+	wifi[2]_tidq_enqueue_fail_cnt_7       = 0               drop
+	wifi[2]_tidq_ttl_expire_cnt_0         = 0               drop
+	wifi[2]_tidq_ttl_expire_cnt_1         = 0               drop
+	wifi[2]_tidq_ttl_expire_cnt_2         = 0               drop
+	wifi[2]_tidq_ttl_expire_cnt_3         = 0               drop
+	wifi[2]_tidq_ttl_expire_cnt_4         = 0               drop
+	wifi[2]_tidq_ttl_expire_cnt_5         = 0               drop
+	wifi[2]_tidq_ttl_expire_cnt_6         = 0               drop
+	wifi[2]_tidq_ttl_expire_cnt_7         = 0               drop
+	wifi[2]_tidq_dequeue_req_cnt_0        = 0               special
+	wifi[2]_tidq_dequeue_req_cnt_1        = 0               special
+	wifi[2]_tidq_dequeue_req_cnt_2        = 0               special
+	wifi[2]_tidq_dequeue_req_cnt_3        = 0               special
+	wifi[2]_tidq_dequeue_req_cnt_4        = 0               special
+	wifi[2]_tidq_dequeue_req_cnt_5        = 0               special
+	wifi[2]_tidq_dequeue_req_cnt_6        = 0               special
+	wifi[2]_tidq_dequeue_req_cnt_7        = 0               special
+	wifi[2]_total_tidq_depth              = 0               special
+	wifi[2]_rx_htt_fetch_cnt              = 0               special
+	wifi[2]_total_tidq_bypass_cnt         = 0               special
+	wifi[2]_global_q_full_cnt             = 0               special
+	wifi[2]_tidq_full_cnt                 = 0               special
+	wifi[2]_peer_unauth_rx_pkt_drop       = 0               drop
+
+== /sys/kernel/debug/qca-nss-drv/stats/wifi_ext_vdev
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<< WIFI EXTENDED VAP STATS >>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+== /sys/kernel/debug/qca-nss-drv/stats/wifili
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< WIFILI >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+
+#txrx
+
+	wifili[0]_rx_msdu_error                 = 0               error
+	wifili[0]_rx_inv_peer_rcv               = 0               special
+	wifili[0]_rx_wds_srcport_exception      = 0               exception
+	wifili[0]_rx_wds_srcport_exception_fail = 0               drop
+	wifili[0]_rx_deliverd                   = 6132            special
+	wifili[0]_rx_deliver_drops              = 0               drop
+	wifili[0]_rx_intra_bss_ucast            = 0               special
+	wifili[0]_rx_intra_bss_ucast_fail       = 0               drop
+	wifili[0]_rx_intra_bss_mcast            = 208             special
+	wifili[0]_rx_intra_bss_mcast_fail       = 0               drop
+	wifili[0]_rx_sg_rcv_send                = 0               special
+	wifili[0]_rx_sg_rcv_fail                = 0               drop
+	wifili[0]_rx_mcast_echo                 = 0               special
+	wifili[0]_rx_inv_tid                    = 0               special
+	wifili[0]_stats_rx_frag_inv_sc          = 0               special
+	wifili[0]_stats_rx_frag_inv_fc          = 0               special
+	wifili[0]_stats_rx_frag_non_frag        = 0               special
+	wifili[0]_stats_rx_frag_retry           = 0               special
+	wifili[0]_stats_rx_frag_ooo             = 0               special
+	wifili[0]_stats_rx_frag_ooo_seq         = 0               special
+	wifili[0]_stats_rx_frag_all_frag_rcv    = 0               special
+	wifili[0]_stats_rx_frag_deliver         = 0               special
+	wifili[0]_tx_enqueue                    = 7911            special
+	wifili[0]_tx_enqueue_drop               = 0               drop
+	wifili[0]_tx_dequeue                    = 7911            special
+	wifili[0]_tx_hw_enqueue_fail            = 0               drop
+	wifili[0]_tx_sent_count                 = 7911            special
+
+
+#tcl ring
+
+	wifili[0]_tcl_no_hw_desc = 0               special
+	wifili[0]_tcl_ring_full  = 0               special
+	wifili[0]_tcl_ring_sent  = 7911            special
+
+
+#tcl comp
+
+	wifili[0]_tx_desc_free_inv_bufsrc    = 0               error
+	wifili[0]_tx_desc_free_inv_cookie    = 0               special
+	wifili[0]_tx_desc_free_hw_ring_empty = 0               special
+	wifili[0]_tx_desc_free_reaped        = 8460            special
+
+
+#reo ring
+
+	wifili[0]_reo_error          = 0               error
+	wifili[0]_reo_reaped         = 6128            special
+	wifili[0]_reo_inv_cookie     = 0               special
+	wifili[0]_stats_reo_frag_rcv = 0               special
+
+
+#tx sw pool
+
+	wifili[0]_tx_desc_in_use            = 1               special
+	wifili[0]_tx_desc_alloc_fail        = 0               special
+	wifili[0]_tx_desc_already_allocated = 0               special
+	wifili[0]_tx_desc_invalid_free      = 0               special
+	wifili[0]_tx_desc_free_src_fw       = 256             special
+	wifili[0]_tx_desc_free_completion   = 7654            special
+	wifili[0]_tx_desc_no_pb             = 0               special
+	wifili[0]_tx_desc_queuelimit_drop   = 0               drop
+
+
+#tx ext sw pool
+
+	wifili[0]_ext_tx_desc_in_use            = 0               special
+	wifili[0]_ext_tx_desc_alloc_fail        = 0               special
+	wifili[0]_ext_tx_desc_already_allocated = 0               special
+	wifili[0]_ext_tx_desc_invalid_free      = 0               special
+
+
+#rxdma pool
+
+	wifili[0]_rx_desc_no_pb      = 2               special
+	wifili[0]_rx_desc_alloc_fail = 66104           special
+	wifili[0]_rx_desc_in_use     = 4095            special
+
+
+#rxdma ring
+
+	wifili[0]_rxdma_hw_desc_unavailable = 0               special
+	wifili[0]_rxdma_buf_replenished     = 14868           special
+
+
+#txrx
+
+	wifili[1]_rx_msdu_error                 = 0               error
+	wifili[1]_rx_inv_peer_rcv               = 0               special
+	wifili[1]_rx_wds_srcport_exception      = 0               exception
+	wifili[1]_rx_wds_srcport_exception_fail = 0               drop
+	wifili[1]_rx_deliverd                   = 0               special
+	wifili[1]_rx_deliver_drops              = 0               drop
+	wifili[1]_rx_intra_bss_ucast            = 0               special
+	wifili[1]_rx_intra_bss_ucast_fail       = 0               drop
+	wifili[1]_rx_intra_bss_mcast            = 0               special
+	wifili[1]_rx_intra_bss_mcast_fail       = 0               drop
+	wifili[1]_rx_sg_rcv_send                = 0               special
+	wifili[1]_rx_sg_rcv_fail                = 0               drop
+	wifili[1]_rx_mcast_echo                 = 0               special
+	wifili[1]_rx_inv_tid                    = 0               special
+	wifili[1]_stats_rx_frag_inv_sc          = 0               special
+	wifili[1]_stats_rx_frag_inv_fc          = 0               special
+	wifili[1]_stats_rx_frag_non_frag        = 0               special
+	wifili[1]_stats_rx_frag_retry           = 0               special
+	wifili[1]_stats_rx_frag_ooo             = 0               special
+	wifili[1]_stats_rx_frag_ooo_seq         = 0               special
+	wifili[1]_stats_rx_frag_all_frag_rcv    = 0               special
+	wifili[1]_stats_rx_frag_deliver         = 0               special
+	wifili[1]_tx_enqueue                    = 0               special
+	wifili[1]_tx_enqueue_drop               = 0               drop
+	wifili[1]_tx_dequeue                    = 0               special
+	wifili[1]_tx_hw_enqueue_fail            = 0               drop
+	wifili[1]_tx_sent_count                 = 0               special
+
+
+#tcl ring
+
+	wifili[1]_tcl_no_hw_desc = 0               special
+	wifili[1]_tcl_ring_full  = 0               special
+	wifili[1]_tcl_ring_sent  = 0               special
+
+
+#tcl comp
+
+	wifili[1]_tx_desc_free_inv_bufsrc    = 0               error
+	wifili[1]_tx_desc_free_inv_cookie    = 0               special
+	wifili[1]_tx_desc_free_hw_ring_empty = 0               special
+	wifili[1]_tx_desc_free_reaped        = 0               special
+
+
+#reo ring
+
+	wifili[1]_reo_error          = 0               error
+	wifili[1]_reo_reaped         = 0               special
+	wifili[1]_reo_inv_cookie     = 0               special
+	wifili[1]_stats_reo_frag_rcv = 0               special
+
+
+#tx sw pool
+
+	wifili[1]_tx_desc_in_use            = 0               special
+	wifili[1]_tx_desc_alloc_fail        = 0               special
+	wifili[1]_tx_desc_already_allocated = 0               special
+	wifili[1]_tx_desc_invalid_free      = 0               special
+	wifili[1]_tx_desc_free_src_fw       = 0               special
+	wifili[1]_tx_desc_free_completion   = 0               special
+	wifili[1]_tx_desc_no_pb             = 0               special
+	wifili[1]_tx_desc_queuelimit_drop   = 0               drop
+
+
+#tx ext sw pool
+
+	wifili[1]_ext_tx_desc_in_use            = 0               special
+	wifili[1]_ext_tx_desc_alloc_fail        = 0               special
+	wifili[1]_ext_tx_desc_already_allocated = 0               special
+	wifili[1]_ext_tx_desc_invalid_free      = 0               special
+
+
+#rxdma pool
+
+	wifili[1]_rx_desc_no_pb      = 0               special
+	wifili[1]_rx_desc_alloc_fail = 0               special
+	wifili[1]_rx_desc_in_use     = 0               special
+
+
+#rxdma ring
+
+	wifili[1]_rxdma_hw_desc_unavailable = 0               special
+	wifili[1]_rxdma_buf_replenished     = 0               special
+
+
+#txrx
+
+	wifili[2]_rx_msdu_error                 = 0               error
+	wifili[2]_rx_inv_peer_rcv               = 0               special
+	wifili[2]_rx_wds_srcport_exception      = 0               exception
+	wifili[2]_rx_wds_srcport_exception_fail = 0               drop
+	wifili[2]_rx_deliverd                   = 0               special
+	wifili[2]_rx_deliver_drops              = 0               drop
+	wifili[2]_rx_intra_bss_ucast            = 0               special
+	wifili[2]_rx_intra_bss_ucast_fail       = 0               drop
+	wifili[2]_rx_intra_bss_mcast            = 0               special
+	wifili[2]_rx_intra_bss_mcast_fail       = 0               drop
+	wifili[2]_rx_sg_rcv_send                = 0               special
+	wifili[2]_rx_sg_rcv_fail                = 0               drop
+	wifili[2]_rx_mcast_echo                 = 0               special
+	wifili[2]_rx_inv_tid                    = 0               special
+	wifili[2]_stats_rx_frag_inv_sc          = 0               special
+	wifili[2]_stats_rx_frag_inv_fc          = 0               special
+	wifili[2]_stats_rx_frag_non_frag        = 0               special
+	wifili[2]_stats_rx_frag_retry           = 0               special
+	wifili[2]_stats_rx_frag_ooo             = 0               special
+	wifili[2]_stats_rx_frag_ooo_seq         = 0               special
+	wifili[2]_stats_rx_frag_all_frag_rcv    = 0               special
+	wifili[2]_stats_rx_frag_deliver         = 0               special
+	wifili[2]_tx_enqueue                    = 0               special
+	wifili[2]_tx_enqueue_drop               = 0               drop
+	wifili[2]_tx_dequeue                    = 0               special
+	wifili[2]_tx_hw_enqueue_fail            = 0               drop
+	wifili[2]_tx_sent_count                 = 0               special
+
+
+#tcl ring
+
+	wifili[2]_tcl_no_hw_desc = 0               special
+	wifili[2]_tcl_ring_full  = 0               special
+	wifili[2]_tcl_ring_sent  = 0               special
+
+
+#tcl comp
+
+	wifili[2]_tx_desc_free_inv_bufsrc    = 0               error
+	wifili[2]_tx_desc_free_inv_cookie    = 0               special
+	wifili[2]_tx_desc_free_hw_ring_empty = 0               special
+	wifili[2]_tx_desc_free_reaped        = 0               special
+
+
+#reo ring
+
+	wifili[2]_reo_error          = 0               error
+	wifili[2]_reo_reaped         = 0               special
+	wifili[2]_reo_inv_cookie     = 0               special
+	wifili[2]_stats_reo_frag_rcv = 0               special
+
+
+#tx sw pool
+
+	wifili[2]_tx_desc_in_use            = 0               special
+	wifili[2]_tx_desc_alloc_fail        = 0               special
+	wifili[2]_tx_desc_already_allocated = 0               special
+	wifili[2]_tx_desc_invalid_free      = 0               special
+	wifili[2]_tx_desc_free_src_fw       = 0               special
+	wifili[2]_tx_desc_free_completion   = 0               special
+	wifili[2]_tx_desc_no_pb             = 0               special
+	wifili[2]_tx_desc_queuelimit_drop   = 0               drop
+
+
+#tx ext sw pool
+
+	wifili[2]_ext_tx_desc_in_use            = 0               special
+	wifili[2]_ext_tx_desc_alloc_fail        = 0               special
+	wifili[2]_ext_tx_desc_already_allocated = 0               special
+	wifili[2]_ext_tx_desc_invalid_free      = 0               special
+
+
+#rxdma pool
+
+	wifili[2]_rx_desc_no_pb      = 0               special
+	wifili[2]_rx_desc_alloc_fail = 0               special
+	wifili[2]_rx_desc_in_use     = 0               special
+
+
+#rxdma ring
+
+	wifili[2]_rxdma_hw_desc_unavailable = 0               special
+	wifili[2]_rxdma_buf_replenished     = 0               special
+
+
+#wbm ring
+
+	wifili_wbm_ie_local_alloc_fail = 0               error
+	wifili_wbm_src_dma             = 47              special
+	wifili_wbm_src_dma_code_inv    = 0               special
+	wifili_wbm_src_reo             = 503             special
+	wifili_wbm_src_reo_code_nullq  = 3               special
+	wifili_wbm_src_reo_code_inv    = 499             error
+	wifili_wbm_src_inv             = 0               error
+
+
+#txrx
+
+	wifili[0]_rx_msdu_error                 = 0               error
+	wifili[0]_rx_inv_peer_rcv               = 0               special
+	wifili[0]_rx_wds_srcport_exception      = 0               exception
+	wifili[0]_rx_wds_srcport_exception_fail = 0               drop
+	wifili[0]_rx_deliverd                   = 0               special
+	wifili[0]_rx_deliver_drops              = 0               drop
+	wifili[0]_rx_intra_bss_ucast            = 0               special
+	wifili[0]_rx_intra_bss_ucast_fail       = 0               drop
+	wifili[0]_rx_intra_bss_mcast            = 0               special
+	wifili[0]_rx_intra_bss_mcast_fail       = 0               drop
+	wifili[0]_rx_sg_rcv_send                = 0               special
+	wifili[0]_rx_sg_rcv_fail                = 0               drop
+	wifili[0]_rx_mcast_echo                 = 0               special
+	wifili[0]_rx_inv_tid                    = 0               special
+	wifili[0]_stats_rx_frag_inv_sc          = 0               special
+	wifili[0]_stats_rx_frag_inv_fc          = 0               special
+	wifili[0]_stats_rx_frag_non_frag        = 0               special
+	wifili[0]_stats_rx_frag_retry           = 0               special
+	wifili[0]_stats_rx_frag_ooo             = 0               special
+	wifili[0]_stats_rx_frag_ooo_seq         = 0               special
+	wifili[0]_stats_rx_frag_all_frag_rcv    = 0               special
+	wifili[0]_stats_rx_frag_deliver         = 0               special
+	wifili[0]_tx_enqueue                    = 221             special
+	wifili[0]_tx_enqueue_drop               = 0               drop
+	wifili[0]_tx_dequeue                    = 221             special
+	wifili[0]_tx_hw_enqueue_fail            = 0               drop
+	wifili[0]_tx_sent_count                 = 221             special
+
+
+#tcl ring
+
+	wifili[0]_tcl_no_hw_desc = 0               special
+	wifili[0]_tcl_ring_full  = 0               special
+	wifili[0]_tcl_ring_sent  = 221             special
+
+
+#tcl comp
+
+	wifili[0]_tx_desc_free_inv_bufsrc    = 0               error
+	wifili[0]_tx_desc_free_inv_cookie    = 0               special
+	wifili[0]_tx_desc_free_hw_ring_empty = 0               special
+	wifili[0]_tx_desc_free_reaped        = 221             special
+
+
+#reo ring
+
+	wifili[0]_reo_error          = 0               error
+	wifili[0]_reo_reaped         = 0               special
+	wifili[0]_reo_inv_cookie     = 0               special
+	wifili[0]_stats_reo_frag_rcv = 0               special
+
+
+#tx sw pool
+
+	wifili[0]_tx_desc_in_use            = 0               special
+	wifili[0]_tx_desc_alloc_fail        = 0               special
+	wifili[0]_tx_desc_already_allocated = 0               special
+	wifili[0]_tx_desc_invalid_free      = 0               special
+	wifili[0]_tx_desc_free_src_fw       = 221             special
+	wifili[0]_tx_desc_free_completion   = 0               special
+	wifili[0]_tx_desc_no_pb             = 0               special
+	wifili[0]_tx_desc_queuelimit_drop   = 0               drop
+
+
+#tx ext sw pool
+
+	wifili[0]_ext_tx_desc_in_use            = 0               special
+	wifili[0]_ext_tx_desc_alloc_fail        = 0               special
+	wifili[0]_ext_tx_desc_already_allocated = 0               special
+	wifili[0]_ext_tx_desc_invalid_free      = 0               special
+
+
+#rxdma pool
+
+	wifili[0]_rx_desc_no_pb      = 2               special
+	wifili[0]_rx_desc_alloc_fail = 0               special
+	wifili[0]_rx_desc_in_use     = 4095            special
+
+
+#rxdma ring
+
+	wifili[0]_rxdma_hw_desc_unavailable = 0               special
+	wifili[0]_rxdma_buf_replenished     = 8190            special
+
+
+#wbm ring
+
+	wifili_wbm_ie_local_alloc_fail = 0               error
+	wifili_wbm_src_dma             = 0               special
+	wifili_wbm_src_dma_code_inv    = 0               special
+	wifili_wbm_src_reo             = 0               special
+	wifili_wbm_src_reo_code_nullq  = 0               special
+	wifili_wbm_src_reo_code_inv    = 0               error
+	wifili_wbm_src_inv             = 0               error
+
+
+#wbm ring
+
+	wifili_wbm_ie_local_alloc_fail = 0               error
+	wifili_wbm_src_dma             = 0               special
+	wifili_wbm_src_dma_code_inv    = 0               special
+	wifili_wbm_src_reo             = 0               special
+	wifili_wbm_src_reo_code_nullq  = 0               special
+	wifili_wbm_src_reo_code_inv    = 0               error
+	wifili_wbm_src_inv             = 0               error
+
+
+===== nss-meminfo =====
+drwxr-xr-x    6 root     root             0 Dec 24 12:57 .
+drwx------   27 root     root             0 Jan  1  1970 ..
+drwxr-xr-x    2 root     root             0 Dec 24 12:57 logs
+drwxr-xr-x    2 root     root             0 Dec 24 12:57 meminfo
+drwxr-xr-x    5 root     root             0 Dec 24 12:57 stats
+drwxr-xr-x   10 root     root             0 Dec 24 12:57 strings
+
+===== nss-other-debugfs =====
+/sys/kernel/debug/qca-nss-drv
+/sys/kernel/debug/qca-nss-drv/meminfo
+/sys/kernel/debug/qca-nss-drv/meminfo/core0
+/sys/kernel/debug/qca-nss-drv/strings
+/sys/kernel/debug/qca-nss-drv/strings/lso_rx
+/sys/kernel/debug/qca-nss-drv/strings/udp_st
+/sys/kernel/debug/qca-nss-drv/strings/wifi_mesh
+/sys/kernel/debug/qca-nss-drv/strings/wifili
+/sys/kernel/debug/qca-nss-drv/strings/gre
+/sys/kernel/debug/qca-nss-drv/strings/l2tpv2
+/sys/kernel/debug/qca-nss-drv/strings/pppoe
+/sys/kernel/debug/qca-nss-drv/strings/pptp
+/sys/kernel/debug/qca-nss-drv/strings/ipv6_reasm
+/sys/kernel/debug/qca-nss-drv/strings/ipv6
+/sys/kernel/debug/qca-nss-drv/strings/ipv4_reasm
+/sys/kernel/debug/qca-nss-drv/strings/eth_rx
+/sys/kernel/debug/qca-nss-drv/strings/ipv4
+/sys/kernel/debug/qca-nss-drv/strings/drv
+/sys/kernel/debug/qca-nss-drv/strings/n2h
+/sys/kernel/debug/qca-nss-drv/strings/common_node_stats
+/sys/kernel/debug/qca-nss-drv/logs
+/sys/kernel/debug/qca-nss-drv/logs/core0
+/sys/kernel/debug/qca-nss-drv/stats
+/sys/kernel/debug/qca-nss-drv/stats/lso_rx
+/sys/kernel/debug/qca-nss-drv/stats/cpu_load_ubi
+/sys/kernel/debug/qca-nss-drv/stats/udp_st
+/sys/kernel/debug/qca-nss-drv/stats/wifi_mesh
+/sys/kernel/debug/qca-nss-drv/stats/wifi_ext_vdev
+/sys/kernel/debug/qca-nss-drv/stats/wifili
+/sys/kernel/debug/qca-nss-drv/stats/wifi
+/sys/kernel/debug/qca-nss-drv/stats/gre
+/sys/kernel/debug/qca-nss-drv/stats/l2tpv2
+/sys/kernel/debug/qca-nss-drv/stats/pppoe
+/sys/kernel/debug/qca-nss-drv/stats/pptp
+/sys/kernel/debug/qca-nss-drv/stats/ipv6_reasm
+/sys/kernel/debug/qca-nss-drv/stats/ipv6
+/sys/kernel/debug/qca-nss-drv/stats/ipv4_reasm
+/sys/kernel/debug/qca-nss-drv/stats/eth_rx
+/sys/kernel/debug/qca-nss-drv/stats/ipv4
+/sys/kernel/debug/qca-nss-drv/stats/unaligned
+/sys/kernel/debug/qca-nss-drv/stats/n2h
+/sys/kernel/debug/qca-nss-drv/stats/dynamic_if
+/sys/kernel/debug/qca-nss-drv/stats/project
+/sys/kernel/debug/qca-nss-drv/stats/gmac
+/sys/kernel/debug/qca-nss-drv/stats/drv
+
+===== dmesg-nss =====
+
+===== uci-nss-ecm =====
+nss.qca_nss_0=nss_firmware
+nss.qca_nss_1=nss_firmware
+nss.@general[0]=general
+nss.@general[0].enable_rps='1'
+---- ecm
+ecm.global=ecm
+ecm.global.acceleration_engine='auto'
+
+===== sysctl-nss-ecm-conf =====
+# nf_conntrack_tcp_no_window_check is 0 by default, set it to 1
+net.netfilter.nf_conntrack_tcp_no_window_check=1
+net.bridge.bridge-nf-call-iptables=1
+net.bridge.bridge-nf-call-ip6tables=1
+net.netfilter.nf_conntrack_max=16384
+---- qca-nss-drv.conf
+# Default Number of connection configuration
+dev.nss.ipv4cfg.ipv4_conn=4096
+dev.nss.ipv6cfg.ipv6_conn=4096
+
+
+===== ecm-debugfs =====
+ecm_classifier_default
+ecm_classifier_dscp
+ecm_conntrack_notifier
+ecm_db
+ecm_nss_bond_notifier
+ecm_nss_ipv4
+ecm_nss_ipv6
+ecm_state
+front_end_ipv4_stop
+front_end_ipv6_stop
+/sys/kernel/debug/ecm/ecm_nss_ipv4/accelerated_count = 0
+/sys/kernel/debug/ecm/ecm_nss_ipv6/accelerated_count = 0
+/sys/kernel/debug/ecm/ecm_db/connection_count = 0
+/sys/kernel/debug/ecm/ecm_state/state_file_output_mask
+/sys/kernel/debug/ecm/ecm_state/state_dev_major
+/sys/kernel/debug/ecm/ecm_conntrack_notifier/stop
+/sys/kernel/debug/ecm/ecm_nss_ipv6/ecm_nss_multicast_ipv6_stop
+/sys/kernel/debug/ecm/ecm_nss_ipv6/multicast_accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv6/non_ported_accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv6/vlan_passthrough_set
+/sys/kernel/debug/ecm/ecm_nss_ipv6/stats_request_counter
+/sys/kernel/debug/ecm/ecm_nss_ipv6/tcp_accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv6/udp_accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv6/decel_cmd_avg_millis
+/sys/kernel/debug/ecm/ecm_nss_ipv6/accel_cmd_avg_millis
+/sys/kernel/debug/ecm/ecm_nss_ipv6/accel_limit_mode
+/sys/kernel/debug/ecm/ecm_nss_ipv6/pending_decel_count
+/sys/kernel/debug/ecm/ecm_nss_ipv6/pending_accel_count
+/sys/kernel/debug/ecm/ecm_nss_ipv6/accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv6/nack_limit_default
+/sys/kernel/debug/ecm/ecm_nss_ipv6/driver_fail_limit_default
+/sys/kernel/debug/ecm/ecm_nss_ipv6/no_action_limit_default
+/sys/kernel/debug/ecm/front_end_ipv6_stop
+/sys/kernel/debug/ecm/ecm_nss_ipv4/ecm_nss_multicast_ipv4_stop
+/sys/kernel/debug/ecm/ecm_nss_ipv4/multicast_accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv4/non_ported_accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv4/vlan_passthrough_set
+/sys/kernel/debug/ecm/ecm_nss_ipv4/stats_request_counter
+/sys/kernel/debug/ecm/ecm_nss_ipv4/tcp_accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv4/udp_accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv4/decel_cmd_avg_millis
+/sys/kernel/debug/ecm/ecm_nss_ipv4/accel_cmd_avg_millis
+/sys/kernel/debug/ecm/ecm_nss_ipv4/accel_limit_mode
+/sys/kernel/debug/ecm/ecm_nss_ipv4/pending_decel_count
+/sys/kernel/debug/ecm/ecm_nss_ipv4/pending_accel_count
+/sys/kernel/debug/ecm/ecm_nss_ipv4/accelerated_count
+/sys/kernel/debug/ecm/ecm_nss_ipv4/nack_limit_default
+/sys/kernel/debug/ecm/ecm_nss_ipv4/driver_fail_limit_default
+/sys/kernel/debug/ecm/ecm_nss_ipv4/no_action_limit_default
+/sys/kernel/debug/ecm/front_end_ipv4_stop
+/sys/kernel/debug/ecm/ecm_nss_bond_notifier/stop
+/sys/kernel/debug/ecm/ecm_classifier_dscp/enabled
+/sys/kernel/debug/ecm/ecm_classifier_default/accel_delay_pkts
+/sys/kernel/debug/ecm/ecm_classifier_default/accel_mode
+/sys/kernel/debug/ecm/ecm_classifier_default/enabled
+/sys/kernel/debug/ecm/ecm_db/delete
+/sys/kernel/debug/ecm/ecm_db/defunct_all
+/sys/kernel/debug/ecm/ecm_db/iface_count
+/sys/kernel/debug/ecm/ecm_db/node_count
+/sys/kernel/debug/ecm/ecm_db/mapping_count
+/sys/kernel/debug/ecm/ecm_db/host_count
+/sys/kernel/debug/ecm/ecm_db/connection_count_simple
+/sys/kernel/debug/ecm/ecm_db/connection_count
+
+===== nss-firmware =====
+-rwxrwxr-x    1 root     root        761852 Dec 24 10:43 /lib/firmware/qca-nss0-retail.bin
+lrwxrwxrwx    1 root     root            21 Dec 24 12:49 /lib/firmware/qca-nss0.bin -> ./qca-nss0-retail.bin
+-rwxrwxr-x    1 root     root        761852 Dec 24 10:43 qca-nss0-retail.bin
+lrwxrwxrwx    1 root     root            21 Dec 24 12:49 qca-nss0.bin -> ./qca-nss0-retail.bin
+
+===== nss-dp-interfaces =====
+bond0
+bonding_masters
+br-lan
+br-miot
+eth0
+eth0.1
+eth1
+eth1.2
+eth1.3
+eth1.4
+gre0
+gretap0
+ip6gre0
+ip6tnl0
+lo
+soc0
+soc1
+wifi0
+wifi1
+wl0
+wl1
+wl13
+-- eth0
+0
+-- eth1
+2
+
+===== skb-recycler-again =====

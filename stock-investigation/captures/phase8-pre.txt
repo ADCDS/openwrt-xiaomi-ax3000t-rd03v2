@@ -1,0 +1,26 @@
+=== PRE-LOAD baseline ===
+MemFree:           13264 kB
+MemAvailable:      65280 kB
+Cached:            53608 kB
+SwapCached:            0 kB
+Slab:              59132 kB
+SReclaimable:       8284 kB
+SUnreclaim:        50848 kB
+
+	n2h_rx_pkts                       = 7528206         common
+	n2h_pbuf_def_total_count          = 14884           special
+	n2h_pbuf_def_free_count           = 6692            special
+	n2h_payload_alloc_fails           = 99              special
+
+	wifili[0]_rx_deliverd                   = 7240            special
+	wifili[0]_tx_sent_count                 = 9413            special
+	wifili[0]_tx_desc_alloc_fail        = 0               special
+	wifili[0]_rx_desc_alloc_fail = 71158           special
+	wifili[1]_rx_deliverd                   = 0               special
+	wifili[1]_tx_sent_count                 = 0               special
+	wifili[1]_tx_desc_alloc_fail        = 0               special
+	wifili[1]_rx_desc_alloc_fail = 0               special
+	wifili[0]_rx_deliverd                   = 166             special
+	wifili[0]_tx_sent_count                 = 303             special
+	wifili[0]_tx_desc_alloc_fail        = 0               special
+	wifili[0]_rx_desc_alloc_fail = 30              special

@@ -1,0 +1,294 @@
+
+===== marker =====
+Tue Sep 15 13:11:01 BRT 2026
+uptime: 757137.30 1482510.84
+0.00 0.00 0.00 1/86 17777
+Linux rd03v2-ap 6.12.94 #0 SMP Thu Jul  9 11:01:03 2026 aarch64 GNU/Linux
+DISTRIB_ID='OpenWrt'
+DISTRIB_RELEASE='SNAPSHOT'
+DISTRIB_REVISION='r35297-25ee12629e'
+DISTRIB_TARGET='qualcommax/ipq50xx'
+DISTRIB_ARCH='aarch64_cortex-a53'
+DISTRIB_DESCRIPTION='OpenWrt SNAPSHOT r35297-25ee12629e'
+DISTRIB_TAINTS='no-all'
+
+===== meminfo =====
+MemTotal:         175760 kB
+MemFree:           46244 kB
+MemAvailable:      32304 kB
+Buffers:               0 kB
+Cached:            15696 kB
+SwapCached:            0 kB
+Active:            13360 kB
+Inactive:           7296 kB
+Active(anon):        920 kB
+Inactive(anon):     4372 kB
+Active(file):      12440 kB
+Inactive(file):     2924 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                 0 kB
+Writeback:             0 kB
+AnonPages:          4924 kB
+Mapped:             5128 kB
+Shmem:               332 kB
+KReclaimable:       5900 kB
+Slab:              67392 kB
+SReclaimable:       5900 kB
+SUnreclaim:        61492 kB
+KernelStack:        1384 kB
+PageTables:          732 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:       87880 kB
+Committed_AS:      12516 kB
+VmallocTotal:   261087232 kB
+VmallocUsed:       12176 kB
+VmallocChunk:          0 kB
+Percpu:              256 kB
+
+===== zone-managed =====
+Node 0, zone      DMA
+        spanned  65536
+        present  65536
+        managed  43940
+  start_pfn:           262144
+Node 0, zone    DMA32
+        spanned  0
+        present  0
+        managed  0
+Node 0, zone   Normal
+        spanned  0
+        present  0
+        managed  0
+Node 0, zone  Movable
+        spanned  0
+        present  0
+        managed  0
+
+===== dmesg-memory =====
+[    0.000000] OF: reserved mem: 0x0000000040000000..0x00000000407fffff (8192 KiB) nomap non-reusable memory@40000000
+[    0.000000] OF: reserved mem: 0x000000004a400000..0x000000004a7fffff (4096 KiB) nomap non-reusable tz_apps@4a400000
+[    0.000000] OF: reserved mem: 0x000000004a800000..0x000000004a9fffff (2048 KiB) nomap non-reusable bootloader@4a800000
+[    0.000000] OF: reserved mem: 0x000000004aa00000..0x000000004aafffff (1024 KiB) nomap non-reusable sbl@4aa00000
+[    0.000000] OF: reserved mem: 0x000000004ab00000..0x000000004abfffff (1024 KiB) nomap non-reusable smem@4ab00000
+[    0.000000] OF: reserved mem: 0x000000004ac00000..0x000000004adfffff (2048 KiB) nomap non-reusable tz@4ac00000
+[    0.000000] OF: reserved mem: 0x000000004b000000..0x000000004dffffff (49152 KiB) nomap non-reusable wcss@4b000000
+[    0.000000] OF: reserved mem: 0x000000004b000000..0x000000004dffffff (49152 KiB) nomap non-reusable q6_mem_regions@4b000000
+[    0.000000] OF: reserved mem: OVERLAP DETECTED!
+[    0.014930] Memory: 173220K/262144K available (8768K kernel code, 906K rwdata, 2808K rodata, 960K init, 288K bss, 87344K reserved, 0K cma-reserved)
+[    2.122882] remoteproc remoteproc0: cd00000.remoteproc is available
+[    2.138486] remoteproc remoteproc1: pd-1 is available
+[    2.149296] remoteproc remoteproc2: pd-2 is available
+[    2.159924] remoteproc remoteproc3: pd-3 is available
+[    3.603958] ubi0: available PEBs: 0, total reserved PEBs: 652, PEBs reserved for bad PEB handling: 20
+[    3.657537] Freeing unused kernel memory: 960K
+[   13.307110] UBIFS (ubi0:1): reserved for root: 3244587 bytes (3168 KiB)
+
+===== iomem =====
+40800000-4a3fffff : System RAM
+  41000000-41b6ffff : Kernel code
+  41c60000-41d9ffff : Kernel data
+4ae00000-4affffff : System RAM
+4e000000-4fffffff : System RAM
+
+===== reserved-memory-dt =====
+-- bootloader@4a800000
+-- memory@40000000
+-- q6_mem_regions@4b000000
+-- sbl@4aa00000
+-- smem@4ab00000
+-- tz@4ac00000
+-- tz_apps@4a400000
+-- wcss@4b000000
+
+===== vm-sysctls =====
+vm.min_free_kbytes = 16384
+vm.watermark_scale_factor = 10
+vm.overcommit_memory = 0
+vm.lowmem_reserve_ratio = 256	256	32	0
+vm.panic_on_oom = 0
+vm.swappiness = 60
+vm.vfs_cache_pressure = 100
+
+===== zone-watermarks =====
+Node 0, zone      DMA
+        min      4096
+        low      5120
+        high     6144
+        present  65536
+        managed  43940
+      nr_zone_inactive_anon 1093
+      nr_zone_active_anon 230
+      nr_zone_inactive_file 731
+      nr_zone_active_file 3110
+      nr_zone_unevictable 0
+      nr_zone_write_pending 0
+              high:  2560
+              high:  2746
+Node 0, zone    DMA32
+        min      0
+        low      0
+        high     0
+        present  0
+        managed  0
+Node 0, zone   Normal
+        min      0
+        low      0
+        high     0
+        present  0
+        managed  0
+Node 0, zone  Movable
+        min      32
+        low      32
+        high     32
+        present  0
+        managed  0
+
+===== slabinfo-top =====
+no /proc/slabinfo
+(sysfs slab present)
+
+===== module-memory =====
+modules=87 total=5177344 bytes (4.94 MiB)
+     12.00 KiB  xhci_plat_hcd
+     16.00 KiB  xhci_pci
+    136.00 KiB  xhci_hcd
+     16.00 KiB  udp_tunnel
+     12.00 KiB  udp_diag
+     48.00 KiB  tun
+     12.00 KiB  tcp_diag
+     12.00 KiB  slhc
+     12.00 KiB  sha512_generic
+     12.00 KiB  sha3_generic
+     12.00 KiB  seqiv
+     12.00 KiB  raw_diag
+     12.00 KiB  qrtr_smd
+     24.00 KiB  qrtr
+     20.00 KiB  qmi_helpers
+    504.00 KiB  qca_ssdk
+     12.00 KiB  qca_nss_pppoe
+    312.00 KiB  qca_nss_drv
+     40.00 KiB  qca_nss_dp
+     24.00 KiB  pptp
+
+===== vmallocinfo =====
+vmalloc total = 172470272 bytes (164.48 MiB)
+non-ioremap = 89.04 MiB
+-- by caller (top 30) --
+    79110144  ioremap | __ioremap_prot+0x58/0xa0
+    45056000  vm_area | unpurged vm_area
+    19787776  dma-coherent | dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+     9043968  vmap | paging_init+0x28c/0x318
+     6279168  vmalloc | execmem_alloc+0x10/0x1c
+     2949120  vmap | paging_init+0x2a4/0x318
+     1863680  vmalloc | kernel_clone+0x4c/0x3dc
+     1314816  vmap | paging_init+0x2f4/0x318
+     1310720  vmalloc | zstd_comp_init+0x34/0x7c
+      655360  vmap | paging_init+0x2d8/0x318
+      532480  vmalloc | xz_dec_lzma2_create+0x70/0x88
+      528384  vmalloc | nf_flow_rule_route_inet+0x28/0x60 [nf_flow_table_inet]
+      327680  vmap | paging_init+0x2bc/0x318
+      294912  vmalloc | p_lzma_malloc+0x18/0x38
+      266240  vmalloc | ecm_db_node_init+0x38/0xc0 [ecm]
+      266240  vmalloc | ecm_db_mapping_init+0x38/0xc0 [ecm]
+      266240  vmalloc | ecm_db_host_init+0x38/0xc0 [ecm]
+      266240  vmalloc | ecm_db_connection_init+0x80/0x1ac [ecm]
+      266240  vmalloc | ecm_db_connection_init+0x60/0x1ac [ecm]
+      167936  vmalloc | pcpu_mem_zalloc+0x34/0x74
+      163840  vmalloc | pcpu_get_vm_areas+0x0/0xf00
+      151552  vmalloc | deflate_comp_init+0x28/0x80
+      135168  vmalloc | ubi_attach_mtd_dev+0x414/0xaac
+      135168  vmalloc | ecm_db_node_init+0x48/0xc0 [ecm]
+      135168  vmalloc | ecm_db_mapping_init+0x48/0xc0 [ecm]
+      135168  vmalloc | ecm_db_host_init+0x48/0xc0 [ecm]
+      135168  vmalloc | ecm_db_connection_init+0x90/0x1ac [ecm]
+      135168  vmalloc | ecm_db_connection_init+0x70/0x1ac [ecm]
+      131072  vmalloc | ubifs_mount_orphans+0x29c/0x3e0
+      131072  vmalloc | ubifs_mount+0xff8/0x1460
+
+===== ath11k-dma =====
+0x00000000e8751910-0x000000005f4e39a4    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x000000004915c08c-0x0000000052562e81    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x000000006b348fdf-0x0000000027a2f5f8    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x0000000061366316-0x00000000f4b3d07f   12288 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x000000001a54b894-0x0000000075d7fd92    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x000000008b06625a-0x000000001e8ae445    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x00000000cb75c2b7-0x000000008ad1c663    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x00000000a2822fea-0x00000000dfd5ea3f    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x00000000f57310a6-0x00000000aadefcae    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x000000008725a434-0x0000000085984204    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x0000000051613304-0x000000000e12429d   40960 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x00000000533d717b-0x00000000f2f5b85c    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x0000000035e34e1d-0x0000000001c6bdb9    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x000000003fd6b217-0x0000000051705c9a   16384 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x0000000051705c9a-0x0000000055f65812   12288 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x000000006870fe79-0x000000006024ba47    8192 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x0000000063de517f-0x00000000c2bbd7d0   24576 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x0000000098462229-0x00000000c0c0d433   12288 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x00000000cf0587de-0x00000000e2d4a867   12288 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+0x00000000c2f5d2ca-0x00000000704da33e   16384 dma_common_contiguous_remap+0x98/0xd8 dma-coherent
+
+===== cma =====
+
+===== buddyinfo =====
+Node 0, zone      DMA    140     52     25    485    172     35      7      7      2      1      1 
+
+===== wifi-state =====
+	Interface phy1-ap0
+		ssid <redacted-ssid>
+		type AP
+		channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+	Interface phy0-ap1
+		ssid <redacted-ssid>
+		type AP
+		channel 11 (2462 MHz), width: 20 MHz, center1: 2462 MHz
+	Interface phy0-ap0
+		ssid <redacted-ssid>
+		type AP
+		channel 11 (2462 MHz), width: 20 MHz, center1: 2462 MHz
+-- phy0
+-- phy1
+
+===== stations =====
+-- phy0-ap0: 0
+-- phy0-ap1: 1
+-- phy1-ap0: 1
+
+===== lsmod-count =====
+87
+
+===== processes-rss =====
+sum VmRSS = 29680 kB
+
+===== accounting =====
+MemTotal        175760 kB
+  MemFree        39524 kB
+  Buffers            0 kB
+  Cached         15700 kB
+  AnonPages       4992 kB
+  Slab           67636 kB
+  KernelStack     1388 kB
+  PageTables       748 kB
+  ---------------------
+  accounted     129988 kB
+  UNACCOUNTED    45772 kB
+
+===== ethtool-pause-and-mac =====
+== eth0
+Pause parameters for eth0:
+Autonegotiate:	on
+RX:		off
+TX:		off
+
+== eth1
+Pause parameters for eth1:
+Autonegotiate:	on
+RX:		off
+TX:		off
+
+no devmem

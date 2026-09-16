@@ -1,0 +1,40 @@
+#!/bin/sh
+# rsh - run a command (or a piped script) on the live stock RD03v2 bench unit.
+#
+# Read-only by policy: nothing in scripts/ may write flash (no mtd write,
+# nvram set/commit, fw_setenv, or UCI commit).
+#
+#   ./rsh 'cat /proc/meminfo'
+#   ./rsh < phase1.sh > ../raw/phase1.txt
+#
+# Host ssh_config is bypassed with -F /dev/null because the bench host has a
+# root-owned drop-in with bad permissions that makes ssh bail out.
+set -eu
+
+# Credentials come from ../.bench-env (gitignored) or the environment, never
+# from this file.
+envfile="$(dirname "$0")/../.bench-env"
+[ -f "$envfile" ] && . "$envfile"
+
+: "${STOCK_HOST:=192.168.31.1}"
+: "${STOCK_USER:=root}"
+if [ -z "${STOCK_PASS:-}" ]; then
+  echo "$(basename "$0"): STOCK_PASS is not set; put it in stock-investigation/.bench-env" >&2
+  exit 2
+fi
+
+SSH_OPTS="-F /dev/null
+  -o HostKeyAlgorithms=+ssh-rsa
+  -o PubkeyAcceptedAlgorithms=+ssh-rsa
+  -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile=/dev/null
+  -o LogLevel=ERROR
+  -o ConnectTimeout=10
+  -o ServerAliveInterval=15"
+
+if [ "$#" -gt 0 ]; then
+  exec sshpass -p "$STOCK_PASS" ssh $SSH_OPTS "$STOCK_USER@$STOCK_HOST" "$@"
+else
+  # no args: feed stdin to a remote shell
+  exec sshpass -p "$STOCK_PASS" ssh $SSH_OPTS "$STOCK_USER@$STOCK_HOST" 'sh -s'
+fi

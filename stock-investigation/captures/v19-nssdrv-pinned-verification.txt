@@ -1,0 +1,98 @@
+=== Finding #1: driver facts verified at the EXACT pinned revision ===
+
+The OpenWrt nss_packages feed pins qca-nss-drv at:
+    PKG_SOURCE_VERSION := d5ee67b
+    PKG_SOURCE_DATE    := 2024-11-13
+    PKG_SOURCE_URL     := https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-drv.git
+
+This matters: d5ee67b is NOT on branch NHSS.QSDK.12.5 (whose head is 53a0dc1,
+2024-04-06) and is NOT present in a depth-1 clone of that branch. An earlier
+verification pass read 53a0dc1 and called it "12.5"; that was a neighbouring
+revision, not the one this build compiles. Re-verified against the pin itself:
+
+    git clone <url> && git checkout d5ee67b
+    d5ee67b 2024-08-07 [qca-nss-drv] Add support for clearing N2H stats
+
+All five load-bearing facts hold at d5ee67b, verbatim:
+
+1. extra_pbuf_core0 pages are HOST memory, not the nss@40000000 carve-out
+     nss_n2h.c:1233   void *kern_addr = kzalloc(PAGE_SIZE, GFP_ATOMIC);
+     nss_n2h.c:1241   dma_map_single(nss_ctx->dev, kern_addr, PAGE_SIZE, DMA_TO_DEVICE);
+     nss_n2h.c:1344   * Add extra NSS bufs from host memory
+     nss_core.h:494   uint32_t buf_sz_allocated; /* size of bufs allocated from host */
+
+2. extra_pbuf_core0 is WRITE-ONCE per boot
+     nss_n2h.c:1364-1367
+       if (nss_ctx->buf_sz_allocated) {
+               nss_n2h_core0_add_buf_pool_size = nss_ctx->buf_sz_allocated;
+               return -EPERM;
+       }
+   Note the assignment BEFORE the error return: a failed second write still
+   leaves the sysctl reading the old value, so a readback is not proof of a
+   successful write. (Same guard for core1 at :1403.)
+
+3. The allocation loop can panic the box
+     nss_n2h.c:1235   BUG_ON(!page_count);
+     exports/nss_n2h.h:30  #define MAX_PAGES_PER_MSG 32
+   196 pages / 32 per message = 7 messages, i.e. 7 separate BUG_ON exposure
+   points. Argues against pairing this with finding #2's min_free_kbytes cut.
+
+4. The knob is a BYTE count, not a buffer or page count
+     nss_n2h.c:1216   int num_pages = ALIGN(buf_pool_size, PAGE_SIZE)/PAGE_SIZE;
+   802816 / 4096 = 196 pages exactly = 784.0 KiB exactly.
+
+5. Profile constants (nss_hlos_if.h)
+     LOW    : NSS_DEFAULT_NUM_CONN 512   + NSS_LOW_MEM_EMPTY_POOL_BUF_SZ 4096
+     MEDIUM : NSS_DEFAULT_NUM_CONN 2048
+     else   : NSS_DEFAULT_NUM_CONN 4096
+   LOW is the only profile that clamps the empty pool; 8704 appears nowhere in
+   the driver and is an observed non-LOW runtime value.
+
+=== Net arithmetic for finding #1 ===
+    pool shrink : (8704 - 4096) x 2304 B = 10,616,832 B = 10.125 MiB returned
+    extra_pbuf  :                 802,816 B =  0.766 MiB spent (host pages)
+    NET                                     =  9.359 MiB
+
+So a successful run of scripts/v19-nss-pool-experiment.sh should show SUnreclaim
+about 9.4 MB lower, not 10.1 MB. Expecting the gross figure would make a correct
+result look like a shortfall.
+
+=== Closed at build level (residual risk from review round 3) ===
+
+The reviews could only check the driver claims against a clone. The NSS build
+has now run, so the same greps were repeated against the source tarball the
+build actually downloaded and compiled:
+
+    openwrt/dl/qca-nss-drv-12.5.2024.11.13~d5ee67b.tar.zst
+    -> produced kmod-qca-nss-drv-6.12.94.12.5.2024.11.13~d5ee67b-r17.apk
+
+Same revision, same line numbers, verbatim:
+    nss_n2h.c:1216  int num_pages = ALIGN(buf_pool_size, PAGE_SIZE)/PAGE_SIZE;
+    nss_n2h.c:1233  void *kern_addr = kzalloc(PAGE_SIZE, GFP_ATOMIC);
+    nss_n2h.c:1235  BUG_ON(!page_count);
+    nss_n2h.c:1344  * Add extra NSS bufs from host memory
+    nss_core.h:494  uint32_t buf_sz_allocated; /* size of bufs allocated from host */
+    nss_hlos_if.h   LOW 512 / MEDIUM 2048 / else 4096
+
+So the provenance, write-once, BUG_ON, byte-unit and profile-constant claims are
+now verified against the exact code running on the flashed box, not a
+neighbouring revision.
+
+=== Finding #3 verified in the shipped DTB ===
+
+The real build artifact, decompiled:
+    build_dir/target-aarch64_cortex-a53_musl/linux-qualcommax_ipq50xx/
+        image-ipq5018-mi-router-ax3000t-v2.dtb
+
+    memory@40000000    reg = <0x00 0x40000000 0x00 0x800000>   (NSS, 8 MiB)
+    tz_apps@4a400000   reg = <0x00 0x4a400000 0x00 0x400000>
+    bootloader@4a800000
+    sbl@4aa00000
+    smem@4ab00000
+    tz@4ac00000
+    wcss@4b000000      reg = <0x00 0x4b000000 0x00 0x3000000>   (Q6, 48 MiB)
+
+    grep -c q6_mem_regions -> 0
+
+Matches the offline prediction exactly: the duplicate node is gone, the Q6
+carve-out keeps base and size, and the NSS region is untouched.

@@ -1,0 +1,2197 @@
+
+===== ini-tree =====
+drwxr-xr-x    3 root     root           888 Dec 24 12:59 .
+drwxr-xr-x   21 root     root           321 Dec 24 12:49 ..
+-rw-r--r--    1 root     root            72 Dec 24 12:59 QCA5018.ini
+-rw-r--r--    1 root     root            74 Dec 24 12:59 QCA6018.ini
+-rw-r--r--    1 root     root            72 Dec 24 12:59 QCA6290.ini
+-rw-r--r--    1 root     root            72 Dec 24 12:59 QCA8074.ini
+-rw-r--r--    1 root     root            84 Dec 24 12:59 QCA9984.ini
+-rw-r--r--    1 root     root            92 Dec 24 12:59 QCN6122.ini
+-rw-r--r--    1 root     root           145 Dec 24 12:59 QCN9000.ini
+-rw-r--r--    1 root     root          3479 Dec 24 12:59 global.ini
+drwxr-xr-x    2 root     root          1024 Dec 24 12:59 internal
+-rw-r--r--    1 root     root           235 Dec 24 12:59 wifi_module_param.ini
+drwxr-xr-x    2 root     root          1024 Dec 24 12:59 .
+drwxr-xr-x    3 root     root           888 Dec 24 12:59 ..
+-rw-r--r--    1 root     root           679 Dec 24 12:59 AR900B_i.ini
+-rw-r--r--    1 root     root           680 Dec 24 12:59 IPQ4019_i.ini
+-rw-r--r--    1 root     root          1925 Dec 24 12:59 QCA5018_i.ini
+-rw-r--r--    1 root     root          1923 Dec 24 12:59 QCA6018_i.ini
+-rw-r--r--    1 root     root          1584 Dec 24 12:59 QCA6290_i.ini
+-rw-r--r--    1 root     root          2096 Dec 24 12:59 QCA8074V2_i.ini
+-rw-r--r--    1 root     root          1884 Dec 24 12:59 QCA8074_i.ini
+-rw-r--r--    1 root     root           653 Dec 24 12:59 QCA9888_i.ini
+-rw-r--r--    1 root     root           680 Dec 24 12:59 QCA9984_i.ini
+-rw-r--r--    1 root     root          1850 Dec 24 12:59 QCN6122_i.ini
+-rw-r--r--    1 root     root          1771 Dec 24 12:59 QCN9000_i.ini
+-rw-r--r--    1 root     root          2645 Dec 24 12:59 global_i.ini
+
+===== global.ini =====
+# Enable 802.11ax stubbing support for testing. Valid only for QCA9984
+enable_11ax_stub=0
+
+# Enable Tx TCP Checksum
+enable_tx_tcp_cksum=0
+
+# VoW Configuration
+vow_config=0
+
+# Enable qwrap target config
+qwrap_enable=0
+
+# Disable Hardware CCE Component
+cce_disable=0
+
+# Low Memory System
+low_mem_system=0
+
+# Beacon offload disable
+beacon_offload_disable=0
+
+# Enable uart/serial prints from target
+enableuartprint=0
+
+# Configure EAPOL minrate enable/disable and AC to configure (if any)
+eapol_minrate_set=0
+eapol_minrate_ac_set=3
+
+# Configure Mesh support
+mesh_support=0
+
+# cfg80211 config(enable/disable)
+cfg80211_config=1
+
+# Disable IP header padding to manage IP header alignment
+iphdr_pad=1
+
+# LTEU support
+lteu_support=0
+
+# BMI Handling: 0 - Driver, 1 - User agent
+bmi=0
+
+# Override default max descriptors
+max_descs=0
+
+# Override default max peer
+max_peers=0
+
+#Override default max vdevs
+max_vdevs=0
+
+# Min Free buffers reserved for AC-BK
+OL_ACBKMinfree=0
+
+# Min Free buffers reserved for AC-B
+OL_ACBEMinfree=0
+
+# Min Free buffers reserved for AC-VI
+OL_ACVIMinfree=0
+
+# Min Free buffers reserved for AC-VO
+OL_ACVOMinfree=0
+
+# Firmware download OTP
+otp_mod_param=0xffffffff
+
+# Emulation Type : 0-->ASIC, 1-->M2M, 2-->BB
+emu_type=0
+
+# Override max active peers in peer qcache
+max_active_peers=0
+
+# Target Scheduler Parameters
+tgt_sched_params=0
+
+# FW Code Sign
+fw_code_sign=0
+
+# Enable target allocram tracking
+allocram_track_max=0
+
+# Max vap nodes for which mempoolis statically allocated
+max_vaps=16
+
+# Max client nodes for which mempoolis statically allocated
+max_clients=64
+
+# Firmware dump options
+#FW_DUMP_TO_FILE                 0x1u
+#FW_DUMP_TO_CRASH_SCOPE          0x2u
+#FW_DUMP_NO_HOST_CRASH           0x4u
+#FW_DUMP_RECOVER_WITHOUT_CORE    0x8u
+#FW_DUMP_ADD_SIGNATURE           0x10u
+fw_dump_options=0x2
+
+# Smart Antenna Confgurations
+enable_smart_antenna=0
+enable_smart_antenna_da=0
+sa_validate_sw=0
+
+# NSS Offload Configuration
+nss_wifi_ol_skip_nw_process=0
+nss_wifi_nxthop_cfg=0
+nss_wifi_olcfg=7
+nss_wifili_olcfg=0x00
+
+# Spectral disable
+spectral_disable=0
+
+#TWT configuration
+twt_enable=1
+b_twt_enable=0
+
+# MBSS IE config
+mbss_ie_enable=0
+
+# RDK stats enable
+enable_rdk_stats=0
+
+# Enable SNR monitoring
+gEnableSNRMonitoring=1
+
+# Timeout to print peer refs in milliseconds
+g_peer_del_wait_time=5000
+
+#dpd support
+dpd_support=0
+
+# Spatial Reuse configuration for self
+allow_mon_vaps_in_sr=1
+self_non_srg_obss_pd_tx_enable=1
+self_srg_obss_pd_tx_enable=1
+self_non_srg_obss_pd_threshold_db=-128
+self_srg_obss_pd_threshold_db=-128
+self_non_srg_obss_pd_threshold_dbm=-128
+self_srg_obss_pd_threshold_dbm=-128
+sr_enable_per_ac=0x2
+self_srg_bss_color_bitmap_low=0
+self_srg_bss_color_bitmap_high=0
+self_srg_partial_bssid_bitmap_low=0
+self_srg_partial_bssid_bitmap_high=0
+self_psr_tx_enable=0
+self_hesiga_sr15_enable=0
+
+# Poison the spectral buffers
+poison_spectral_bufs=0
+
+# Config command logging feature flag
+config_logging_enable=1
+
+# Log levels to be printed on console
+logger_enable_mask=0
+
+# Override default 6ghz RNR advertisement behavior
+# Default behavior is to advertize 6Ghz AP in RNR
+# in 6Ghz only AP case. Selective addition of Non Tx AP
+# enbaled by default.
+rnr_6ghz_driver_override=0
+# Selective Non Tx AP RNR addition
+rnr_selective_nontx_add=1
+
+# Enable external Auto Channel Selection
+externalacs_enable=0
+
+# Enable NSS Wi-Fi radio scheme
+nss_wifi_radio_scheme_enable=1
+
+# Enable carrier_vow_optimization
+carrier_vow_optimization=0
+wds_ext=0
+dp_rx_hash=0
+
+===== internal-inis =====
+## /ini/internal/AR900B_i.ini
+# INI file
+# This file will contain legacy specific internal INI configurations
+# This file includes INI configs for AR900B
+
+TSOEnable=1
+LROEnable=1
+dp_sg_support=1
+GROEnable=1
+dp_offload_tx_csum_support=1
+dp_offload_rx_csum_support=1
+dp_rawmode_support=1
+dp_peer_flow_control_support=1
+
+mpdu_density=0
+vht_amsdu=4
+dynamic_grouping_support=1
+dpd_support=1
+aggr_burst_support=1
+qboost_support=1
+sifs_frame_support=1
+block_interbss_support=1
+disable_reset_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+burst_mode_support=1
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=16
+num_peers_pdev0=512
+num_monitor_pdev0=1
+num_qwrap_vdevs_pdev0=24
+num_qwrap_peers_pdev0=22
+## /ini/internal/IPQ4019_i.ini
+# INI file
+# This file will contain legacy specific internal INI configurations
+# This file includes INI configs for IPQ4019
+
+TSOEnable=1
+LROEnable=1
+dp_sg_support=1
+GROEnable=1
+dp_offload_tx_csum_support=1
+dp_offload_rx_csum_support=1
+dp_rawmode_support=1
+dp_peer_flow_control_support=1
+
+mpdu_density=0
+vht_amsdu=4
+dynamic_grouping_support=1
+dpd_support=1
+aggr_burst_support=1
+qboost_support=1
+sifs_frame_support=1
+block_interbss_support=1
+disable_reset_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+burst_mode_support=1
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=16
+num_peers_pdev0=512
+num_monitor_pdev0=1
+num_qwrap_vdevs_pdev0=30
+num_qwrap_peers_pdev0=28
+## /ini/internal/QCA5018_i.ini
+# INI file
+# This file will contain QCA5018 specific internal INI configurations
+
+# Datapath Configuration Parameters
+
+dp_htt_packet_type=2
+dp_int_batch_threshold_other=1
+dp_int_batch_threshold_rx=128
+dp_int_batch_threshold_tx=256
+dp_int_timer_threshold_other=256
+dp_int_timer_threshold_rx=500
+dp_int_timer_threshold_tx=1000
+dp_max_alloc_size=0x80000
+dp_max_clients=64
+dp_max_peer_id=64
+dp_reo_dest_rings=4
+dp_tcl_data_rings=3
+dp_nss_reo_dest_rings=1
+dp_nss_tcl_data_rings=1
+dp_tx_desc=0x8000
+dp_tx_ext_desc=0x2000
+dp_pdev_rx_ring=0
+dp_pdev_tx_ring=0
+dp_rx_defrag_timeout=100
+dp_tx_compl_ring_size=0x2000
+dp_tx_ring_size=512
+dp_nss_comp_ring_size=0x8000
+dp_pdev_lmac_ring=1
+dp_tx_num_pools=3
+dp_base_hw_macid=1
+LROEnable=0
+dp_rx_hash=1
+TSOEnable=1
+dp_napi_enabled=1
+dp_tcp_udp_checksumoffload=1
+dp_defrag_timeout_check=1
+dp_nss_cfg=0
+dp_wbm_release_ring=64
+dp_tcl_cmd_ring=32
+dp_tcl_status_ring=32
+dp_reo_reinject_ring=32
+dp_rx_release_ring=4096
+dp_reo_exception_ring=128
+dp_reo_dst_ring=2048
+dp_reo_status_ring=1024
+dp_rxdma_buf_ring=1024
+dp_rxdma_refill_ring=4096
+dp_rxdma_monitor_buf_ring=8192
+dp_rxdma_monitor_dst_ring=8192
+dp_rxdma_monitor_status_ring=2048
+dp_rxdma_monitor_desc_ring=8192
+dp_rxdma_err_dst_ring=4096
+dp_sg_support=1
+dp_offload_tx_csum_support=1
+dp_rawmode_support=1
+
+mpdu_density=0
+multiq_support_enabled=1
+delay_stavap_connection=10
+nac_max_bssid=8
+nac_max_client=24
+aggr_burst_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+wds_support=1
+no_bfee_limit=1
+he_target=1
+hw_mode_id=0
+dp_reo_rings_map=0xF
+dp_tx_allow_per_pkt_vdev_id_check=0
+delay_mon_replenish=0
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=9
+num_peers_pdev0=128
+num_monitor_pdev0=0
+num_qwrap_vdevs_pdev0=30
+num_qwrap_peers_pdev0=28
+dp_tx_desc_limit_0=8192
+dp_tx_desc_limit_1=8192
+dp_tx_desc_limit_2=8192
+num_vdevs_pdev1=9
+num_vdevs_pdev2=9
+num_peers_pdev1=128
+num_peers_pdev2=128
+num_monitor_pdev1=0
+num_monitor_pdev2=0
+## /ini/internal/QCA6018_i.ini
+# INI file
+# This file will contain QCA6018 specific internal INI configurations
+
+# Datapath Configuration Parameters
+
+dp_htt_packet_type=2
+dp_int_batch_threshold_other=1
+dp_int_batch_threshold_rx=128
+dp_int_batch_threshold_tx=256
+dp_int_timer_threshold_other=256
+dp_int_timer_threshold_rx=500
+dp_int_timer_threshold_tx=1000
+dp_max_alloc_size=0x100000
+dp_max_clients=64
+dp_max_peer_id=64
+dp_reo_dest_rings=4
+dp_tcl_data_rings=3
+dp_nss_reo_dest_rings=2
+dp_nss_tcl_data_rings=2
+dp_tx_desc=0x8000
+dp_tx_ext_desc=0x2000
+dp_pdev_rx_ring=0
+dp_pdev_tx_ring=0
+dp_rx_defrag_timeout=100
+dp_tx_compl_ring_size=0x8000
+dp_tx_ring_size=512
+dp_nss_comp_ring_size=0x8000
+dp_pdev_lmac_ring=1
+dp_tx_num_pools=3
+dp_base_hw_macid=1
+LROEnable=0
+dp_rx_hash=1
+TSOEnable=1
+dp_napi_enabled=1
+dp_tcp_udp_checksumoffload=1
+dp_defrag_timeout_check=1
+dp_nss_cfg=0
+dp_wbm_release_ring=64
+dp_tcl_cmd_ring=32
+dp_tcl_status_ring=32
+dp_reo_reinject_ring=32
+dp_rx_release_ring=4096
+dp_reo_exception_ring=128
+dp_reo_dst_ring=2048
+dp_reo_status_ring=1024
+dp_rxdma_buf_ring=1024
+dp_rxdma_refill_ring=4096
+dp_rxdma_monitor_buf_ring=8192
+dp_rxdma_monitor_dst_ring=8192
+dp_rxdma_monitor_status_ring=2048
+dp_rxdma_monitor_desc_ring=8192
+dp_rxdma_err_dst_ring=4096
+dp_sg_support=1
+dp_offload_tx_csum_support=1
+dp_rawmode_support=1
+delay_mon_replenish=0
+
+mpdu_density=0
+multiq_support_enabled=1
+delay_stavap_connection=10
+nac_max_bssid=8
+nac_max_client=24
+aggr_burst_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+wds_support=1
+no_bfee_limit=1
+he_target=1
+dp_tx_allow_per_pkt_vdev_id_check=0
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=16
+num_vdevs_pdev1=16
+num_vdevs_pdev2=16
+num_peers_pdev0=512
+num_peers_pdev1=512
+num_peers_pdev2=512
+num_monitor_pdev0=1
+num_monitor_pdev1=1
+num_monitor_pdev2=1
+num_qwrap_vdevs_pdev0=30
+num_qwrap_peers_pdev0=28
+num_qwrap_vdevs_pdev1=30
+num_qwrap_peers_pdev1=28
+num_qwrap_vdevs_pdev2=30
+num_qwrap_peers_pdev2=28
+## /ini/internal/QCA6290_i.ini
+# INI file
+# This file will contain QCA6290 specific internal INI configurations
+
+# Datapath Configuration Parameters
+
+dp_htt_packet_type=2
+dp_int_batch_threshold_other=1
+dp_int_batch_threshold_rx=128
+dp_int_batch_threshold_tx=256
+dp_int_timer_threshold_other=1000
+dp_int_timer_threshold_rx=500
+dp_int_timer_threshold_tx=1000
+dp_max_alloc_size=0x200000
+dp_max_clients=64
+dp_max_peer_id=64
+dp_reo_dest_rings=4
+dp_tcl_data_rings=3
+dp_tx_desc=0x8000
+dp_tx_ext_desc=0x2000
+dp_pdev_rx_ring=0
+dp_pdev_tx_ring=0
+dp_rx_defrag_timeout=100
+dp_tx_compl_ring_size=0x2000
+dp_tx_ring_size=512
+dp_nss_comp_ring_size=0x1000
+dp_pdev_lmac_ring=1
+dp_tx_num_pools=3
+dp_base_hw_macid=1
+LROEnable=0
+dp_rx_hash=1
+TSOEnable=1
+dp_napi_enabled=1
+dp_tcp_udp_checksumoffload=1
+dp_defrag_timeout_check=1
+dp_nss_cfg=0
+dp_wbm_release_ring=64
+dp_tcl_cmd_ring=32
+dp_tcl_status_ring=32
+dp_reo_reinject_ring=32
+dp_rx_release_ring=1024
+dp_reo_exception_ring=128
+dp_reo_cmd_ring=64
+dp_reo_status_ring=128
+dp_reo_dst_ring=1024
+dp_rxdma_buf_ring=1024
+dp_rxdma_refill_ring=4096
+dp_rxdma_monitor_buf_ring=4096
+dp_rxdma_monitor_dst_ring=2048
+dp_rxdma_monitor_status_ring=1024
+dp_rxdma_monitor_desc_ring=4096
+dp_rxdma_err_dst_ring=1024
+dp_sg_support=1
+dp_offload_tx_csum_support=1
+dp_rawmode_support=1
+
+mpdu_density=0
+multiq_support_enabled=1
+delay_stavap_connection=10
+aggr_burst_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+wds_support=1
+no_bfee_limit=1
+he_target=1
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=16
+num_peers_pdev0=512
+num_monitor_pdev0=0
+num_qwrap_vdevs_pdev0=30
+num_qwrap_peers_pdev0=28
+## /ini/internal/QCA8074V2_i.ini
+# INI file
+# This file will contain QCA8074 V2 specific internal INI configurations
+
+# Datapath Configuration Parameters
+
+dp_htt_packet_type=2
+dp_int_batch_threshold_other=1
+dp_int_batch_threshold_rx=128
+dp_int_batch_threshold_tx=256
+dp_int_timer_threshold_other=256
+dp_int_timer_threshold_rx=500
+dp_int_timer_threshold_tx=1000
+dp_max_alloc_size=0x80000
+dp_max_clients=64
+dp_max_peer_id=64
+dp_reo_dest_rings=4
+dp_tcl_data_rings=3
+dp_nss_reo_dest_rings=3
+dp_nss_tcl_data_rings=3
+dp_tx_desc=0x8000
+dp_tx_ext_desc=0x2000
+dp_pdev_rx_ring=0
+dp_pdev_tx_ring=0
+dp_rx_defrag_timeout=100
+dp_tx_compl_ring_size=0x8000
+dp_tx_ring_size=512
+dp_nss_comp_ring_size=0x8000
+dp_pdev_lmac_ring=1
+dp_tx_num_pools=3
+dp_base_hw_macid=1
+LROEnable=0
+dp_rx_hash=1
+TSOEnable=1
+dp_napi_enabled=1
+dp_tcp_udp_checksumoffload=1
+dp_defrag_timeout_check=1
+dp_nss_cfg=0
+dp_wbm_release_ring=64
+dp_tcl_cmd_ring=32
+dp_tcl_status_ring=32
+dp_reo_reinject_ring=32
+dp_rx_release_ring=4096
+dp_reo_exception_ring=128
+dp_reo_dst_ring=2048
+dp_reo_status_ring=1024
+dp_rxdma_buf_ring=1024
+dp_rxdma_refill_ring=4096
+dp_rxdma_monitor_buf_ring=8192
+dp_rxdma_monitor_dst_ring=8192
+dp_rxdma_monitor_status_ring=2048
+dp_rxdma_monitor_desc_ring=8192
+dp_rxdma_err_dst_ring=4096
+dp_sg_support=1
+dp_offload_tx_csum_support=1
+dp_rawmode_support=1
+mpdu_density=0
+multiq_support_enabled=1
+delay_stavap_connection=10
+nac_max_bssid=8
+nac_max_client=24
+aggr_burst_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+wds_support=1
+no_bfee_limit=1
+he_target=1
+dp_rx_flow_tag_enable=0
+dp_tx_allow_per_pkt_vdev_id_check=0
+dp_rx_per_pdev_flow_search=0
+dp_rx_flow_search_table_size=2048
+dp_rx_monitor_protocol_flow_tag_enable=0
+dp_reo_rings_map=0xF
+led_gpio_enable_8074=0
+delay_mon_replenish=0
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=16
+num_vdevs_pdev1=16
+num_vdevs_pdev2=16
+num_peers_pdev0=512
+num_peers_pdev1=512
+num_peers_pdev2=512
+num_monitor_pdev0=1
+num_monitor_pdev1=1
+num_monitor_pdev2=1
+num_qwrap_vdevs_pdev0=30
+num_qwrap_peers_pdev0=28
+num_qwrap_vdevs_pdev1=30
+num_qwrap_peers_pdev1=28
+num_qwrap_vdevs_pdev2=30
+num_qwrap_peers_pdev2=28
+## /ini/internal/QCA8074_i.ini
+# INI file
+# This file will contain QCA8074 specific internal INI configurations
+
+# Datapath Configuration Parameters
+
+dp_htt_packet_type=2
+dp_int_batch_threshold_other=1
+dp_int_batch_threshold_rx=128
+dp_int_batch_threshold_tx=256
+dp_int_timer_threshold_other=256
+dp_int_timer_threshold_rx=500
+dp_int_timer_threshold_tx=1000
+dp_max_alloc_size=0x80000
+dp_max_clients=64
+dp_max_peer_id=64
+dp_reo_dest_rings=4
+dp_tcl_data_rings=3
+dp_nss_reo_dest_rings=2
+dp_nss_tcl_data_rings=2
+dp_tx_desc=0x8000
+dp_tx_ext_desc=0x2000
+dp_pdev_rx_ring=0
+dp_pdev_tx_ring=0
+dp_rx_defrag_timeout=100
+dp_tx_compl_ring_size=0x2000
+dp_tx_ring_size=512
+dp_nss_comp_ring_size=0x2000
+dp_pdev_lmac_ring=1
+dp_tx_num_pools=3
+dp_base_hw_macid=1
+LROEnable=0
+dp_rx_hash=1
+TSOEnable=1
+dp_napi_enabled=1
+dp_tcp_udp_checksumoffload=1
+dp_defrag_timeout_check=1
+dp_nss_cfg=0
+dp_wbm_release_ring=64
+dp_tcl_cmd_ring=32
+dp_tcl_status_ring=32
+dp_reo_reinject_ring=32
+dp_rx_release_ring=1024
+dp_reo_exception_ring=128
+dp_reo_dst_ring=2048
+dp_reo_status_ring=1024
+dp_rxdma_buf_ring=1024
+dp_rxdma_refill_ring=4096
+dp_rxdma_monitor_buf_ring=8192
+dp_rxdma_monitor_dst_ring=8192
+dp_rxdma_monitor_status_ring=2048
+dp_rxdma_monitor_desc_ring=8192
+dp_rxdma_err_dst_ring=4096
+dp_sg_support=1
+dp_offload_tx_csum_support=1
+dp_rawmode_support=1
+
+mpdu_density=0
+multiq_support_enabled=1
+delay_stavap_connection=10
+nac_max_bssid=8
+nac_max_client=24
+aggr_burst_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+wds_support=1
+no_bfee_limit=1
+he_target=1
+dp_reo_rings_map=0xF
+dp_tx_allow_per_pkt_vdev_id_check=0
+delay_mon_replenish=0
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=16
+num_vdevs_pdev1=16
+num_peers_pdev0=512
+num_peers_pdev1=512
+num_monitor_pdev0=1
+num_monitor_pdev1=1
+num_qwrap_vdevs_pdev0=30
+num_qwrap_peers_pdev0=28
+num_qwrap_vdevs_pdev1=30
+num_qwrap_peers_pdev1=28
+num_qwrap_vdevs_pdev2=30
+num_qwrap_peers_pdev2=28
+## /ini/internal/QCA9888_i.ini
+# INI file
+# This file will contain QCA9888 specific internal INI configurations
+
+TSOEnable=1
+LROEnable=1
+dp_sg_support=1
+GROEnable=1
+dp_offload_tx_csum_support=1
+dp_offload_rx_csum_support=1
+dp_rawmode_support=1
+dp_peer_flow_control_support=1
+
+mpdu_density=0
+vht_amsdu=4
+dynamic_grouping_support=1
+dpd_support=1
+aggr_burst_support=1
+qboost_support=1
+sifs_frame_support=1
+block_interbss_support=1
+disable_reset_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+burst_mode_support=1
+
+num_clients=128
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=16
+num_peers_pdev0=512
+num_monitor_pdev0=1
+num_qwrap_vdevs_pdev0=16
+num_qwrap_peers_pdev0=14
+## /ini/internal/QCA9984_i.ini
+# INI file
+# This file will contain legacy specific internal INI configurations
+# This file includes INI configs for QCA9984
+
+TSOEnable=1
+LROEnable=1
+dp_sg_support=1
+GROEnable=1
+dp_offload_tx_csum_support=1
+dp_offload_rx_csum_support=1
+dp_rawmode_support=1
+dp_peer_flow_control_support=1
+
+mpdu_density=0
+vht_amsdu=4
+dynamic_grouping_support=1
+dpd_support=1
+aggr_burst_support=1
+qboost_support=1
+sifs_frame_support=1
+block_interbss_support=1
+disable_reset_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+burst_mode_support=1
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=16
+num_peers_pdev0=512
+num_monitor_pdev0=1
+num_qwrap_vdevs_pdev0=30
+num_qwrap_peers_pdev0=28
+## /ini/internal/QCN6122_i.ini
+# INI file
+# This file will contain QCN6122 specific internal INI configurations
+
+# Datapath Configuration Parameters
+
+dp_htt_packet_type=2
+dp_int_batch_threshold_other=1
+dp_int_batch_threshold_rx=128
+dp_int_batch_threshold_tx=256
+dp_int_timer_threshold_other=256
+dp_int_timer_threshold_rx=500
+dp_int_timer_threshold_tx=1000
+dp_max_alloc_size=0x100000
+dp_max_clients=64
+dp_max_peer_id=64
+dp_reo_dest_rings=4
+dp_tcl_data_rings=3
+dp_nss_reo_dest_rings=1
+dp_nss_tcl_data_rings=1
+dp_tx_desc=0x8000
+dp_tx_ext_desc=0x2000
+dp_pdev_rx_ring=0
+dp_pdev_tx_ring=0
+dp_rx_defrag_timeout=100
+dp_tx_compl_ring_size=0x2000
+dp_tx_ring_size=512
+dp_nss_comp_ring_size=0x8000
+dp_pdev_lmac_ring=1
+dp_tx_num_pools=3
+dp_base_hw_macid=1
+LROEnable=0
+dp_rx_hash=1
+TSOEnable=1
+dp_napi_enabled=1
+dp_tcp_udp_checksumoffload=1
+dp_defrag_timeout_check=1
+dp_nss_cfg=0
+dp_wbm_release_ring=64
+dp_tcl_cmd_ring=32
+dp_tcl_status_ring=32
+dp_reo_reinject_ring=32
+dp_rx_release_ring=4096
+dp_reo_exception_ring=128
+dp_reo_dst_ring=2048
+dp_reo_status_ring=1024
+dp_rxdma_buf_ring=1024
+dp_rxdma_refill_ring=4096
+dp_rxdma_monitor_buf_ring=8192
+dp_rxdma_monitor_dst_ring=8192
+dp_rxdma_monitor_status_ring=2048
+dp_rxdma_monitor_desc_ring=8192
+dp_rxdma_err_dst_ring=4096
+dp_sg_support=1
+dp_offload_tx_csum_support=1
+dp_rawmode_support=1
+dp_rx_rings_poll_mode_enable=1
+dp_poll_mode_enable=0
+
+mpdu_density=0
+multiq_support_enabled=1
+delay_stavap_connection=10
+nac_max_bssid=8
+nac_max_client=24
+aggr_burst_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+wds_support=1
+no_bfee_limit=1
+he_target=1
+hw_mode_id=0
+
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=9
+num_peers_pdev0=128
+num_monitor_pdev0=0
+dp_tx_desc_limit_0=8192
+dp_tx_desc_limit_1=8192
+dp_tx_desc_limit_2=8192
+num_vdevs_pdev1=9
+num_vdevs_pdev2=9
+num_peers_pdev1=128
+num_peers_pdev2=128
+num_monitor_pdev1=0
+num_monitor_pdev2=0
+## /ini/internal/QCN9000_i.ini
+# INI file
+# This file will contain QCN9000 specific internal INI configurations
+
+# Datapath Configuration Parameters
+
+dp_htt_packet_type=2
+dp_int_batch_threshold_other=1
+dp_int_batch_threshold_rx=128
+dp_int_batch_threshold_tx=256
+dp_int_timer_threshold_other=256
+dp_int_timer_threshold_rx=500
+dp_int_timer_threshold_tx=1000
+dp_max_alloc_size=0x80000
+dp_max_clients=64
+dp_max_peer_id=64
+dp_reo_dest_rings=4
+dp_tcl_data_rings=3
+dp_nss_reo_dest_rings=1
+dp_nss_tcl_data_rings=1
+dp_tx_desc=0x8000
+dp_tx_ext_desc=0x2000
+dp_pdev_rx_ring=0
+dp_pdev_tx_ring=0
+dp_rx_defrag_timeout=100
+dp_tx_compl_ring_size=0x2000
+dp_tx_ring_size=512
+dp_nss_comp_ring_size=0x8000
+dp_pdev_lmac_ring=1
+dp_tx_num_pools=3
+dp_base_hw_macid=1
+LROEnable=0
+dp_rx_hash=1
+TSOEnable=1
+dp_napi_enabled=1
+dp_tcp_udp_checksumoffload=1
+dp_defrag_timeout_check=1
+dp_nss_cfg=0
+dp_wbm_release_ring=64
+dp_tcl_cmd_ring=32
+dp_tcl_status_ring=32
+dp_reo_reinject_ring=32
+dp_rx_release_ring=4096
+dp_reo_exception_ring=128
+dp_reo_dst_ring=2048
+dp_reo_status_ring=1024
+dp_rxdma_buf_ring=1024
+dp_rxdma_refill_ring=4096
+dp_rxdma_monitor_buf_ring=8192
+dp_rxdma_monitor_dst_ring=8192
+dp_rxdma_monitor_status_ring=2048
+dp_rxdma_monitor_desc_ring=8192
+dp_rxdma_err_dst_ring=4096
+dp_sg_support=1
+dp_offload_tx_csum_support=1
+dp_rawmode_support=1
+
+mpdu_density=0
+multiq_support_enabled=1
+delay_stavap_connection=10
+nac_max_bssid=8
+nac_max_client=24
+aggr_burst_support=1
+msdu_ttl_support=1
+ppdu_duration_support=1
+wds_support=1
+no_bfee_limit=1
+he_target=1
+dp_tx_allow_per_pkt_vdev_id_check=0
+hw_mode_id=0
+dynamic_hw_mode=0
+full_mon_mode=1
+dp_reo_rings_map=0xF
+delay_mon_replenish=0
+# Control path Configuration Parameters
+
+num_vdevs_pdev0=16
+num_peers_pdev0=512
+num_monitor_pdev0=1
+num_qwrap_vdevs_pdev0=30
+num_qwrap_peers_pdev0=28
+## /ini/internal/global_i.ini
+# INI file
+# This file will contain internal global INI configurations
+#
+gActiveMaxChannelTime=105
+gPassiveMaxChannelTime=300
+gScanNumProbes=0
+gScanProbeRepeatTime=50
+hostscan_adaptive_dwell_mode=0
+
+#TWT configuration
+twt_sta_config_timer_ms=5000
+twt_mbss_support=0
+twt_default_slot_size=10
+twt_congestion_thresh_setup=50
+twt_congestion_thresh_teardown=20
+twt_congestion_thresh_critical=100
+twt_interference_thresh_teardown=80
+twt_interference_thresh_setup=50
+twt_min_no_sta_setup=10
+twt_min_no_sta_teardown=2
+twt_no_of_bcast_mcast_slots=2
+twt_min_no_twt_slots=2
+twt_max_no_sta_twt=500
+twt_mode_check_interval=10000
+twt_add_sta_slot_interval=1000
+twt_remove_sta_slot_interval=5000
+
+# Preferred HW mode id (Range defined in wmi_host_hw_mode_config_type)
+#enum wmi_host_hw_mode_config_type {
+#	WMI_HOST_HW_MODE_SINGLE       = 0,
+#	WMI_HOST_HW_MODE_DBS          = 1,
+#	WMI_HOST_HW_MODE_SBS_PASSIVE  = 2,
+#	WMI_HOST_HW_MODE_SBS          = 3,
+#	WMI_HOST_HW_MODE_DBS_SBS      = 4,
+#	WMI_HOST_HW_MODE_DBS_OR_SBS   = 5,
+#	WMI_HOST_HW_MODE_FW_INTERNAL  = 6,
+#	WMI_HOST_HW_MODE_2G_PHYB      = 7,
+#	WMI_HOST_HW_MODE_MAX,
+#};
+hw_mode_id=8
+
+# Dynamic HW mode (Range defined in wmi_host_dynamic_hw_mode_config_type)
+#enum wmi_host_dynamic_hw_mode_config_type {
+#	WMI_HOST_DYNAMIC_HW_MODE_DISABLED = 0,
+#	WMI_HOST_DYNAMIC_HW_MODE_SLOW     = 1,
+#	WMI_HOST_DYNAMIC_HW_MODE_FAST     = 2,
+#	WMI_HOST_DYNAMIC_HW_MODE_MAX,
+#};
+dynamic_hw_mode=0
+# Primary interface for WMI_HOST_DYNAMIC_HW_MODE_FAST
+#dynamic_hw_mode_primary_if=wifi0
+
+# Spatial Reuse Parameter Set Element configuration
+he_srp_ie_enable=1
+he_srp_sr_control=0x03
+he_srp_non_srg_obss_pd_max_offset=0
+he_srp_srg_obss_pd_min_offset=0
+he_srp_srg_obss_pd_max_offset=0
+he_srp_srg_bss_color_bitmap_high=0
+he_srp_srg_bss_color_bitmap_low=0
+he_srp_srg_partial_bssid_bitmap_high=0
+he_srp_srg_partial_bssid_bitmap_low=0
+
+set_max_rx_mcs_map=0
+
+# Minidump log config set
+md_cp_ext_pdev=1
+md_cp_ext_psoc=1
+md_cp_ext_vdev=1
+md_cp_ext_peer=0
+md_dp_soc=1
+md_dp_pdev=1
+md_dp_vdev=1
+md_dp_peer=0
+#dp_srng_reo: reo_dest, reo_exception, reo_cmd, reo_status
+md_dp_srng_reo=0
+#dp_srng_tcl: tcl_data, tcl_cmd, tcl_status, tcl_comp
+md_dp_srng_tcl=0
+#dp_srng_wbm: wbm_desc_rel, wbm_idle_link
+md_dp_srng_wbm=0
+md_dp_link_desc_bank=0
+#dp_srng_rxdma: rxdma_mon_buf, rxdma_mon_dst, rxdma_mon_status
+md_dp_srng_rxdma=0
+md_dp_hal_soc=1
+#objmgr data structures
+md_objmgr_psoc=1
+md_objmgr_pdev=1
+md_objmgr_vdev=1
+#special HK phyB mode
+mode_2g_phyb=0
+#bss color default value
+#val == 0 for disable feature
+#val > 63 for random init
+bss_color_default_val=255
+#nss required data
+nss_wifi_radio_pri_map=0
+nss_wifi_pri_map_bits_per_radio=4
+
+===== wifi_nss_olcfg =====
+7
+drwxr-xr-x    3 root     root             0 Dec 24 12:58 .
+drwxrwxr-x   22 root     root           803 Dec 24 12:52 ..
+drwxr-xr-x    2 root     root             0 Dec 24 12:49 debug
+-rwxr-xr-x    1 root     root          5573 Dec 24 10:43 dpp-hostapd-update-uci
+-rwxr-xr-x    1 root     root          3927 Dec 24 10:43 dpp-operating-class-update.sh
+-rwxr-xr-x    1 root     root          8233 Dec 24 10:43 dpp-supplicant-update-uci
+-rw-r--r--    1 root     root         64688 Dec 24 10:43 hostapd.sh
+-rw-r--r--    1 root     root            52 Dec 24 10:43 qca-wifi-modules
+-rwxr-xr-x    1 root     root         12683 Dec 24 10:43 qcacommands_mesh.xml
+-rwxr-xr-x    1 root     root         26132 Dec 24 10:43 qcacommands_ol_radio.xml
+-rwxr-xr-x    1 root     root         45535 Dec 24 10:43 qcacommands_vap.xml
+-rw-r--r--    1 root     root          1641 Dec 24 10:43 qcawifi_countrycode.txt
+-rw-r--r--    1 root     root        275833 Dec 24 10:43 qcawificfg80211.sh
+-rw-r--r--    1 root     root            23 Dec 24 10:43 tools_config
+-rw-r--r--    1 root     root             2 Dec 24 12:57 wifi_nss_olcfg
+-rw-r--r--    1 root     root             2 Dec 24 12:58 wifi_nss_override
+-rw-r--r--    1 root     root         16521 Dec 24 10:43 wpa_supplicant.sh
+-rwxr-xr-x    1 root     root           733 Dec 24 10:43 wps-hostapd-nbh-update
+-rwxr-xr-x    1 root     root          3528 Dec 24 10:43 wps-hostapd-update-uci
+-rwxr-xr-x    1 root     root         11151 Dec 24 10:43 wps-supplicant-update-uci
+
+===== module-parameters =====
+== qca_ol
+   ar900b_20_targ_clk = -1
+   dfs_disable = 0
+   frac = -1
+   intval = -1
+   ipq4019_20_targ_clk = -1
+   ol_dual_band_2g_radios = 0
+   ol_dual_band_5g_radios = 0
+   ol_scan_freqlist = 
+   polledmode = 0
+   qca9888_20_targ_clk = -1
+   testmode = 0
+   war1 = 1
+   war1_allow_sleep = 0
+== umac
+   ahbskip = 0
+   atf_mode = 0
+   enable_mesh_peer_cap_update = 0
+   enable_pktlog_support = 1
+   fw_rec_dbg_mask = 0
+   g_csa_max_rx_wait_time = 60000
+   g_unicast_deauth_on_stop = 0
+   netlink_acfg = 24
+   netlink_ath_ssid_event = 29
+   netlink_band_steering_event = 21
+   netlink_son_ald = 31
+   qld_max_list = 0
+== wifi_3_0
+== qca_nss_drv
+   max_ipv4_conn = 512
+   max_ipv6_conn = 512
+   meminfo_user_config = 
+   nss_skip_nw_process = 0
+   pn_mq_en = N
+== qdf
+   prealloc_disabled = Y
+   qdf_dbg_arr = 
+   qdf_dbg_mask = 11
+   qdf_log_dump_at_kernel_enable = Y
+   qdf_log_flush_timer_period = 0
+== qca_nss_dp
+== mem_manager
+   mm_dbg_enable = 0
+== cfg80211
+   bss_entries_limit = 1000
+   cfg80211_disable_40mhz_24ghz = N
+   ieee80211_regdom = 00
+== asf
+== ath_pktlog
+== qca_ssdk
+
+===== dmesg-wifi =====
+[  142.050960] wlan: [749:I:ANY] DES SSID SET=<redacted-ssid>
+[  142.064739] wlan: [749:I:ANY] desired hw mode: 29
+[  142.067955] wlan: [749:I:ANY] ieee80211_ucfg_set_freq_internal: 
+[  142.073346] wlan: [749:E:MBSSIE] ieee80211_ucfg_set_txvap: MBSSID is not enabled
+[  142.086438] wlan: [0:I:ANY] wlan_acs_start_scan_report: [EXT] Invoking ACS module for ACS report
+[  142.782871] wlan: [0:I:ANY] wlan_acs_start_scan_report: [EXT] Invoking ACS module for ACS report
+[  142.809099] wlan: [0:E:CMN_MLME] mlme_vdev_restart_is_allowed:  No multivdev restart
+[  142.823006] wlan: [2526:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:0|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:1|ul_mumimo:1|dl_muofdma_bfer:0
+[  142.823076] wlan: [2526:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x72
+[  142.838310] wlan: [0:E:CMN_MLME] mlme_vdev_restart_is_allowed:  No multivdev restart
+[  142.959740] wlan: [749:I:ANY] Skip bcast de-auth reason code 3, handled in VDEV down
+[  145.326884] wlan: [3222:I:ANY] ol_ath_wifi_ssr: ol_ath_wifi_ssr: SSR event 2 bus_type 1
+[  145.346785] wlan: [3222:I:ANY] ol_ath_wifi_ssr: ol_ath_wifi_ssr: SSR event 3 bus_type 1
+[  145.354008] wlan: [3222:I:ANY] ol_ath_target_start: subsystem_get success
+[  145.361763] cnss[41]: INFO: Waiting for FW ready. Device: 0xfffb, FW ready timeout: 15 seconds
+[  145.414256] cnss[41]: INFO: QMI WLFW service connected, state: 0x1
+[  145.414582] cnss[41]: INFO: device_id : 65531 mem mode : [2]
+[  145.419361] cnss[41]: INFO: platform name: Qualcomm Technologies, Inc. IPQ5018/AP-MP03.3
+[  145.426724] cnss[41]: INFO: Target capability: chip_id: 0x0, chip_family: 0x4, board_id: 0xff, soc_id: 0xffffffff, fw_version: 0x2504ffff, fw_build_timestamp: 2025-01-09 01:49, otp_version: 0x0 eeprom_caldata_read_timeout 0s
+[  145.433645] cnss[41]: INFO: Device BAR Info pa: 0x81e00000, va: 0x95300000, size: 0x200000
+[  145.453924] cnss[41]: INFO: Using Boardid from bootargs:0x60
+[  145.477283] cnss[41]: INFO: BDF location : 0x4cf00000
+[  145.477312] cnss[41]: INFO: BDF qcn6122/bdwlan.b60 size 131072
+[  145.482832] cnss[41]: INFO: per device BDF location : 0x4cf20000
+[  145.487232] cnss[41]: INFO: CALDATA qcn6122/caldata_1.bin size 131072 offset 0x20000
+[  145.580486] cnss[41]: INFO: FW ready received for device 0xfffb
+[  145.580675] wlan: [3222:I:ANY] pld_ahb_wlan_enable: cnss_mode: Mission mode 
+[  145.586615] cnss[41]: INFO: Sending mode message, mode: MISSION(0), state: 0x7
+[  145.604719] wlan: [3222:I:ANY] qca_napi_create: qca_napi_create: napi instance 0 created on pipe 4
+[  145.604794] wlan: [3222:I:ANY] htc_wmi_init: HT Create . 84970000
+[  145.612953] wlan: [3222:I:ANY] htc_wmi_init: Skipping BMI Done
+[  145.618731] wlan: [3222:I:ANY] htc_wmi_init: host_enable 0
+[  145.632942] wlan: [3222:I:ANY] ol_target_init_complete: CDP soc attach success
+[  145.632978] wlan: [3222:I:ANY] ol_target_init_complete: Soc attach success NSS config 0 
+[  145.639180] wlan: [3222:I:ANY] htc_set_async_ep: htc_set_async_ep: htc_handle 84970000, ep 2, value 1
+[  145.648901] wlan: [2063:I:TIF] HE_CAP Info = 9a08010d
+[  145.657645] wlan: [2063:I:TIF] Num HW modes = 1
+[  145.661612] wlan: [2063:I:TIF] Num PHY = 1
+[  145.666652] wlan: [2063:I:TIF] FW Build Version (Ext.) = 0
+[  145.670071] wlan: [2063:I:TIF] HDL Version: MajorVersion.MinorVersion = 0.0
+[  145.677137] wlan: [2063:I:TIF] Preferred HW Mode = 0 Num Radios = 1
+[  145.683301] wlan: [2063:W:TIF] add_11ax_mode_flags: 11AX wireless modes are not populated by the target in reg capabilities, adding 11AX wireless modes
+[  145.688624] wlan: [2063:I:TIF] init_deinit_add_11ax_modes: hw_mode_id = 0 phy_id = 0 wireless modes = 0
+[  145.703419] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: num_radios: 1
+[  145.712683] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: ema_max_vap_cnt: 0
+[  145.719096] wlan: [2063:I:TIF] init_deinit_get_total_num_vdevs_for_soc: num_vdevs: 9
+[  145.726930] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: num_radios: 1
+[  145.734671] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: ema_max_vap_cnt: 0
+[  145.742206] wlan: [2063:I:TIF] init_deinit_get_total_num_vdevs_for_soc: num_vdevs: 9
+[  145.749742] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: num_radios: 1
+[  145.757587] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: ema_max_vap_cnt: 0
+[  145.765027] wlan: [2063:I:TIF] init_deinit_get_total_num_vdevs_for_soc: num_vdevs: 9
+[  145.772692] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: num_radios: 1
+[  145.780540] wlan: [2063:I:TIF] init_deinit_get_total_num_ema_vaps: ema_max_vap_cnt: 0
+[  145.787842] wlan: [2063:I:TIF] init_deinit_get_total_num_vdevs_for_soc: num_vdevs: 9
+[  145.795623] wlan: [2063:I:ANY] init_deinit_update_pdev_tgt_info: pdev id:0 wmi_handle:8941c200
+[  145.809646] wlan: [2063:I:ANY] init_deinit_update_pdev_tgt_info: Pdev = 0 Number of peers = 137 vdevs = 9
+[  145.811858] wlan: [2063:I:TIF] init_deinit_update_pdev_tgt_info: CDP PDEV INIT success
+[  145.921755] wlan: [2063:I:ANY] copy_fw_abi_version_tlv: copy_fw_abi_version_tlv: INIT_CMD version: 1, 0, 0x5f414351, 0x4c4d, 0x0, 0x0
+[  146.110743] wlan: [2063:I:ANY] ready_extract_init_status_tlv: ready_extract_init_status_tlv:0
+[  146.110784] wlan: [2063:I:ANY] dp_peer_map_attach_wifi3: dp_peer_map_attach_wifi3 max_peers 163, max_ast_index: 528
+[  146.118362] wlan: [3222:I:ANY] ol_ath_connect_htc: WMI is ready
+[  146.139928] wlan: [3222:E:NSS] [nss-wifili]: pdev:82ca0480 radio_ifnum:37 scheme_id:2 radio_priority:0 
+[  146.142983] wlan: [3222:E:TIF] target_if_lro_hash_config: pdev with id 0 is NULL
+[  146.148541] wlan: [3222:I:ANY] ol_ath_soc_start: Skip txrx_pdev_attach_target
+[  146.155947] wlan: [3222:I:ANY] ol_ath_soc_start: BURSTING enabled by default
+[  146.162991] wlan: [3222:I:ANY] ol_ath_stats_attach: periodic_chan_stats: 1
+[  146.163318] wlan: [0:I:ANY] ol_ath_twt_enable_complete_event_handler: twt enabled
+[  146.176955] wlan: [3222:I:ANY] ol_ath_ucfg_set_rx_pkt_protocol_tagging: Set RX packet type TAG, opcode : 0, pkt_type : 18, metadata : 0xca0,pdev_id = 0, REO dest ring = 5
+[  146.186235] wlan: [3222:I:ANY] wlan_scan_update_channel_list: num_chan: 25
+[  146.201064] wlan: [3222:I:ANY] ol_ath_configure_cong_ctrl_max_msdus: pdev_idx = 0 tx_desc_limit = 8192
+[  146.207622] wlan: [3222:I:ANY] dp_lag_pdev_set_primary_radio: pdev(820e1c08) is_primary 0 
+[  146.217027] wlan: [3222:I:Dynamic Mode Change] ol_ath_check_and_reconfig_hw_mode: Running with HW mode = 0
+[  146.231223] wlan: [3222:I:ANY] wlan_scan_update_channel_list: num_chan: 13
+[  146.269554] wlan: [3222:I:ANY] wlan_scan_update_channel_list: num_chan: 13
+[  146.310266] wlan: [3222:I:ANY] ieee80211_setctry_tryretaining_curchan: [442] Skipping current channel retention during set_country operation
+[  146.318881] wlan: [3222:I:ANY] number of channels: 2G = 0 5G = 13, 6G = 0
+[  146.332121] wlan: [3222:I:ANY] wlan_cfg80211_set_country: wlan_cfg80211_set_country: Country: CN ret: 0 
+[  146.733103] wlan: [3326:I:ANY] wlan_cfg80211_set_hwaddr: wlan_cfg80211_set_hwaddr :xx:xx:xx:xx:xx:xx ret: 0 
+[  146.778890] wlan: [3329:I:ANY] ol_ath_set_config_param: set TXBF_SND_PERIOD: val 100 stat 0
+[  146.914120] wlan: [0:I:ANY] ol_ath_set_config_param: Disconnect_timeout value: 10
+[  146.957262] wlan: [0:I:ANY] ol_ath_set_config_param: Reconfiguration_timeout value:60
+[  147.431434] wlan: [3447:I:ANY] wlan_cfg80211_add_virtual_intf: proprietary mode 6 for interface: wl0 : clone params: 0x00000001 
+[  147.431514] wlan: [3447:I:MBSSIE] osif_mbssid_sanity_check: mbssid_sanity_ok: YES
+[  147.442347] wlan: [3447:I:ANY] osifp_create_wlan_vap: VDEV Create xx:xx:xx:xx:xx:xx
+[  147.450064] wlan: [3447:I:ANY] ol_ath_vap_set_param: Setting SGI value: 1
+[  147.458045] wlan: [3447:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:1|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:1|ul_mumimo:0|dl_muofdma_bfer:0
+[  147.463959] wlan: [3447:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x33
+[  147.478640] wlan: [3447:I:ANY] ol_ath_vap_set_param: VDEV params: AC/VHT sounding mode:HE|SU/MU sounding mode:SU|Trig/Non-Trig sounding mode:Non-Trigged
+[  147.500412] wlan: [3447:I:ANY] osif_create_vap_complete: TX Checksum:1|SG:1|TSO:1|LRO:0
+[  147.500444] wlan: [3447:I:ANY] WLAN-NSS: VAP NSS ops initialized 
+[  147.511839] wlan: [3447:I:ANY] VAP device wl0 created osifp: (84a78480) os_if: (83ee8000)
+[  148.775434] wlan: [3545:I:ANY] ieee80211_ucfg_setparam: Setting Max Stations:64
+[  148.860015] wlan: [3552:I:ANY] wlan_set_param:  HE MU BFER setting not supported in this target 
+[  148.924984] wlan: [3557:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:1|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:1|ul_mumimo:1|dl_muofdma_bfer:0
+[  148.925026] wlan: [3557:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x73
+[  149.005175] wlan: [3560:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:1|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:0|ul_mumimo:1|dl_muofdma_bfer:0
+[  149.005218] wlan: [3560:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x53
+[  149.751594] wlan: [749:I:ANY] wlan_cfg80211_do_acs: vap-0(wl0):ACS Params
+[  149.751629] wlan: [749:I:ANY] wlan_cfg80211_do_acs: ht_enabled:1|ht40_enabled:0|vht_enabled:1|hw_mode:31|chwidth:20|
+[  152.274273] wlan: [413:E:ANY] ol_ath_get_chan_grade_info: RF characterization entries is empty
+[  152.274663] wlan: [413:I:ANY] vap-0(wl0): ACS result PCH 48 freq 5240, SCH 28 freq 5140, hw_mode 2 chwidth 160, vht_seg0 50 freq 5250, vht_seg1 0 freq 0
+[  152.290456] wlan: [413:I:ANY] ieee80211_acs_scan_evhandler: [EXT] lock held duration (8ms)
+[  152.353095] wlan: [749:I:ANY] DES SSID SET=<redacted-ssid>
+[  152.353136] wlan: [749:I:ANY] desired hw mode: 31
+[  152.357679] wlan: [749:I:ANY] ieee80211_ucfg_set_freq_internal: 
+[  152.364743] wlan: [749:E:MBSSIE] ieee80211_ucfg_set_txvap: MBSSID is not enabled
+[  152.374072] wlan: [0:I:ANY] wlan_acs_start_scan_report: [EXT] Invoking ACS module for ACS report
+[  153.543967] wlan: [0:E:CMN_MLME] mlme_vdev_restart_is_allowed:  No multivdev restart
+[  153.696873] wlan: [3808:I:ANY] wlan_cfg80211_add_virtual_intf: proprietary mode 6 for interface: wl5 : clone params: 0x00000000 
+[  153.696959] wlan: [3808:I:MBSSIE] osif_mbssid_sanity_check: mbssid_sanity_ok: YES
+[  153.708228] wlan: [3808:I:ANY] osifp_create_wlan_vap: No cloning
+[  153.715219] wlan: [3808:I:ANY] osifp_create_wlan_vap: VDEV Create xx:xx:xx:xx:xx:xx
+[  153.721755] wlan: [3808:I:ANY] ol_ath_vap_set_param: Setting SGI value: 1
+[  153.728963] wlan: [3808:I:ANY] ol_ath_vap_set_param: VDEV params:HE su_bfee:1|su_bfer:1|mu_bfee:0|mu_bfer:0|dl_muofdma:1|ul_muofdma:1|ul_mumimo:0|dl_muofdma_bfer:0
+[  153.735891] wlan: [3808:I:ANY] ol_ath_vap_set_param: he_bf_cap=0x33
+[  153.749936] wlan: [3808:I:ANY] ol_ath_vap_set_param: VDEV params: AC/VHT sounding mode:HE|SU/MU sounding mode:SU|Trig/Non-Trig sounding mode:Non-Trigged
+[  153.770432] wlan: [3808:I:ANY] osif_create_vap_complete: TX Checksum:1|SG:1|TSO:1|LRO:0
+[  153.770472] wlan: [3808:I:ANY] WLAN-NSS: VAP NSS ops initialized 
+[  153.778114] wlan: [3808:I:ANY] osif_create_vap_complete: Updating VAP1 channel for mode 31 as per parent VAP0
+[  153.790017] wlan: [3808:I:ANY] VAP device wl5 created osifp: (89b17480) os_if: (84628000)
+[  154.884537] wlan: [3899:I:ANY] osif_nss_ol_vap_delete: vap detach 89b17480: if_num 39 
+[  154.885248] wlan: [3899:I:ANY] osif_nss_vdev_detach: Dealloc Dynamic interface Node :39 of type:6
+[  154.899524] wlan: [3899:I:ANY] ieee80211_mbo_vdetach: MBO terminated
+[  154.902395] wlan: [0:I:ANY] osif_nss_wifili_vdev_get_mpsta_vdevid: Get MPSTA: vdev is NULL
+[  154.909780] wlan: [0:E:ANY] ol_peer_delete_response_event_handler: peer_del_resp: mac: xx:xx:xx:xx:xx:xx vdevid: 1 Unable to find vdev
+[  154.917989] wlan: [3899:I:ANY] ieee80211_oce_vdetach: OCE terminated
+[  155.735467] wlan: [4020:I:ANY] son_enable_disable_vdev_events: son_enable_disable_vdev_events,765: wlan son is not enable
+[  155.736861] wlan: [4020:I:ANY] son_enable_disable_vdev_events: son_enable_disable_vdev_events,765: wlan son is not enable
+[  243.095660] wlan: [2045:D:dfs] WLAN_DEBUG_DFS_ALWAYS : dfs_control: enable detects, ignore_dfs 0
+[ 3641.411503] wlan: [2962:E:ANY] ath_sysctl_pktlog_filter_mac: Invalid Pointer
+
+===== iw-dev =====
+phy#1
+	Interface wl0
+		ifindex 27
+		wdev 0x100000004
+		addr xx:xx:xx:xx:xx:xx
+		ssid <redacted-ssid>
+		type AP
+		channel 48 (5240 MHz), width: 160 MHz, center1: 5250 MHz
+		txpower 28.00 dBm
+	Interface wifi1
+		ifindex 16
+		wdev 0x100000001
+		addr xx:xx:xx:xx:xx:xx
+		type AP
+		channel 48 (5240 MHz), width: 160 MHz, center1: 5250 MHz
+phy#0
+	Interface wl13
+		ifindex 26
+		wdev 0x5
+		addr xx:xx:xx:xx:xx:xx
+		type AP
+		channel 6 (2437 MHz), width: 20 MHz, center1: 2437 MHz
+		txpower 30.00 dBm
+	Interface wl1
+		ifindex 25
+		wdev 0x4
+		addr xx:xx:xx:xx:xx:xx
+		ssid <redacted-ssid>
+		type AP
+		channel 6 (2437 MHz), width: 20 MHz, center1: 2437 MHz
+		txpower 30.00 dBm
+	Interface wifi0
+		ifindex 14
+		wdev 0x1
+		addr xx:xx:xx:xx:xx:xx
+		type AP
+		channel 6 (2437 MHz), width: 20 MHz, center1: 2437 MHz
+
+===== iw-phy =====
+Wiphy phy1
+	wiphy index: 1
+	max # scan SSIDs: 10
+	max scan IEs length: 255 bytes
+	max # sched scan SSIDs: 0
+	max # match sets: 0
+	max # scan plans: 1
+	max scan plan interval: -1
+	max scan plan iterations: 0
+	Retry short limit: 7
+	Retry long limit: 4
+	Coverage class: 0 (up to 0m)
+	Device supports AP-side u-APSD.
+	Available Antennas: TX 0x3 RX 0x3
+	Configured Antennas: TX 0x3 RX 0x3
+	Supported interface modes:
+		 * managed
+		 * AP
+		 * AP/VLAN
+		 * WDS
+		 * monitor
+	Band 2:
+		Capabilities: 0x19e7
+			RX LDPC
+			HT20/HT40
+			Dynamic SM Power Save
+			RX HT20 SGI
+			RX HT40 SGI
+			TX STBC
+			RX STBC 1-stream
+			Max AMSDU length: 7935 bytes
+			DSSS/CCK HT40
+		Maximum RX AMPDU length 65535 bytes (exponent: 0x003)
+		Minimum RX AMPDU time spacing: No restriction (0x00)
+		HT TX/RX MCS rate indexes supported: 0-15
+		VHT Capabilities (0x7381f9fa):
+			Max MPDU length: 11454
+			Supported Channel Width: 160 MHz, 80+80 MHz
+			RX LDPC
+			short GI (80 MHz)
+			short GI (160/80+80 MHz)
+			TX STBC
+			SU Beamformer
+			SU Beamformee
+			RX antenna pattern consistency
+			TX antenna pattern consistency
+		VHT RX MCS set:
+			1 streams: MCS 0-9
+			2 streams: MCS 0-9
+			3 streams: not supported
+			4 streams: not supported
+			5 streams: not supported
+			6 streams: not supported
+			7 streams: not supported
+			8 streams: not supported
+		VHT RX highest supported: 0 Mbps
+		VHT TX MCS set:
+			1 streams: MCS 0-9
+			2 streams: MCS 0-9
+			3 streams: not supported
+			4 streams: not supported
+			5 streams: not supported
+			6 streams: not supported
+			7 streams: not supported
+			8 streams: not supported
+		VHT TX highest supported: 0 Mbps
+		HE Iftypes: Station AP
+			HE MAC Capabilities (0x010d9a081040):
+				+HTC HE Supported
+				TWT Responder
+				Dynamic BA Fragementation Level: 1
+				Minimum Payload size of 128 bytes: 1
+				BSR
+				OM Control
+				Maximum A-MPDU Length Exponent: 3
+				RX Control Frame to MultiBSS
+				A-MSDU in A-MPDU
+				OM Control UL MU Data Disable RX
+			HE PHY Capabilities: (0x1c604c89fdc9838c110c00):
+				HE40/HE80/5GHz
+				HE160/5GHz
+				HE160/HE80+80/5GHz
+				LDPC Coding in Payload
+				HE SU PPDU with 1x HE-LTF and 0.8us GI
+				STBC Tx <= 80MHz
+				STBC Rx <= 80MHz
+				Full Bandwidth UL MU-MIMO
+				DCM Max Constellation: 1
+				DCM Max Constellation Rx: 1
+				SU Beamformer
+				SU Beamformee
+				Beamformee STS <= 80Mhz: 7
+				Beamformee STS > 80Mhz: 7
+				Sounding Dimensions <= 80Mhz: 1
+				Sounding Dimensions > 80Mhz: 1
+				Ng = 16 SU Feedback
+				Ng = 16 MU Feedback
+				Codebook Size SU Feedback
+				Codebook Size MU Feedback
+				PPE Threshold Present
+				HE SU PPDU & HE PPDU 4x HE-LTF 0.8us GI
+				Max NC: 1
+				STBC Rx > 80MHz
+				HE ER SU PPDU 4x HE-LTF 0.8us GI
+				HE ER SU PPDU 1x HE-LTF 0.8us GI
+				TX 1024-QAM
+				RX 1024-QAM
+			HE RX MCS and NSS set <= 80 MHz
+					 1 streams: MCS 0-11
+					 2 streams: MCS 0-11
+					 3 streams: not supported
+					 4 streams: not supported
+					 5 streams: not supported
+					 6 streams: not supported
+					 7 streams: not supported
+					 8 streams: not supported
+			HE TX MCS and NSS set <= 80 MHz
+					 1 streams: MCS 0-11
+					 2 streams: MCS 0-11
+					 3 streams: not supported
+					 4 streams: not supported
+					 5 streams: not supported
+					 6 streams: not supported
+					 7 streams: not supported
+					 8 streams: not supported
+			HE RX MCS and NSS set 160 MHz
+					 1 streams: MCS 0-11
+					 2 streams: MCS 0-11
+					 3 streams: not supported
+					 4 streams: not supported
+					 5 streams: not supported
+					 6 streams: not supported
+					 7 streams: not supported
+					 8 streams: not supported
+			HE TX MCS and NSS set 160 MHz
+					 1 streams: MCS 0-11
+					 2 streams: MCS 0-11
+					 3 streams: not supported
+					 4 streams: not supported
+					 5 streams: not supported
+					 6 streams: not supported
+					 7 streams: not supported
+					 8 streams: not supported
+			HE RX MCS and NSS set 80+80 MHz
+					 1 streams: MCS 0-11
+					 2 streams: MCS 0-11
+					 3 streams: not supported
+					 4 streams: not supported
+					 5 streams: not supported
+					 6 streams: not supported
+					 7 streams: not supported
+					 8 streams: not supported
+			HE TX MCS and NSS set 80+80 MHz
+					 1 streams: MCS 0-11
+					 2 streams: MCS 0-11
+					 3 streams: not supported
+					 4 streams: not supported
+					 5 streams: not supported
+					 6 streams: not supported
+					 7 streams: not supported
+					 8 streams: not supported
+			PPE Threshold 
+		Frequencies:
+			* 5180 MHz [36] (30.0 dBm)
+			* 5200 MHz [40] (30.0 dBm)
+			* 5220 MHz [44] (30.0 dBm)
+			* 5240 MHz [48] (30.0 dBm)
+			* 5260 MHz [52] (30.0 dBm)
+			* 5280 MHz [56] (30.0 dBm)
+			* 5300 MHz [60] (30.0 dBm)
+			* 5320 MHz [64] (30.0 dBm)
+			* 5745 MHz [149] (33.0 dBm)
+			* 5765 MHz [153] (33.0 dBm)
+			* 5785 MHz [157] (33.0 dBm)
+			* 5805 MHz [161] (33.0 dBm)
+			* 5825 MHz [165] (33.0 dBm)
+	valid interface combinations:
+		 * #{ AP } <= 17, #{ managed } <= 30, #{ monitor } <= 1,
+		   total <= 17, #channels <= 1, STA/AP BI must match, radar detect widths: { 20 MHz (no HT), 20 MHz, 40 MHz, 80 MHz }
+
+	Maximum associated stations in AP mode: 128
+	Supported extended features:
+		* [ AQL ]: Airtime Queue Limits (AQL)
+		* [ VLAN_OFFLOAD ]: VLAN offload support
+Wiphy phy0
+	wiphy index: 0
+	max # scan SSIDs: 10
+	max scan IEs length: 255 bytes
+	max # sched scan SSIDs: 0
+	max # match sets: 0
+	max # scan plans: 1
+	max scan plan interval: -1
+	max scan plan iterations: 0
+	Retry short limit: 7
+	Retry long limit: 4
+	Coverage class: 0 (up to 0m)
+	Device supports AP-side u-APSD.
+	Available Antennas: TX 0x3 RX 0x3
+	Configured Antennas: TX 0x3 RX 0x3
+	Supported interface modes:
+
+===== ifconfig =====
+bond0     Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          BROADCAST MASTER MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+br-lan    Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          inet addr:192.168.31.1  Bcast:192.168.31.255  Mask:255.255.255.0
+          inet6 addr: fd00:6969:6969::1/128 Scope:Global
+          inet6 addr: fe80::5292:6aff:fef3:3f5c/64 Scope:Link
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:5974 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:7399 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:453019 (442.4 KiB)  TX bytes:2085244 (1.9 MiB)
+
+br-miot   Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          inet addr:192.168.32.1  Bcast:192.168.32.255  Mask:255.255.255.0
+          inet6 addr: fe80::5492:6aff:fef3:3f5e/64 Scope:Link
+          UP BROADCAST MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:4 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:0 (0.0 B)  TX bytes:428 (428.0 B)
+
+eth0      Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          inet6 addr: fe80::5292:6aff:fef3:3f5c/64 Scope:Link
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:15 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:0 (0.0 B)  TX bytes:1746 (1.7 KiB)
+
+eth0.1    Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          UP BROADCAST MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:8 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:0 (0.0 B)  TX bytes:896 (896.0 B)
+
+eth1      Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          inet6 addr: fe80::5292:6aff:fef3:3f5c/64 Scope:Link
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:2 errors:0 dropped:0 overruns:0 frame:1
+          TX packets:1171 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:188 (188.0 B)  TX bytes:568386 (555.0 KiB)
+
+eth1.2    Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          UP BROADCAST MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:7 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:0 (0.0 B)  TX bytes:766 (766.0 B)
+
+eth1.3    Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:2 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:1150 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:152 (152.0 B)  TX bytes:561380 (548.2 KiB)
+
+eth1.4    Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          UP BROADCAST MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:7 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:0 (0.0 B)  TX bytes:766 (766.0 B)
+
+gre0      Link encap:UNSPEC  HWaddr 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  
+          NOARP  MTU:1476  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1 
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+gretap0   Link encap:Ethernet  HWaddr xx:xx:xx:xx:xx:xx  
+          BROADCAST MULTICAST  MTU:1462  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+
+===== wifi-uci =====
+wireless.wifi0=wifi-device
+wireless.wifi0.type='qcawificfg80211'
+wireless.wifi0.channel='0'
+wireless.wifi0.macaddr='xx:xx:xx:xx:xx:xx'
+wireless.wifi0.hwmode='11axg'
+wireless.wifi0.htmode='HT40'
+wireless.wifi0.country='CN'
+wireless.wifi0.disabled='0'
+wireless.wifi0.txbf='3'
+wireless.wifi0.ax='1'
+wireless.wifi0.bw='0'
+wireless.@wifi-iface[0]=wifi-iface
+wireless.@wifi-iface[0].device='wifi0'
+wireless.@wifi-iface[0].ifname='wl1'
+wireless.@wifi-iface[0].network='lan'
+wireless.@wifi-iface[0].mode='ap'
+wireless.@wifi-iface[0].ssid='<redacted-ssid>'
+wireless.@wifi-iface[0].wpsdevicename='XiaoMiRouter'
+wireless.@wifi-iface[0].he_ul_ofdma='0'
+wireless.@wifi-iface[0].twt_responder='0'
+wireless.@wifi-iface[0].amsdu='2'
+wireless.@wifi-iface[0].wscconfigstatus='2'
+wireless.@wifi-iface[0].disabled='0'
+wireless.@wifi-iface[0].key=<redacted>
+wireless.@wifi-iface[0].wnm='1'
+wireless.@wifi-iface[0].rrm='1'
+wireless.@wifi-iface[0].miwifi_mesh='0'
+wireless.@wifi-iface[0].encryption='psk2'
+wireless.wifi1=wifi-device
+wireless.wifi1.type='qcawificfg80211'
+wireless.wifi1.channel='0'
+wireless.wifi1.macaddr='xx:xx:xx:xx:xx:xx'
+wireless.wifi1.hwmode='11axa'
+wireless.wifi1.htmode='HT80'
+wireless.wifi1.country='CN'
+wireless.wifi1.disabled='0'
+wireless.wifi1.txbf='3'
+wireless.wifi1.ax='1'
+wireless.wifi1.bw='0'
+wireless.wifi1.CSwOpts='0x31'
+wireless.@wifi-iface[1]=wifi-iface
+wireless.@wifi-iface[1].device='wifi1'
+wireless.@wifi-iface[1].ifname='wl0'
+wireless.@wifi-iface[1].network='lan'
+wireless.@wifi-iface[1].mode='ap'
+wireless.@wifi-iface[1].ssid='<redacted-ssid>'
+wireless.@wifi-iface[1].wpsdevicename='XiaoMiRouter'
+wireless.@wifi-iface[1].he_ul_ofdma='0'
+wireless.@wifi-iface[1].twt_responder='0'
+wireless.@wifi-iface[1].wscconfigstatus='2'
+wireless.@wifi-iface[1].disabled='0'
+wireless.@wifi-iface[1].key=<redacted>
+wireless.@wifi-iface[1].wnm='1'
+wireless.@wifi-iface[1].rrm='1'
+wireless.@wifi-iface[1].miwifi_mesh='0'
+wireless.@wifi-iface[1].channel_block_list='52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,165'
+wireless.@wifi-iface[1].encryption='psk2'
+wireless.miot_2G=wifi-iface
+wireless.miot_2G.ifname='wl13'
+wireless.miot_2G.network='miot'
+wireless.miot_2G.encryption='none'
+wireless.miot_2G.device='wifi0'
+wireless.miot_2G.mode='ap'
+wireless.miot_2G.hidden='1'
+wireless.miot_2G.maxsta='20'
+wireless.miot_2G.ssid='<redacted-ssid>'
+wireless.miot_2G.bsd='0'
+wireless.miot_2G.disabled='0'
+wireless.miot_2G.ap_isolate='1'
+wireless.miot_2G.userswitch='1'
+wireless.bh_ap=wifi-iface
+wireless.bh_ap.device='wifi1'
+wireless.bh_ap.ifname='wl5'
+wireless.bh_ap.network='lan'
+wireless.bh_ap.mode='ap'
+wireless.bh_ap.channel_block_list='52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,165'
+wireless.bh_ap.encryption='psk2'
+wireless.bh_ap.hidden='1'
+wireless.bh_ap.backhaul='1'
+wireless.bh_ap.backhaul_ap='1'
+wireless.bh_ap.wds='1'
+wireless.bh_ap.wps_pbc='1'
+wireless.bh_ap.wps_pbc_enable='0'
+wireless.bh_ap.wps_pbc_start_time='0'
+wireless.bh_ap.wps_pbc_duration='120'
+wireless.bh_ap.group='0'
+wireless.bh_ap.athnewind='1'
+wireless.bh_ap.mesh_aplimit='9'
+wireless.bh_ap.miwifi_mesh='0'
+wireless.bh_ap.mesh_version='4'
+wireless.bh_ap.macaddr='xx:xx:xx:xx:xx:xx'
+wireless.bh_ap.ssid='<redacted-ssid>'
+wireless.bh_ap.mesh_ver='4'
+wireless.bh_ap.mesh_apmac='xx:xx:xx:xx:xx:xx'
+wireless.bh_ap.disabled='0'
+wireless.iot_2g=wifi-iface
+wireless.iot_2g.device='wifi0'
+wireless.iot_2g.ifname='wl17'
+wireless.iot_2g.network='lan'
+wireless.iot_2g.encryption='mixed-psk'
+wireless.iot_2g.mode='ap'
+wireless.iot_2g.hidden='0'
+wireless.iot_2g.disabled='1'
+wireless.iot_2g.iotwifi5mode='1'
+wireless.iot_2g.macaddr='xx:xx:xx:xx:xx:xx'
+wireless.iot_5g=wifi-iface
+wireless.iot_5g.device='wifi1'
+wireless.iot_5g.ifname='wl16'
+wireless.iot_5g.network='lan'
+wireless.iot_5g.encryption='mixed-psk'
+wireless.iot_5g.mode='ap'
+wireless.iot_5g.hidden='0'
+wireless.iot_5g.disabled='1'
+wireless.iot_5g.iotwifi5mode='1'
+wireless.iot_5g.macaddr='xx:xx:xx:xx:xx:xx'
+
+===== cfg80211tool-list =====
+	 dp_peer_stats                  
+	 fc_peer_stats                  
+	 atf_sched_dur                  
+	 aggr_burst                     
+	 set_ba_timeout                 
+	 get_ba_timeout                 
+	 set_pcp_tid_map                
+	 get_pcp_tid_map                
+	 set_tidmap_prec                
+	 get_tidmap_prec                
+	 set_sa_param                   
+	 get_sa_param                   
+	 setHwaddr                      
+	 setCountry                     
+	 getCountry                     
+	 he_bsscolor                    
+	 get_he_bsscolor                
+	 enable_mesh_mode               
+	 get_enable_mesh_mode           
+	 btcoex_dc                      
+	 set_mgmt_rssi_thr              
+	 get_mgmt_rssi_thr              
+	 he_srp_psr_enable              
+	 get_he_srp_psr_enable          
+	 he_srp_non_srg_obsspd_enable   
+	 get_he_srp_non_srg_obsspd_enable 
+	 he_srp_sr15_enable             
+	 get_he_srp_sr15_enable         
+	 set_rxProtocolTag              
+	 dump_rxProtocolTagStats        
+	 gpio_config                    
+	 gpio_output                    
+	 nav_config                     
+	 get_nav_config                 
+	 he_srp_srg_obsspd_enable       
+	 get_he_srp_srg_obsspd_enable   
+	 he_srp_srg_bss_color_bitmap    
+	 get_he_srp_srg_bss_color_bitmap 
+	 he_srp_srg_partial_bssid_bitmap 
+	 get_he_srp_srg_partial_bssid_bitmap 
+---- wifi1
+	 dp_peer_stats                  
+	 fc_peer_stats                  
+	 atf_sched_dur                  
+	 aggr_burst                     
+	 set_ba_timeout                 
+	 get_ba_timeout                 
+	 set_pcp_tid_map                
+	 get_pcp_tid_map                
+	 set_tidmap_prec                
+	 get_tidmap_prec                
+	 set_sa_param                   
+	 get_sa_param                   
+	 setHwaddr                      
+	 setCountry                     
+	 getCountry                     
+	 he_bsscolor                    
+	 get_he_bsscolor                
+	 enable_mesh_mode               
+	 get_enable_mesh_mode           
+	 btcoex_dc                      
+	 set_mgmt_rssi_thr              
+	 get_mgmt_rssi_thr              
+	 he_srp_psr_enable              
+	 get_he_srp_psr_enable          
+	 he_srp_non_srg_obsspd_enable   
+	 get_he_srp_non_srg_obsspd_enable 
+	 he_srp_sr15_enable             
+	 get_he_srp_sr15_enable         
+	 set_rxProtocolTag              
+	 dump_rxProtocolTagStats        
+	 gpio_config                    
+	 gpio_output                    
+	 nav_config                     
+	 get_nav_config                 
+	 he_srp_srg_obsspd_enable       
+	 get_he_srp_srg_obsspd_enable   
+	 he_srp_srg_bss_color_bitmap    
+	 get_he_srp_srg_bss_color_bitmap 
+	 he_srp_srg_partial_bssid_bitmap 
+	 get_he_srp_srg_partial_bssid_bitmap 
+
+===== cfg80211tool-nss =====
+wifi0 get_nss_wifi_offload -> cfg80211tool.1: unrecognized option: get_nss_wifi_offload
+parseCmdinputs:1132 Unsupported Command 
+wifi0 nss_wifi_olcfg -> cfg80211tool.1: unrecognized option: nss_wifi_olcfg
+parseCmdinputs:1132 Unsupported Command 
+wifi0 get_fw_recovery -> wifi0	get_fw_recovery:0
+wifi0 get_ol_cfg -> cfg80211tool.1: unrecognized option: get_ol_cfg
+parseCmdinputs:1132 Unsupported Command 
+wifi1 get_nss_wifi_offload -> cfg80211tool.1: unrecognized option: get_nss_wifi_offload
+parseCmdinputs:1132 Unsupported Command 
+wifi1 nss_wifi_olcfg -> cfg80211tool.1: unrecognized option: nss_wifi_olcfg
+parseCmdinputs:1132 Unsupported Command 
+wifi1 get_fw_recovery -> wifi1	get_fw_recovery:0
+wifi1 get_ol_cfg -> cfg80211tool.1: unrecognized option: get_ol_cfg
+parseCmdinputs:1132 Unsupported Command 
+
+===== wifistats =====
+HTT_TX_PDEV_STATS_CMN_TLV:
+mac_id = 0
+comp_delivered = 181
+self_triggers = 298408
+hw_queued = 47337
+hw_reaped = 53580
+underrun = 0
+hw_paused = 41471
+hw_flush = 4365
+hw_filt = 4372
+tx_abort = 0
+ppdu_ok = 40953
+mpdu_requeued = 2919
+tx_xretry = 1749
+data_rc = 5
+mpdu_dropped_xretry = 0
+illegal_rate_phy_err = 0
+cont_xretry = 0
+tx_timeout = 0
+tx_time_dur_data = 1353019
+pdev_resets = 0
+phy_underrun = 0
+txop_ovf = 0
+seq_posted = 44600
+seq_failed_queueing = 1370
+seq_completed = 43230
+seq_restarted = 0
+seq_txop_repost_stop = 1425
+next_seq_cancel = 1865
+dl_mu_mimo_seq_posted = 0
+dl_mu_ofdma_seq_posted = 0
+ul_mu_mimo_seq_posted = 0
+ul_mu_ofdma_seq_posted = 0
+mu_mimo_peer_blacklist_count = 0
+seq_qdepth_repost_stop = 0
+seq_min_msdu_repost_stop = 1066
+mu_seq_min_msdu_repost_stop = 0
+seq_switch_hw_paused = 53
+next_seq_posted_dsr = 1776
+seq_posted_isr = 300
+seq_ctrl_cached = 3246
+mpdu_count_tqm = 7402
+msdu_count_tqm = 7402
+mpdu_removed_tqm = 0
+msdu_removed_tqm = 0
+remove_mpdus_max_retries = 0
+mpdus_sw_flush = 4
+mpdus_hw_filter = 0
+mpdus_truncated = 0
+mpdus_ack_failed = 2818
+mpdus_expired = 0
+mpdus_seq_hw_retry = 365
+ack_tlv_proc = 3765
+coex_abort_mpdu_cnt_valid = 5035
+coex_abort_mpdu_cnt = 47509
+num_total_ppdus_tried_ota = 42450
+num_data_ppdus_tried_ota = 5035
+local_ctrl_mgmt_enqued = 37226
+local_ctrl_mgmt_freed = 37226
+local_data_enqued = 0
+---- wifi1
+HTT_TX_PDEV_STATS_CMN_TLV:
+mac_id = 0
+comp_delivered = 0
+self_triggers = 179161
+hw_queued = 36396
+hw_reaped = 36396
+underrun = 0
+hw_paused = 35682
+hw_flush = 30
+hw_filt = 30
+tx_abort = 0
+ppdu_ok = 35717
+mpdu_requeued = 466
+tx_xretry = 466
+data_rc = 3
+mpdu_dropped_xretry = 0
+illegal_rate_phy_err = 0
+cont_xretry = 0
+tx_timeout = 0
+tx_time_dur_data = 0
+pdev_resets = 0
+phy_underrun = 0
+txop_ovf = 0
+seq_posted = 35864
+seq_failed_queueing = 0
+seq_completed = 35864
+seq_restarted = 0
+seq_txop_repost_stop = 175
+next_seq_cancel = 0
+dl_mu_mimo_seq_posted = 0
+dl_mu_ofdma_seq_posted = 0
+ul_mu_mimo_seq_posted = 0
+ul_mu_ofdma_seq_posted = 0
+mu_mimo_peer_blacklist_count = 0
+seq_qdepth_repost_stop = 0
+seq_min_msdu_repost_stop = 0
+mu_seq_min_msdu_repost_stop = 0
+seq_switch_hw_paused = 0
+next_seq_posted_dsr = 0
+seq_posted_isr = 0
+seq_ctrl_cached = 0
+mpdu_count_tqm = 0
+msdu_count_tqm = 0
+mpdu_removed_tqm = 0
+msdu_removed_tqm = 0
+remove_mpdus_max_retries = 0
+mpdus_sw_flush = 5
+mpdus_hw_filter = 0
+mpdus_truncated = 0
+mpdus_ack_failed = 466
+mpdus_expired = 0
+mpdus_seq_hw_retry = 354
+ack_tlv_proc = 0
+coex_abort_mpdu_cnt_valid = 0
+coex_abort_mpdu_cnt = 36183
+num_total_ppdus_tried_ota = 36183
+num_data_ppdus_tried_ota = 0
+local_ctrl_mgmt_enqued = 35863
+local_ctrl_mgmt_freed = 35863
+local_data_enqued = 0
+
+===== apstats =====
+apstats: Error - VAP Interface name not configured.
+
+apstats v0.1: Display Access Point Statistics.
+
+Usage:
+
+apstats [Level] [[-i interface_name] | [-m STA_MAC_Address]] [-R]  
+
+One of four levels can be selected. The levels are as follows (from 
+the top to the bottom of the hierarchy): 
+Entire Access Point, Radio, VAP and STA. 
+The default is Entire Access Point. Information for sub-levels below 
+the selected level can be displayed by choosing the -R (recursive) 
+option (not applicable for the STA level, where information for a 
+single STA is displayed). 
+
+LEVELS:
+
+-a or --aplevel
+    Entire Access Point Level (WLAN).
+    No Interface or STA MAC needs to be provided.
+
+-r or --radiolevel
+    Radio Level.
+    Radio Interface Name needs to be provided.
+
+-v or --vaplevel
+    VAP Level.
+    VAP Interface Name needs to be provided.
+
+-s or --stalevel
+    STA Level.
+    STA MAC Address needs to be provided.
+
+INTERFACE:
+
+If Radio Level is selected:
+-i wifiX or --ifname=wifiX
+
+If VAP Level is selected:
+-i <VAP_name> or --ifname=<VAP_name>
+
+STA MAC ADDRESS:
+
+Required if STA Level is selected:
+-m xx:xx:xx:xx:xx:xx or --stamacaddr xx:xx:xx:xx:xx:xx
+
+OTHER OPTIONS:
+-R or --recursive
+    Recursive display
+-M Mesh stats
+
+===== nss-wifili-stats =====
+cpu_load_ubi
+drv
+dynamic_if
+eth_rx
+gmac
+gre
+ipv4
+ipv4_reasm
+ipv6
+ipv6_reasm
+l2tpv2
+lso_rx
+n2h
+pppoe
+pptp
+project
+udp_st
+unaligned
+wifi
+wifi_ext_vdev
+wifi_mesh
+wifili
+---- wifili
+
+________________________________________________________________________________
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< WIFILI >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+________________________________________________________________________________
+
+
+#txrx
+
+	wifili[0]_rx_msdu_error                 = 0               error
+	wifili[0]_rx_inv_peer_rcv               = 0               special
+	wifili[0]_rx_wds_srcport_exception      = 0               exception
+	wifili[0]_rx_wds_srcport_exception_fail = 0               drop
+	wifili[0]_rx_deliverd                   = 6025            special
+	wifili[0]_rx_deliver_drops              = 0               drop
+	wifili[0]_rx_intra_bss_ucast            = 0               special
+	wifili[0]_rx_intra_bss_ucast_fail       = 0               drop
+	wifili[0]_rx_intra_bss_mcast            = 204             special
+	wifili[0]_rx_intra_bss_mcast_fail       = 0               drop
+	wifili[0]_rx_sg_rcv_send                = 0               special
+	wifili[0]_rx_sg_rcv_fail                = 0               drop
+	wifili[0]_rx_mcast_echo                 = 0               special
+	wifili[0]_rx_inv_tid                    = 0               special
+	wifili[0]_stats_rx_frag_inv_sc          = 0               special
+	wifili[0]_stats_rx_frag_inv_fc          = 0               special
+	wifili[0]_stats_rx_frag_non_frag        = 0               special
+	wifili[0]_stats_rx_frag_retry           = 0               special
+	wifili[0]_stats_rx_frag_ooo             = 0               special
+	wifili[0]_stats_rx_frag_ooo_seq         = 0               special
+	wifili[0]_stats_rx_frag_all_frag_rcv    = 0               special
+	wifili[0]_stats_rx_frag_deliver         = 0               special
+	wifili[0]_tx_enqueue                    = 7753            special
+	wifili[0]_tx_enqueue_drop               = 0               drop
+	wifili[0]_tx_dequeue                    = 7753            special
+	wifili[0]_tx_hw_enqueue_fail            = 0               drop
+	wifili[0]_tx_sent_count                 = 7753            special
+
+
+#tcl ring
+
+	wifili[0]_tcl_no_hw_desc = 0               special
+	wifili[0]_tcl_ring_full  = 0               special
+	wifili[0]_tcl_ring_sent  = 7753            special
+
+
+#tcl comp
+
+	wifili[0]_tx_desc_free_inv_bufsrc    = 0               error
+	wifili[0]_tx_desc_free_inv_cookie    = 0               special
+	wifili[0]_tx_desc_free_hw_ring_empty = 0               special
+	wifili[0]_tx_desc_free_reaped        = 8288            special
+
+
+#reo ring
+
+	wifili[0]_reo_error          = 0               error
+	wifili[0]_reo_reaped         = 6021            special
+	wifili[0]_reo_inv_cookie     = 0               special
+	wifili[0]_stats_reo_frag_rcv = 0               special
+
+
+#tx sw pool
+
+	wifili[0]_tx_desc_in_use            = 3               special
+	wifili[0]_tx_desc_alloc_fail        = 0               special
+	wifili[0]_tx_desc_already_allocated = 0               special
+	wifili[0]_tx_desc_invalid_free      = 0               special
+	wifili[0]_tx_desc_free_src_fw       = 252             special
+	wifili[0]_tx_desc_free_completion   = 7498            special
+	wifili[0]_tx_desc_no_pb             = 0               special
+	wifili[0]_tx_desc_queuelimit_drop   = 0               drop
+
+
+#tx ext sw pool
+
+	wifili[0]_ext_tx_desc_in_use            = 0               special
+	wifili[0]_ext_tx_desc_alloc_fail        = 0               special
+	wifili[0]_ext_tx_desc_already_allocated = 0               special
+	wifili[0]_ext_tx_desc_invalid_free      = 0               special
+
+
+#rxdma pool
+
+	wifili[0]_rx_desc_no_pb      = 2               special
+	wifili[0]_rx_desc_alloc_fail = 66099           special
+	wifili[0]_rx_desc_in_use     = 4095            special
+
+
+#rxdma ring
+
+	wifili[0]_rxdma_hw_desc_unavailable = 0               special
+	wifili[0]_rxdma_buf_replenished     = 14749           special
+
+
+#txrx
+
+	wifili[1]_rx_msdu_error                 = 0               error
+	wifili[1]_rx_inv_peer_rcv               = 0               special
+	wifili[1]_rx_wds_srcport_exception      = 0               exception
+	wifili[1]_rx_wds_srcport_exception_fail = 0               drop
+	wifili[1]_rx_deliverd                   = 0               special
+	wifili[1]_rx_deliver_drops              = 0               drop
+	wifili[1]_rx_intra_bss_ucast            = 0               special
+	wifili[1]_rx_intra_bss_ucast_fail       = 0               drop
+	wifili[1]_rx_intra_bss_mcast            = 0               special
+	wifili[1]_rx_intra_bss_mcast_fail       = 0               drop
+	wifili[1]_rx_sg_rcv_send                = 0               special
+	wifili[1]_rx_sg_rcv_fail                = 0               drop
+	wifili[1]_rx_mcast_echo                 = 0               special
+	wifili[1]_rx_inv_tid                    = 0               special
+	wifili[1]_stats_rx_frag_inv_sc          = 0               special
+	wifili[1]_stats_rx_frag_inv_fc          = 0               special
+	wifili[1]_stats_rx_frag_non_frag        = 0               special
+	wifili[1]_stats_rx_frag_retry           = 0               special
+	wifili[1]_stats_rx_frag_ooo             = 0               special
+	wifili[1]_stats_rx_frag_ooo_seq         = 0               special
+	wifili[1]_stats_rx_frag_all_frag_rcv    = 0               special
+	wifili[1]_stats_rx_frag_deliver         = 0               special
+	wifili[1]_tx_enqueue                    = 0               special
+	wifili[1]_tx_enqueue_drop               = 0               drop
+
+===== cnss-debugfs =====
+/sys/kernel/debug/cnss:
+QCA5018
+QCN6122_1
+qmi_record
+
+/sys/kernel/debug/cnss/QCA5018:
+control_params
+dev_boot
+dynamic_feature
+pin_connect_result
+reg_read
+reg_write
+runtime_pm
+stats
+
+/sys/kernel/debug/cnss/QCN6122_1:
+control_params
+dev_boot
+dynamic_feature
+pin_connect_result
+reg_read
+reg_write
+runtime_pm
+stats
+## /sys/kernel/debug/cnss/qmi_record
+
+===== ieee80211-debugfs =====
+phy0
+phy1
+
+===== firmware-files =====
+drwxr-xr-x    4 root     root            92 Dec 24 10:43 .
+drwxrwxr-x   22 root     root           803 Dec 24 12:52 ..
+drwxr-xr-x    3 root     root           663 Dec 24 12:49 IPQ5018
+-rwxrwxr-x    1 root     root        761852 Dec 24 10:43 qca-nss0-retail.bin
+lrwxrwxrwx    1 root     root            21 Dec 24 12:49 qca-nss0.bin -> ./qca-nss0-retail.bin
+drwxr-xr-x    2 root     root           188 Dec 24 12:49 qcn6122
+drwxr-xr-x    2 root     root           188 Dec 24 12:49 .
+drwxr-xr-x    4 root     root            92 Dec 24 10:43 ..
+lrwxrwxrwx    1 root     root            37 Dec 24 12:49 bdwlan.b60 -> ../IPQ5018/WIFI_FW/qcn6122/bdwlan.b60
+lrwxrwxrwx    1 root     root            37 Dec 24 12:49 bdwlan.bin -> ../IPQ5018/WIFI_FW/qcn6122/bdwlan.bin
+lrwxrwxrwx    1 root     root            34 Dec 24 12:49 caldata_1.bin -> /tmp/IPQ5018/qcn6122/caldata_1.bin
+lrwxrwxrwx    1 root     root            36 Dec 24 12:49 m3_fw.b00 -> ../IPQ5018/WIFI_FW/qcn6122/m3_fw.b00
+lrwxrwxrwx    1 root     root            36 Dec 24 12:49 m3_fw.b01 -> ../IPQ5018/WIFI_FW/qcn6122/m3_fw.b01
+lrwxrwxrwx    1 root     root            36 Dec 24 12:49 m3_fw.b02 -> ../IPQ5018/WIFI_FW/qcn6122/m3_fw.b02
+lrwxrwxrwx    1 root     root            38 Dec 24 12:49 m3_fw.flist -> ../IPQ5018/WIFI_FW/qcn6122/m3_fw.flist
+lrwxrwxrwx    1 root     root            36 Dec 24 12:49 m3_fw.mdt -> ../IPQ5018/WIFI_FW/qcn6122/m3_fw.mdt
+lrwxrwxrwx    1 root     root            48 Dec 24 12:49 qdss_trace_config.bin -> ../IPQ5018/WIFI_FW/qcn6122/qdss_trace_config.bin
+drwxr-xr-x    3 root     root           663 Dec 24 12:49 .
+drwxr-xr-x    4 root     root            92 Dec 24 10:43 ..
+drwxr-xr-x    3 root     root           632 Dec 24 12:49 WIFI_FW
+lrwxrwxrwx    1 root     root            18 Dec 24 12:49 bdwlan.b24 -> WIFI_FW/bdwlan.b24
+lrwxrwxrwx    1 root     root            18 Dec 24 12:49 bdwlan.bin -> WIFI_FW/bdwlan.bin
+lrwxrwxrwx    1 root     root            24 Dec 24 12:49 caldata.bin -> /tmp/IPQ5018/caldata.bin
+lrwxrwxrwx    1 root     root            32 Dec 24 12:49 firmware_rdp_feature.ini -> WIFI_FW/firmware_rdp_feature.ini
+lrwxrwxrwx    1 root     root            37 Dec 24 12:49 firmware_rdp_feature_512P.ini -> WIFI_FW/firmware_rdp_feature_512P.ini
+lrwxrwxrwx    1 root     root            22 Dec 24 12:49 fw_version.txt -> WIFI_FW/fw_version.txt
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 m3_fw.b00 -> WIFI_FW/m3_fw.b00
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 m3_fw.b01 -> WIFI_FW/m3_fw.b01
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 m3_fw.b02 -> WIFI_FW/m3_fw.b02
+lrwxrwxrwx    1 root     root            19 Dec 24 12:49 m3_fw.flist -> WIFI_FW/m3_fw.flist
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 m3_fw.mdt -> WIFI_FW/m3_fw.mdt
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b00 -> WIFI_FW/q6_fw.b00
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b01 -> WIFI_FW/q6_fw.b01
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b02 -> WIFI_FW/q6_fw.b02
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b03 -> WIFI_FW/q6_fw.b03
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b04 -> WIFI_FW/q6_fw.b04
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b05 -> WIFI_FW/q6_fw.b05
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b07 -> WIFI_FW/q6_fw.b07
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b08 -> WIFI_FW/q6_fw.b08
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b09 -> WIFI_FW/q6_fw.b09
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b10 -> WIFI_FW/q6_fw.b10
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b11 -> WIFI_FW/q6_fw.b11
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b13 -> WIFI_FW/q6_fw.b13
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b14 -> WIFI_FW/q6_fw.b14
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b15 -> WIFI_FW/q6_fw.b15
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b16 -> WIFI_FW/q6_fw.b16
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b17 -> WIFI_FW/q6_fw.b17
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b18 -> WIFI_FW/q6_fw.b18
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b20 -> WIFI_FW/q6_fw.b20
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.b21 -> WIFI_FW/q6_fw.b21
+lrwxrwxrwx    1 root     root            19 Dec 24 12:49 q6_fw.flist -> WIFI_FW/q6_fw.flist
+lrwxrwxrwx    1 root     root            17 Dec 24 12:49 q6_fw.mdt -> WIFI_FW/q6_fw.mdt
+lrwxrwxrwx    1 root     root            29 Dec 24 12:49 qdss_trace_config.bin -> WIFI_FW/qdss_trace_config.bin
+
+===== remoteproc =====
+-- /sys/class/remoteproc/remoteproc0 name= state=running fw=IPQ5018/q6_fw.mdt
+-- /sys/class/remoteproc/remoteproc1 name= state=running fw=(null)
+-- /sys/class/remoteproc/remoteproc2 name= state=running fw=(null)
+remoteproc0
+remoteproc1
+remoteproc2

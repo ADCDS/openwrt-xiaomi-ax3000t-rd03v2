@@ -1,0 +1,339 @@
+=== identity ===
+DISTRIB_ID='OpenWrt'
+DISTRIB_RELEASE='SNAPSHOT'
+DISTRIB_REVISION='r35297-25ee12629e'
+DISTRIB_TARGET='qualcommax/ipq50xx'
+DISTRIB_ARCH='aarch64_cortex-a53'
+DISTRIB_DESCRIPTION='OpenWrt SNAPSHOT r35297-25ee12629e'
+DISTRIB_TAINTS=''
+Linux OpenWrt 6.12.94 #0 SMP Thu Jul  9 11:01:03 2026 aarch64 GNU/Linux
+xiaomi,mi-router-ax3000t-v2
+ 11:41:49 up 41 min,  load average: 0.01, 0.00, 0.00
+=== meminfo ===
+MemTotal:         183564 kB
+MemFree:           48800 kB
+MemAvailable:      43320 kB
+Buffers:               0 kB
+Cached:            31444 kB
+SwapCached:            0 kB
+Active:            15844 kB
+Inactive:          20372 kB
+Active(anon):       5036 kB
+Inactive(anon):        0 kB
+Active(file):      10808 kB
+Inactive(file):    20372 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                 0 kB
+Writeback:             0 kB
+AnonPages:          4796 kB
+Mapped:             5408 kB
+Shmem:               264 kB
+KReclaimable:       7004 kB
+Slab:              22296 kB
+SReclaimable:       7004 kB
+SUnreclaim:        15292 kB
+KernelStack:        1320 kB
+PageTables:          756 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:       91780 kB
+Committed_AS:      13808 kB
+VmallocTotal:   261087232 kB
+VmallocUsed:       10792 kB
+VmallocChunk:          0 kB
+Percpu:              256 kB
+=== zoneinfo ===
+Node 0, zone      DMA
+  per-node stats
+      nr_inactive_anon 0
+      nr_active_anon 1268
+      nr_inactive_file 5093
+      nr_active_file 2702
+      nr_unevictable 0
+      nr_slab_reclaimable 1751
+      nr_slab_unreclaimable 3823
+      nr_isolated_anon 0
+      nr_isolated_file 0
+      workingset_nodes 0
+      workingset_refault_anon 0
+      workingset_refault_file 0
+      workingset_activate_anon 0
+      workingset_activate_file 0
+      workingset_restore_anon 0
+      workingset_restore_file 0
+      workingset_nodereclaim 0
+      nr_anon_pages 1199
+      nr_mapped    1352
+      nr_file_pages 7861
+      nr_dirty     0
+      nr_writeback 0
+      nr_writeback_temp 0
+      nr_shmem     66
+      nr_shmem_hugepages 0
+      nr_shmem_pmdmapped 0
+      nr_file_hugepages 0
+      nr_file_pmdmapped 0
+      nr_anon_transparent_hugepages 0
+      nr_vmscan_write 0
+      nr_vmscan_immediate_reclaim 0
+      nr_dirtied   96
+      nr_written   96
+      nr_throttled_written 0
+      nr_kernel_misc_reclaimable 0
+      nr_foll_pin_acquired 0
+      nr_foll_pin_released 0
+      nr_kernel_stack 1332
+      nr_page_table_pages 189
+      nr_sec_page_table_pages 0
+      nr_swapcached 0
+      pgdemote_kswapd 0
+      pgdemote_direct 0
+      pgdemote_khugepaged 0
+  pages free     12200
+        boost    0
+        min      4096
+        low      5120
+        high     6144
+        promo    7168
+        spanned  65536
+        present  65536
+        managed  45891
+        cma      0
+        protection: (0, 0, 0, 0)
+      nr_free_pages 12200
+      nr_zone_inactive_anon 0
+      nr_zone_active_anon 1268
+      nr_zone_inactive_file 5093
+      nr_zone_active_file 2702
+      nr_zone_unevictable 0
+      nr_zone_write_pending 0
+      nr_mlock     0
+      nr_bounce    0
+      nr_zspages   0
+      nr_free_cma  0
+  pagesets
+    cpu: 0
+              count: 27
+              high:  2635
+              batch: 15
+  vm stats threshold: 8
+    cpu: 1
+              count: 104
+              high:  2560
+              batch: 15
+  vm stats threshold: 8
+  node_unreclaimable:  0
+  start_pfn:           262144
+Node 0, zone    DMA32
+  pages free     0
+        boost    0
+        min      0
+        low      0
+        high     0
+        promo    0
+        spanned  0
+        present  0
+        managed  0
+        cma      0
+        protection: (0, 0, 0, 0)
+Node 0, zone   Normal
+  pages free     0
+        boost    0
+        min      0
+        low      0
+        high     0
+        promo    0
+        spanned  0
+        present  0
+        managed  0
+        cma      0
+        protection: (0, 0, 0, 0)
+Node 0, zone  Movable
+  pages free     0
+        boost    0
+        min      32
+        low      32
+        high     32
+        promo    32
+        spanned  0
+        present  0
+        managed  0
+        cma      0
+        protection: (0, 0, 0, 0)
+=== vmstat ===
+nr_free_pages 12182
+nr_zone_inactive_anon 0
+nr_zone_active_anon 1268
+nr_zone_inactive_file 5093
+nr_zone_active_file 2702
+nr_zone_unevictable 0
+nr_zone_write_pending 0
+nr_mlock 0
+nr_bounce 0
+nr_zspages 0
+nr_free_cma 0
+nr_inactive_anon 0
+nr_active_anon 1268
+nr_inactive_file 5093
+nr_active_file 2702
+nr_unevictable 0
+nr_slab_reclaimable 1751
+nr_slab_unreclaimable 3823
+nr_isolated_anon 0
+nr_isolated_file 0
+workingset_nodes 0
+workingset_refault_anon 0
+workingset_refault_file 0
+workingset_activate_anon 0
+workingset_activate_file 0
+workingset_restore_anon 0
+workingset_restore_file 0
+workingset_nodereclaim 0
+nr_anon_pages 1199
+nr_mapped 1352
+nr_file_pages 7861
+nr_dirty 0
+nr_writeback 0
+nr_writeback_temp 0
+nr_shmem 66
+nr_shmem_hugepages 0
+nr_shmem_pmdmapped 0
+nr_file_hugepages 0
+nr_file_pmdmapped 0
+nr_anon_transparent_hugepages 0
+nr_vmscan_write 0
+nr_vmscan_immediate_reclaim 0
+nr_dirtied 96
+nr_written 96
+nr_throttled_written 0
+nr_kernel_misc_reclaimable 0
+nr_foll_pin_acquired 0
+nr_foll_pin_released 0
+nr_kernel_stack 1332
+nr_page_table_pages 189
+nr_sec_page_table_pages 0
+nr_swapcached 0
+pgdemote_kswapd 0
+pgdemote_direct 0
+pgdemote_khugepaged 0
+nr_dirty_threshold 2766
+nr_dirty_background_threshold 1381
+nr_memmap_pages 0
+nr_memmap_boot_pages 1024
+nr_unstable 0
+=== sysctl vm + conntrack ===
+net.netfilter.nf_conntrack_buckets = 11776
+net.netfilter.nf_conntrack_max = 11776
+net.nf_conntrack_max = 11776
+vm.min_free_kbytes = 16384
+vm.swappiness = 60
+vm.watermark_boost_factor = 15000
+vm.watermark_scale_factor = 10
+=== lsmod ===
+ath11k                495616  1 ath11k_ahb
+ath11k_ahb             24576  0 
+cfg80211              372736  2 ath11k,mac80211
+cmac                   12288  0 
+compat                 12288  3 ath11k_ahb,mac80211,cfg80211
+crc_ccitt              12288  1 ppp_async
+crc32c_generic         12288  1 
+drbg                   24576  0 
+dwc3                   49152  0 
+dwc3_qcom              16384  0 
+ext4                  458752  0 
+geniv                  12288  1 seqiv
+gpio_button_hotplug    16384  0 
+hmac                   12288  0 
+inet_diag              20480  3 udp_diag,tcp_diag,raw_diag
+jbd2                   77824  1 ext4
+jitterentropy_rng      16384  0 
+leds_gpio              12288  0 
+libcrc32c              12288  1 nf_tables
+mac80211              720896  1 ath11k
+mbcache                12288  1 ext4
+michael_mic            12288  2 
+nf_conntrack          102400  7 nft_redir,nft_nat,nft_masq,nft_flow_offload,nft_ct,nf_nat,nf_flow_table
+nf_defrag_ipv4         12288  2 nft_tproxy,nf_conntrack
+nf_defrag_ipv6         16384  2 nft_tproxy,nf_conntrack
+nf_flow_table          32768  2 nf_flow_table_inet,nft_flow_offload
+nf_flow_table_inet     12288  0 
+nf_log_syslog          16384  0 
+nf_nat                 40960  4 nft_redir,nft_nat,nft_masq,nft_chain_nat
+nf_reject_ipv4         12288  2 nft_reject_ipv4,nft_reject_inet
+nf_reject_ipv6         12288  2 nft_reject_ipv6,nft_reject_inet
+nf_tables             221184209 nft_fib_inet,nf_flow_table_inet,nft_tproxy,nft_reject_ipv6,nft_reject_ipv4,nft_reject_inet,nft_reject,nft_redir,nft_quota,nft_numgen,nft_nat,nft_masq,nft_log,nft_limit,nft_hash,nft_flow_offload,nft_fib_ipv6,nft_fib_ipv4,nft_fib,nft_ct,nft_chain_nat
+nf_tproxy_ipv4         12288  1 nft_tproxy
+nf_tproxy_ipv6         12288  1 nft_tproxy
+nfnetlink              16384  1 nf_tables
+nft_chain_nat          12288  2 
+nft_ct                 20480  4 
+nft_fib                12288  3 nft_fib_inet,nft_fib_ipv6,nft_fib_ipv4
+nft_fib_inet           12288  0 
+nft_fib_ipv4           12288  1 nft_fib_inet
+nft_fib_ipv6           12288  1 nft_fib_inet
+nft_flow_offload       12288  0 
+nft_hash               12288  0 
+nft_limit              12288  5 
+nft_log                12288  0 
+nft_masq               12288  1 
+nft_nat                12288  0 
+nft_numgen             12288  0 
+nft_quota              12288  0 
+nft_redir              12288  0 
+nft_reject             12288  3 nft_reject_ipv6,nft_reject_ipv4,nft_reject_inet
+nft_reject_inet        12288  2 
+nft_reject_ipv4        12288  0 
+nft_reject_ipv6        12288  0 
+nft_tproxy             12288  0 
+ppp_async              16384  0 
+ppp_generic            40960  3 pppoe,ppp_async,pppox
+pppoe                  20480  0 
+pppox                  12288  1 pppoe
+qca_nss_dp             40960  0 
+qca_ssdk              516096  1 qca_nss_dp
+qmi_helpers            20480  1 ath11k
+qrtr                   24576  5 qrtr_smd
+qrtr_smd               12288  0 
+raw_diag               12288  0 
+seqiv                  12288  0 
+sha3_generic           12288  0 
+sha512_generic         12288  0 
+slhc                   12288  1 ppp_generic
+tcp_diag               12288  0 
+tun                    49152  0 
+udp_diag               12288  0 
+xhci_hcd              139264  2 xhci_plat_hcd,xhci_pci
+xhci_pci               16384  0 
+xhci_plat_hcd          12288  0 
+=== nss proc tree ===
+ls: /proc/sys/dev/nss: No such file or directory
+=== reserved memory (dmesg) ===
+[    0.000000] OF: reserved mem: 0x000000004a400000..0x000000004a7fffff (4096 KiB) nomap non-reusable tz_apps@4a400000
+[    0.000000] OF: reserved mem: 0x000000004a800000..0x000000004a9fffff (2048 KiB) nomap non-reusable bootloader@4a800000
+[    0.000000] OF: reserved mem: 0x000000004aa00000..0x000000004aafffff (1024 KiB) nomap non-reusable sbl@4aa00000
+[    0.000000] OF: reserved mem: 0x000000004ab00000..0x000000004abfffff (1024 KiB) nomap non-reusable smem@4ab00000
+[    0.000000] OF: reserved mem: 0x000000004ac00000..0x000000004adfffff (2048 KiB) nomap non-reusable tz@4ac00000
+[    0.000000] OF: reserved mem: 0x000000004b000000..0x000000004dffffff (49152 KiB) nomap non-reusable wcss@4b000000
+[    0.000000] OF: reserved mem: 0x000000004b000000..0x000000004dffffff (49152 KiB) nomap non-reusable q6_mem_regions@4b000000
+[    0.000000] OF: reserved mem: OVERLAP DETECTED!
+[    0.000000] wcss@4b000000 (0x000000004b000000--0x000000004e000000) overlaps with q6_mem_regions@4b000000 (0x000000004b000000--0x000000004e000000)
+=== radios ===
+phy0
+phy1
+=== netdev link state ===
+eth0 carrier= speed=
+eth1 carrier=1 speed=1000
+lan2 carrier=0 speed=-1
+lan3 carrier=1 speed=1000
+lan4 carrier=0 speed=-1
+wan carrier=0 speed=-1
+br-lan carrier=1 speed=1000
+=== free ===
+              total        used        free      shared  buff/cache   available
+Mem:         183564       97512       46212         264       39840       41428
+Swap:             0           0           0

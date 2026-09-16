@@ -1,0 +1,91 @@
+RSSI reciprocity measurement — stock 2.0.28 vs this port at v1.8 (issue #3)
+==========================================================================
+
+Reference client: hal, wlp4s0, ath9k (addr xx:xx:xx:xx:xx:xx), fixed position,
+TX power pinned with `iw dev wlp4s0 set txpower fixed 1500` for every pass 2
+measurement.
+
+TX power control validated first (hal associated to stock 2.4 GHz):
+  commanded  5 dBm -> stock reports hal at -64 dBm
+  commanded 15 dBm -> stock reports hal at -57/-58 dBm
+  commanded  5 dBm -> stock reports hal at -64 dBm
+  commanded 15 dBm -> stock reports hal at -57 dBm
+  => control is real and repeatable; a 10 dB command yields ~6.5 dB radiated,
+     so the commanded number is not the radiated number, but at a fixed command
+     the radiated power is constant, which is all reciprocity requires.
+
+Rejected as reference: tiny (RPi4, brcmfmac43455). Hears stock 2.4 GHz at
+-7 dBm (receiver compression) and cannot hear the v1.8 AP's 5 GHz BSS at all,
+so it cannot complete the 5 GHz pair. brcmfmac RSSI calibration is also poorer
+than ath9k's.
+
+PASS 2 — hal TX pinned at a constant setting (the valid pass)
+-------------------------------------------------------------
+A = AP's reported RSSI of hal      B = hal's reported RSSI of AP (beacon avg)
+D = A - B                          P_ap = AP's declared TX power
+
+  link                         A       B      D      P_ap
+  R1 stock 2.4 GHz  ch6      -57     -48     -9     30 dBm
+  R2 v1.8  2.4 GHz  ch11     -60     -51     -9     27 dBm
+  R3 stock 5 GHz    ch48     -67     -81    +14     28 dBm
+  R4 v1.8  5 GHz    ch149    -45     -67    +22     28 dBm
+
+PASS 1 — hal TX left at the regulatory ceiling (kept as a cross-check)
+----------------------------------------------------------------------
+  link                         A       B      D      P_ap    hal ceiling
+  stock 2.4 GHz  ch6         -57     -46    -11     30 dBm   20 dBm
+  v1.8  2.4 GHz  ch11        -60     -52     -8     27 dBm   30 dBm
+  stock 5 GHz    ch48        -71     -86    +15     28 dBm   23 dBm
+  v1.8  5 GHz    ch149       -45     -68    +23     28 dBm   30 dBm
+
+Derivation
+----------
+For one link, in dB:
+    A = P_hal + G + off_ap        G = path gain (reciprocal, cancels)
+    B = P_ap  + G + off_hal
+    D = A - B = P_hal - P_ap + off_ap - off_hal
+
+Comparing two APs with the same client, P_hal and off_hal cancel:
+    off_v18 - off_stock = (D_v18 - D_stock) + (P_v18 - P_stock)
+
+  2.4 GHz  pass 2:  ( -9 - (-9) ) + (27 - 30) = -3 dB
+  2.4 GHz  pass 1:  ( -8 - (-11)) + (27 - 30) =  0 dB
+  5 GHz    pass 2:  ( 22 -  14  ) + (28 - 28) = +8 dB
+  5 GHz    pass 1:  ( 23 -  15  ) + (28 - 28) = +8 dB
+
+Both passes agree on 5 GHz at +8 dB. The 2.4 GHz passes bracket 0 to -3 dB.
+
+Noise floor (absolute, no TX-power assumption)
+----------------------------------------------
+  stock 2.4 GHz  -96 dBm   (iwconfig wl1, "BDF averaged NF value in dBm")
+  stock 5 GHz    -91 dBm   (iwconfig wl0)
+  v1.8  2.4 GHz  -98 dBm   (iw survey, from WMI GET_NFCAL_POWER via patch 952)
+  v1.8  5 GHz    -90 dBm
+  pre-patch port reading was -110 / -113 dBm (README, issue #3)
+
+Declared TX power and regulatory state
+--------------------------------------
+  stock: bdata CountryCode=CN; cfg80211 regdomain reads "country 00" with
+         20 dBm limits, but the QSDK driver ignores it and reports
+         wl1 (2.4 GHz) = 30 dBm, wl0 (5 GHz) = 28 dBm.
+  v1.8 : country BR (DFS-FCC). BR permits 30 dBm on 2.4 GHz and 30 dBm on
+         5725-5850 (which contains ch149). ath11k reports
+         phy0-ap0 (2.4 GHz) = 27 dBm, phy1-ap0 (5 GHz ch149) = 28 dBm.
+
+  UNVERIFIED: whether either driver reports per-chain or total EIRP. Both
+  radios are 2x2, so a per-chain 27 dBm equals a total 30 dBm. This is a
+  +/-3 dB uncertainty on every comparison above that involves unequal
+  declared powers.
+
+Supporting single-point readings
+--------------------------------
+  stock 2.4 GHz, capture host's USB dongle (xx:xx:xx:xx:xx:xx) at ~1.5 m:
+      wlanconfig wl1 list sta -> RSSI -28 dBm, SNR 68, NF -96
+      host /proc/net/wireless   -> level -23 dBm
+  v1.8 5 GHz, its own live clients:
+      -46 / -50 dBm, ack -36 / -56 dBm, NF -90
+  v1.8 2.4 GHz client: -56 dBm, ack -56, NF -98
+
+  hal chain 1 reads a constant -73 dBm on every link and band; it is almost
+  certainly disconnected or dead. Only the combined / beacon-average values
+  were used.

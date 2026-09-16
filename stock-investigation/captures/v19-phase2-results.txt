@@ -1,0 +1,433 @@
+=== Phase 2 on hardware: NSS image flashed to the dev bench ===
+
+Image: v19-build-nss, NSS=1 KMODS=1, from repo commit 377c052 (+ later doc-only
+commits). sysupgrade sha256 2c0c87eb...ae38. Flashed via the sanctioned
+initramfs pivot over the wired link; read-back verified byte-exact before
+reboot (prefix md5 cd62728b... matched, 0 non-0xff bytes past the image).
+
+--- FINDING #3: CONFIRMED ON HARDWARE ---
+
+Cold-boot dmesg, reserved memory:
+  0x40000000..0x407fffff ( 8192 KiB) nomap memory@40000000     <- NSS
+  0x4a400000..0x4a7fffff ( 4096 KiB) nomap tz_apps@4a400000
+  0x4a800000..0x4a9fffff ( 2048 KiB) nomap bootloader@4a800000
+  0x4aa00000..0x4aafffff ( 1024 KiB) nomap sbl@4aa00000
+  0x4ab00000..0x4abfffff ( 1024 KiB) nomap smem@4ab00000
+  0x4ac00000..0x4adfffff ( 2048 KiB) nomap tz@4ac00000
+  0x4b000000..0x4dffffff (49152 KiB) nomap wcss@4b000000       <- Q6, full size
+
+  OVERLAP DETECTED count: 0          (was 1 before the change)
+  q6_mem_regions in /sys/firmware/devicetree/base/reserved-memory/: ABSENT
+  "unable to acquire memory-region" in dmesg: 0
+  remoteproc0 running, pd-1 running, pd-2 running, pd-3 offline (2-radio board)
+  /proc/iomem: 4e000000-4fffffff still System RAM
+  q6/firmware-crash/rproc errors: 0
+
+--- FINDING #1: THE KNOB WORKS, THE ARITHMETIC DOES NOT ---
+
+Both writes succeeded on a freshly booted box (extra_pbuf unspent, both knobs
+-rw-r--r--). extra_pbuf_core0 first, then the pool, as the convention requires.
+
+  n2h_empty_pool_buf_core0 : 8704 -> 4096
+  extra_pbuf_core0         : 0    -> 802816
+  n2h_pbuf_def_total_count : 9984 -> 14884    <- exactly stock's number
+
+That last line is the important one: the NSS-side descriptor pool DID grow to
+stock's 14884 at runtime, with no core restart. So the mechanism works and #1
+does not have to become a build-time change.
+
+SUnreclaim, sampled every 10 s:
+  before        44740 kB
+  t+0           45400
+  t+10          39612    <- almost all of it lands within 10 s
+  t+20          39540
+  t+30          39560
+  t+40          39524
+  t+50          39540
+  t+60          39528
+  after         39528 kB
+
+  OBSERVED  : -5212 kB
+  PREDICTED : -9584 kB net (10368 returned - 784 spent)
+  -> 54% of prediction. MemAvailable +4516 kB.
+
+The shortfall is the 2304 B/buffer assumption, which Q1-MEMORY.md already
+flagged as "the assumption to attack". Solving for it from the measurement:
+
+  freed 5212 kB + extra_pbuf 784 kB = 5996 kB gross for 4608 buffers
+  => 1332 B per buffer, not 2304 B
+
+1332 is close to kmalloc-1024 (1024) + skbuff_head_cache (~256) = 1280, i.e.
+the NSS payload lands one slab class LOWER than the estimate assumed. Note the
+original 97% "match" was against a stock-vs-port SUnreclaim DIFFERENCE that
+also contains ath11k, module and workload differences - it was never a
+controlled measurement of this knob alone. This is.
+
+So finding #1's real gain on this build is ~5.1 MB, not ~10 MB. Still the
+largest single win available and still low-risk, but the README/notes number
+has to change.
+
+--- LOAD TEST: kill criterion NOT tripped ---
+
+Forwarded traffic, wired host -> bench -> 5 GHz tiny, with the pool at 4096:
+
+  run 1 (60 s): 611 MB, 85.4 Mbit/s, 301 retr
+  run 2 (60 s): 600 MB, 83.8 Mbit/s, 233 retr
+
+  n2h_payload_alloc_fails      : 5 -> 5 -> 5   (frozen through 1.2 GB)
+  n2h_pbuf_def_alloc_fail_payload: 5 -> 5
+  n2h_pbuf_def_free_count      : 14882 throughout
+
+No starvation at 4096 buffers under this load. For reference the pre-change
+baseline on the same path was 82.6 Mbit/s, so throughput did not regress.
+
+CAVEAT on what this load test does NOT cover: syd (192.168.1.50) and tiny
+(192.168.1.146) are both in br-lan, so the traffic is BRIDGED, not routed.
+ipv4_create_requests stays 0 and ECM never engages - correctly. Exercising the
+NSS routed fast path needs a second subnet (a WAN, or moving one client off
+br-lan); wan is currently down. The pool question is answered for the wifi<->
+wired datapath, which is what allocates from the n2h pool, but the ECM
+acceleration path is still unexercised on this build.
+
+--- OPERATIONAL TRAP FOUND (not a code defect) ---
+
+After sysupgrade -f with the config backup, NSS redirect was OFF:
+
+  /proc/sys/dev/nss/general/redirect = 0
+
+The image is correct - /rom/etc/rc.local carries the NSS block build.sh
+prepends. But the config backup was taken from the PLAIN build, whose
+/etc/rc.local has no NSS block, and sysupgrade restored that file over the
+image's version. The overlay copy shadowed /rom and the box booted with
+offload half-configured (accel modes come from the same block, and were also
+missing until rc.local ran... they read 1 only because the file that sets them
+is the one that was replaced).
+
+Fix on the box: restore /rom/etc/rc.local over /etc/rc.local.
+
+Worth carrying into the release notes: restoring a config backup ACROSS build
+variants (plain <-> NSS) silently reverts /etc/rc.local, and with it the NSS
+runtime knobs. This matters directly for finding #1, because if #1 ships as an
+rc.local block it inherits exactly this failure mode.
+
+=== ADDENDUM: routed-path test (follow-up to the bridged caveat above) ===
+
+Built a genuinely routed topology to try to engage ECM: moved lan3 out of
+br-lan into its own single-port bridge br-wired with subnet 192.168.5.0/24, so
+syd (192.168.5.50, wired) -> bench -> tiny (192.168.1.146, 5 GHz) crosses an
+L3 boundary. Verified routed: `ip route get 192.168.1.146` goes via 192.168.5.1,
+RTT rises from 0.5 ms (local) to ~7-8 ms (across the AP).
+
+Two topology mistakes worth recording, both caught by the repo's own docs:
+  1. First attempt made lan3 a STANDALONE DSA port. docs/nss-offload.md is
+     explicit: "tag_8021q ports must be bridged (a single-port bridge is fine);
+     a standalone port egresses untagged on the conduit and fails." Fixed by
+     wrapping lan3 in br-wired.
+  2. The new network needed adding to the lan firewall zone, and syd had to
+     DROP its old 192.168.1.50 address - while it held both, the kernel treated
+     tiny as on-link and never routed at all.
+
+Result, 45-60 s runs over the routed path:
+    450-613 MB per run, 83.7-85.7 Mbit/s
+    n2h_payload_alloc_fails : 5 -> 5   (still frozen, now over ~1.7 GB total)
+    ecm connection_count    : 2-3      (ECM sees the flows)
+    ecm accelerated_count   : 0
+    ipv4_create_requests    : 0
+    ipv4_rx_pkts (common)   : 1,323,559   <- the NSS IS processing packets
+
+ECM tracks the connections but never requests acceleration. That is NOT caused
+by the pool change, and not a defect: this image has no NSS Wi-Fi offload. It
+was built without WIFI_NSS_DONOR (correctly - that integration is experimental
+and opt-in), so /sys/module/ath11k/parameters/nss_offload does not exist and
+Wi-Fi frames traverse the host stack. ECM cannot build an accelerable rule for
+a flow whose egress is a non-NSS Wi-Fi netdev.
+
+docs/nss-offload.md states the topology the fast path actually needs: a
+dual-CPU-port WAN<->LAN flow, LAN on eth1 and WAN on eth0, where "the WAN<->LAN
+NAT flow accelerates end to end (tcp_accelerated_count and
+ipv4_create_requests climb)". A Wi-Fi<->wired flow on a WAN-less bench is
+outside that design, so ipv4_create_requests = 0 is the expected reading.
+
+CONCLUSION for finding #1: the pool question is fully answered for the datapath
+that allocates from the n2h pool. ~1.7 GB of forwarded traffic across bridged
+AND routed topologies left payload_alloc_fails frozen at 5, with no throughput
+regression (83.7-85.7 Mbit/s vs an 82.6 Mbit/s pre-change baseline). Testing
+4096 buffers under an *accelerated* WAN<->LAN flow needs a WAN uplink on the
+bench and remains the one genuinely untested case - the same gap
+V1.9-TUNING.md already lists under "What is still unmeasured".
+
+Bench left in the routed topology (br-wired / 192.168.5.0/24). To restore the
+single-subnet bench: uci delete network.wired, network.brwired, re-add lan3 to
+the br-lan ports list, drop "wired" from firewall zone lan, commit, restart.
+
+=== ADDENDUM 2: causality control (does the write CAUSE the drop?) ===
+
+The Phase 2 measurement was taken on a box up ~1 minute, so "a freshly booted
+box sheds ~5 MB on its own" is a live alternative explanation. Tested it by
+driving the knob in both directions on one boot:
+
+  T1  8704 -> 4096 : SUnreclaim 44,740 -> 39,528  =  -5,212 kB  (fresh boot, idle)
+  T2  4096 -> 8704 : SUnreclaim 42,136 -> 46,452  =  +4,316 kB  (reverse)
+  T3  8704 -> 4096 : SUnreclaim 46,476 -> 43,056  =  -3,420 kB  (re-apply)
+
+Every transition moves in the direction the pool size predicts, and each
+completes within the first 10 s sample. Boot settling cannot produce T2, which
+is an INCREASE, and cannot explain T3, taken on a box up 55 minutes. The effect
+is causal, immediate, and reversible for this knob.
+
+(Only n2h_empty_pool_buf_core0 was toggled. extra_pbuf_core0 stayed at 802816
+throughout - it is write-once per boot, so it could not have been re-driven
+even if wanted, and it is therefore NOT part of what T2/T3 measure.)
+
+Per-buffer cost implied by each transition:
+  T1  1,158 B    T2  959 B    T3  760 B
+
+T1 is the cleanest measurement: idle box, nothing associated yet. T2 and T3 ran
+with Wi-Fi clients attached and background traffic flowing, which perturbs slab
+in both directions, and their spread shows why a single measurement should not
+be quoted to four significant figures. The honest statement is:
+
+  - the pool knob demonstrably frees unreclaimable slab, roughly 3.4-5.2 MB for
+    this 4608-buffer delta;
+  - the per-buffer cost is somewhere around 760-1,332 B, comfortably BELOW the
+    2,304 B the old estimate assumed and consistent with a kmalloc-1024-class
+    payload;
+  - "~5 MB" is the right order of magnitude to quote for the change, and the
+    conservative end of the range is ~3.4 MB.
+
+The earlier text saying "1,332 B per buffer" derived from T1 alone plus the
+extra_pbuf cost; it is the top of the range, not a precise constant. Adjusted
+wording accordingly.
+
+=== ADDENDUM 3: boot-to-boot A/B with the real rc.local block ===
+
+Installed the block exactly as build.sh generates it into the bench's
+/etc/rc.local and rebooted, to test the thing that actually ships rather than
+hand-typed sysctl writes.
+
+First attempt FAILED to persist and is worth recording as a trap: writing the
+file with `cat > /etc/rc.local` from an ssh command silently did not reach the
+overlay - after the reboot /etc/rc.local was byte-identical to /rom (md5
+db60e29a..., 1453 bytes) and none of the pool knobs had been applied. An append
+(`>> /etc/rc.local`) DID create /overlay/upper/etc/rc.local, so the overlay was
+writable the whole time; the truncating redirect is what lost. Staging in /tmp
+and `mv`-ing into place worked (2751 bytes, 6 nss lines, overlay copy present).
+Anyone hand-patching rc.local on this box should verify
+/overlay/upper/etc/rc.local afterwards, not just re-read /etc/rc.local.
+
+With the block correctly installed, after a clean reboot:
+
+    n2h_empty_pool_buf_core0 = 4096      (applied at boot)
+    extra_pbuf_core0         = 802816    (applied at boot)
+    general/redirect         = 1
+    n2h_pbuf_def_total_count = 14884
+    n2h_payload_alloc_fails  = 5
+
+So the block works unattended: rc.local runs late enough that
+/proc/sys/dev/nss/n2hcfg exists, and both writes land. This is the first proof
+the change does anything on a box nobody is logged into.
+
+BOOT-TO-BOOT A/B on the same box, same image, both idle a minute after boot,
+differing only in whether rc.local carried the block:
+
+    without the block : SUnreclaim 44,576 kB
+    with the block    : SUnreclaim 38,992 kB
+    net               :          -5,584 kB
+
+This is the number to quote. It is a like-for-like comparison rather than a
+before/after within one boot, and it already includes extra_pbuf's ~784 kB
+cost, so it is the true net gain of shipping the change. It sits at the top of
+the 3.4-5.2 MB range seen from mid-boot toggling, which makes sense: the
+toggling runs happened on boxes with clients associated and traffic flowing.
+
+MemAvailable at the same instant: 40,016 kB with the block, against 37,088 kB
+without - consistent, and the figure a user would actually notice.
+
+=== ADDENDUM 4: build.sh's sed verified inside a real build tree ===
+
+The A/B above installed a hand-generated copy of the block. That leaves a gap:
+it does not prove build.sh's `sed -i '1i\...'` produces the right file during an
+actual image build, where the escaped newlines and the escaped apostrophe in
+"stock's" have to survive.
+
+Closed by starting a second full NSS=1 KMODS=1 build from the repo at 01b91f5
+and inspecting the tree it prepared:
+
+  openwrt/target/linux/qualcommax/ipq50xx/base-files/etc/rc.local
+    - valid shell (`sh -n` clean)
+    - 6 matches for dev/nss (5 writes + 1 comment reference)
+    - write order as intended:
+        5: echo 1 > /proc/sys/dev/nss/general/redirect
+        6: echo 1 > /proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode
+        7: echo 1 > /proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode
+       26: echo 802816 > /proc/sys/dev/nss/n2hcfg/extra_pbuf_core0
+       27: echo 4096   > /proc/sys/dev/nss/n2hcfg/n2h_empty_pool_buf_core0
+    - the apostrophe in "stock's exact number" survived intact
+
+extra_pbuf_core0 precedes the pool write, as the write-once property requires.
+
+=== ADDENDUM 5: the load test does NOT show 4096 is enough ===
+
+Review demolished this claim and it is worth recording plainly, because I had
+written "4096 is enough for this datapath" into build.sh.
+
+    n2h_pbuf_def_total_count = 14884
+    n2h_pbuf_def_free_count  = 14882
+    => peak in-flight = 2 buffers = 0.05% of a 4096 pool
+
+A run that never puts more than 2 buffers in flight cannot distinguish 4096
+from 8704, or from 512. The frozen payload_alloc_fails=5 is not evidence of
+headroom either - it is a cumulative counter that simply never incremented,
+exactly as it sat frozen at 45864 on the v1.8 box. The experiment script says
+this correctly ("its absolute value is therefore NOT the pass/fail test"), and
+build.sh contradicted it.
+
+Contributing factors: ~85 Mbit/s is roughly 10% of this board's rated NAT
+throughput, and the flow was Wi-Fi<->wired, which on a build without the
+experimental Wi-Fi offload never engages the accelerated path that actually
+drains the n2h pool (ipv4_create_requests stayed 0 throughout).
+
+What the load runs DO support: the change causes no regression at this load -
+~1.7 GB moved with no alloc failures and throughput slightly up on the
+pre-change baseline. That is worth having, but it is a "no harm observed"
+result, not a capacity result.
+
+Still genuinely untested: an accelerated WAN<->LAN NAT flow at a few hundred
+Mbit/s, which needs a WAN uplink the bench does not have. Until then the honest
+position is that 4096 matches what stock ships and shows no ill effect at the
+loads reachable here.
+
+=== ADDENDUM 6: extra_pbuf_core0 DROPPED, and why that is strictly better ===
+
+Third review of finding #1 found my bench evidence for the extra_pbuf write was
+a FALSE POSITIVE, and it was right:
+
+  - The S96/S95 symlink was created at 12:11:38; the box booted at 11:47:33. The
+    script had never run at boot at all - every test was hand-invoked.
+  - dmesg contained exactly ONE "Additional pbufs of size 802816" line, at
+    t=28.3s. That is rc.local's doing, not the init script's.
+  - The bench's /etc/rc.local was a STALE OVERLAY COPY still carrying the
+    pre-rework pool writes - the very shadowing the rework exists to prevent.
+  - Because extra_pbuf is write-once (-EPERM), every later run of my script was
+    a no-op that merely READ BACK 802816 and logged it as if it had worked.
+
+Two further defects it found:
+  - START=95 TIED with /etc/init.d/done (also 95), and procd walks /etc/rc.d in
+    glob order, so S95done -> rc.local ran FIRST. On a v1.8 user's box the old
+    unguarded rc.local write would pre-empt the guarded one every boot.
+  - kzalloc(PAGE_SIZE) is NOT order-0: /sys/kernel/slab/kmalloc-4k/order = 3.
+    Slab refill needs 8 contiguous pages, so the real failure mode is
+    FRAGMENTATION, which neither MemFree nor MemAvailable can see. The guard was
+    close to decorative - 20 MB sits only 4 MB above the 16 MB min watermark.
+
+RESOLUTION: drop the extra_pbuf_core0 write entirely. Measured on a clean boot
+with rc.local's stale copy removed and the script at START=96:
+
+  boot, 8704 pool, no knobs        : SUnreclaim 44,576 kB
+  boot, pool=4096 + extra_pbuf     : SUnreclaim 38,992 kB   (net -5,584 kB)
+  boot, pool=4096 only (shipped)   : SUnreclaim 38,204 kB   (net -6,372 kB)
+
+Dropping it does not cost memory - it SAVES a further 788 kB, which is precisely
+the ~784 kB those kzalloc'd host pages occupied. So the simpler change is both
+larger and safer:
+
+  - the pool write allocates nothing; grep of nss_n2h_set_empty_buf_pool() for
+    kzalloc/kmalloc/BUG_ON/GFP_ATOMIC returns ZERO hits. The entire panic class
+    is gone, not mitigated.
+  - no write-once knob, so the change is fully reversible at runtime.
+  - no memory pre-check needed, so no false sense of safety from a signal that
+    cannot see fragmentation.
+
+What is given up: the NSS descriptor pool stays at 9,984 instead of stock's
+14,884. The load runs measured peak in-flight of 2 buffers, so those 4,900 extra
+descriptors are not reachable at any load this bench can produce. If an
+accelerated WAN<->LAN flow ever shows descriptor starvation, extra_pbuf can be
+revisited - as a deliberate, separately tested decision, not as a freebie
+bundled with a memory saving.
+
+Clean-boot verification of the shipped script (uptime 85 s, rc.local with 0
+extra_pbuf references):
+    logread: "nss-bufpool: pool 8704 -> 4096"      <- ran AT BOOT
+    dmesg "Additional pbufs" count: 0              <- we allocate nothing
+    pool=4096  extra_pbuf=0  pbuf_def_total=9984
+    SUnreclaim 38,204 kB   MemFree 46,728 kB   MemAvailable 42,676 kB
+
+Reporting is now honest about what each invocation did, which the previous
+version was not:
+    first run     : "pool 8704 -> 4096"
+    re-run        : "pool already 4096, nothing to do"
+    after stop    : "pool restored to 8704"
+    stale rc.local: "note: extra_pbuf_core0=802816 was set by something else
+                     (stale /etc/rc.local?); this build does not set it"
+
+=== ADDENDUM 7: the shipped squashfs verified, not just the source ===
+
+Every earlier check looked at the source tree or a hand-installed copy. This one
+opens the actual image:
+
+    unsquashfs build_dir/.../linux-qualcommax_ipq50xx/root.squashfs \
+        etc/init.d/nss-bufpool etc/rc.d
+
+    etc/init.d/nss-bufpool   START=96   4088 bytes
+    etc/rc.d/S96nss-bufpool -> ../init.d/nss-bufpool
+    grep -c "echo 802816"  ->  0
+
+So the shipped rootfs carries the right script, OpenWrt's init-enable loop
+created the S96 symlink without any help, the START=96 tie-break with
+/etc/init.d/done (START=95) is in the image, and the extra_pbuf write is
+genuinely absent rather than just absent from the source.
+
+A build-mechanics trap worth recording, because it produced a wrong image once:
+hot-syncing a rootfs file into a running build is NOT enough. The first image
+from this tree shipped the stale START=95 script, because
+build_dir/.../root.orig-qualcommax and root-qualcommax had already been
+assembled and are treated as caches. `make package/base-files/compile` rebuilt
+the package correctly (its .pkgdir copy showed START=96) while the staged rootfs
+kept the old file. Removing both cache dirs and re-running `make package/install`
+followed by `make target/install` regenerated them properly; removing them and
+running only `target/install` fails outright, because the initramfs step needs
+root-qualcommax to exist.
+
+Lesson for the release build: do not trust an incremental image after changing a
+base-files file. Either rebuild from scratch or clear
+build_dir/target-*/root*-<target> and re-run package/install first, then verify
+the artifact itself with unsquashfs rather than the tree.
+
+=== ADDENDUM 8: genuine boot-time verification (the R3 objection closed) ===
+
+R3's central objection was that the script had never actually run at boot: the
+rc.d symlink post-dated the only boot, so every observation was hand-invoked.
+Re-tested with the timestamps checked FIRST this time:
+
+    script installed : 12:41:07
+    symlink created  : 12:41:08
+    BOOT             : 12:41:12      <- both predate the boot
+    log line         : 12:41:21      <- 9 s after boot
+
+So this is a real boot-time run. After a further clean reboot:
+
+    logread : "nss-bufpool: pool 8704 -> 4096"
+    dmesg "Additional pbufs" count : 0
+    pool=4096   extra_pbuf=0
+    SUnreclaim 38,144 kB   MemFree 46,848 kB   MemAvailable 42,820 kB
+    both radios up, 6 qca_nss modules loaded
+
+38,144 kB is the lowest SUnreclaim of every configuration tried, against
+44,576 kB for a boot with no knobs - about 6.3 MB, consistent with the earlier
+clean-boot figure and with extra_pbuf's absence now saving rather than costing.
+
+One anomaly chased to ground rather than left hanging: a mid-sequence reading
+showed extra_pbuf=802816 with a matching dmesg line, on a boot whose rc.local was
+the clean image copy (md5 matching /rom, zero n2hcfg references). It was me: the
+12:42:38 log line is my own test of the stale-rc.local warning path, which sets
+the knob deliberately. Nothing in the image writes extra_pbuf - grep over /etc
+and /usr/sbin returns only nss-bufpool itself, which merely READS it to emit that
+warning.
+
+Also learned: `sysupgrade -n` from the installed system is REFUSED on this board
+("Image check failed", with the platform's own message pointing at the initramfs
+path). That is the documented in-place-flash guard doing its job, and it is why
+`sysupgrade -T` returned 1 beforehand. A clean-overlay flash therefore has to go
+through the initramfs pivot; the board will not let you shortcut it. The reboot
+test above achieves the same evidence without another pivot, because the overlay
+rc.local was already removed and verified identical to /rom.

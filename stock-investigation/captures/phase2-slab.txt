@@ -1,0 +1,220 @@
+===== slab real caches (name objects object_size slab_size total_objects slabs order) =====
+:at-0000056 0 52 56   0
+:at-0000136 0 136 136   0
+:t-0000008 0 8 8   0
+:t-0000016 0 16 16   0
+:t-0000024 0 24 24   0
+:t-0000032 0 32 32   0
+:t-0000040 0 40 40   0
+:t-0000048 0 44 48   0
+:t-0000056 0 56 56   0
+:t-0000064 0 64 64   0
+:t-0000080 0 80 80   0
+:t-0000088 0 88 88   0
+:t-0000104 0 104 104   0
+:t-0000128 0 128 128   0
+:t-0000144 0 144 144   0
+:t-0000152 0 152 152   0
+:t-0000160 0 160 160   0
+:t-0000192 0 192 192   0
+:t-0000224 0 224 224   0
+:t-0000248 0 248 248   0
+:t-0000256 0 256 256   0
+:t-0000320 0 320 320   0
+:t-0000384 0 384 384   1
+:t-0000448 0 400 448   1
+:t-0000512 0 512 512   1
+:t-0000576 0 536 576   1
+:t-0000640 0 632 640   1
+:t-0000704 0 704 704   2
+:t-0000768 0 768 768   2
+:t-0000832 0 784 832   2
+:t-0001024 0 1024 1024   2
+:t-0001072 0 1068 1072   2
+:t-0001152 0 1096 1152   2
+:t-0001184 0 1184 1184   2
+:t-0001536 0 1536 1536   3
+:t-0002048 0 2048 2048   3
+:t-0003072 0 3072 3072   3
+:t-0004096 0 4096 4096   3
+:t-0008192 0 8192 8192   3
+TCP 0 1400 1408   3
+TCPv6 0 1520 1536   3
+UDP 0 656 704   2
+UDP-Lite 0 656 704   2
+UDPLITEv6 0 776 832   2
+UDPv6 0 776 832   2
+anon_vma 0 44 48   0
+bdev_cache 0 472 512   1
+inode_cache 0 328 336   0
+jffs2_i 0 384 392   1
+kmem_cache 0 144 192   0
+kmem_cache_node 0 16 64   0
+nf_conntrack_1 0 216 224   0
+proc_inode_cache 0 360 368   1
+radix_tree_node 0 100 104   0
+request_sock_TCP 0 232 240   0
+request_sock_TCPv6 0 232 240   0
+shmem_inode_cache 0 368 376   1
+sighand_cache 0 1300 1344   2
+sock_inode_cache 0 360 384   1
+squashfs_inode_cache 0 384 448   1
+tw_sock_TCP 0 184 192   0
+tw_sock_TCPv6 0 184 192   0
+ubifs_inode_slab 0 432 440   1
+
+===== slab aliases (merged caches) =====
+PING -> :t-0000640
+PINGv6 -> :t-0000832
+QIPCRTR -> :t-0000512
+RAW -> :t-0000640
+RAWv6 -> :t-0000832
+UNIX -> :t-0000704
+anon_vma_chain -> :t-0000032
+bio-0 -> :t-0000192
+biovec-128 -> :t-0001536
+biovec-16 -> :t-0000192
+biovec-256 -> :t-0003072
+biovec-64 -> :t-0000768
+blkdev_ioc -> :t-0000064
+blkdev_queue -> :t-0001184
+blkdev_requests -> :t-0000224
+bridge_fdb_cache -> :t-0000064
+buffer_head -> :at-0000056
+cred_jar -> :t-0000128
+dentry -> :at-0000136
+dio -> :t-0000384
+dmaengine-unmap-2 -> :t-0000032
+eventpoll_epi -> :t-0000128
+eventpoll_pwq -> :t-0000040
+fasync_cache -> :t-0000032
+fib6_nodes -> :t-0000032
+file_lock_cache -> :t-0000128
+file_lock_ctx -> :t-0000032
+files_cache -> :t-0000256
+filp -> :t-0000192
+flow_cache -> :t-0000104
+fs_cache -> :t-0000064
+idr_layer_cache -> :t-0001072
+inet_peer_cache -> :t-0000128
+inotify_inode_mark -> :t-0000056
+ip4-frags -> :t-0000128
+ip6-frags -> :t-0000144
+ip6_dst_cache -> :t-0000256
+ip6_mrt_cache -> :t-0000128
+ip_dst_cache -> :t-0000128
+ip_fib_alias -> :t-0000032
+ip_fib_trie -> :t-0000032
+ip_mrt_cache -> :t-0000128
+jffs2_full_dnode -> :t-0000016
+jffs2_inode_cache -> :t-0000032
+jffs2_node_frag -> :t-0000024
+jffs2_raw_dirent -> :t-0000064
+jffs2_raw_inode -> :t-0000128
+jffs2_refblock -> :t-0000248
+jffs2_tmp_dnode -> :t-0000040
+jffs2_xattr_datum -> :t-0000056
+jffs2_xattr_ref -> :t-0000032
+kernfs_node_cache -> :t-0000080
+kmalloc-1024 -> :t-0001024
+kmalloc-128 -> :t-0000128
+kmalloc-192 -> :t-0000192
+kmalloc-2048 -> :t-0002048
+kmalloc-256 -> :t-0000256
+kmalloc-4096 -> :t-0004096
+kmalloc-512 -> :t-0000512
+kmalloc-64 -> :t-0000064
+kmalloc-8192 -> :t-0008192
+miwifi_connstat_attr -> :t-0000048
+miwifi_connstat_lock -> :t-0000008
+miwifi_conntrack_attr -> :t-0000040
+miwifi_nfnlq_ext_record -> :t-0000016
+mm_struct -> :t-0000448
+mnt_cache -> :t-0000192
+names_cache -> :t-0004096
+nf-frags -> :t-0000144
+nf_conntrack_expect -> :t-0000160
+nsproxy -> :t-0000024
+pid -> :t-0000064
+pool_workqueue -> :t-0000256
+posix_timers_cache -> :t-0000152
+secpath_cache -> :t-0000032
+signal_cache -> :t-0000576
+sigqueue -> :t-0000144
+skbuff_fclone_cache -> :t-0000384
+skbuff_head_cache -> :t-0000192
+task_struct -> :t-0001152
+tcp_bind_bucket -> :t-0000032
+ubi_aeb_slab_cache -> :t-0000048
+ubi_wl_entry_slab -> :t-0000024
+uid_cache -> :t-0000064
+vm_area_struct -> :t-0000088
+xfrm_dst_cache -> :t-0000320
+xt_connlimit_conn -> :t-0000064
+xt_connlimit_rb -> :t-0000032
+xt_hashlimit -> :t-0000080
+
+===== slab reclaim_account flags =====
+:at-0000056 reclaim_account=1 cache_dma= align=8
+:at-0000136 reclaim_account=1 cache_dma= align=8
+:t-0000008 reclaim_account=0 cache_dma= align=8
+:t-0000016 reclaim_account=0 cache_dma= align=8
+:t-0000024 reclaim_account=0 cache_dma= align=8
+:t-0000032 reclaim_account=0 cache_dma= align=8
+:t-0000040 reclaim_account=0 cache_dma= align=8
+:t-0000048 reclaim_account=0 cache_dma= align=8
+:t-0000056 reclaim_account=0 cache_dma= align=8
+:t-0000064 reclaim_account=0 cache_dma= align=64
+:t-0000080 reclaim_account=0 cache_dma= align=8
+:t-0000088 reclaim_account=0 cache_dma= align=8
+:t-0000104 reclaim_account=0 cache_dma= align=8
+:t-0000128 reclaim_account=0 cache_dma= align=64
+:t-0000144 reclaim_account=0 cache_dma= align=8
+:t-0000152 reclaim_account=0 cache_dma= align=8
+:t-0000160 reclaim_account=0 cache_dma= align=8
+:t-0000192 reclaim_account=0 cache_dma= align=64
+:t-0000224 reclaim_account=0 cache_dma= align=8
+:t-0000248 reclaim_account=0 cache_dma= align=8
+:t-0000256 reclaim_account=0 cache_dma= align=64
+:t-0000320 reclaim_account=0 cache_dma= align=64
+:t-0000384 reclaim_account=0 cache_dma= align=64
+:t-0000448 reclaim_account=0 cache_dma= align=64
+:t-0000512 reclaim_account=0 cache_dma= align=64
+:t-0000576 reclaim_account=0 cache_dma= align=64
+:t-0000640 reclaim_account=0 cache_dma= align=64
+:t-0000704 reclaim_account=0 cache_dma= align=64
+:t-0000768 reclaim_account=0 cache_dma= align=64
+:t-0000832 reclaim_account=0 cache_dma= align=64
+:t-0001024 reclaim_account=0 cache_dma= align=64
+:t-0001072 reclaim_account=0 cache_dma= align=8
+:t-0001152 reclaim_account=0 cache_dma= align=64
+:t-0001184 reclaim_account=0 cache_dma= align=8
+:t-0001536 reclaim_account=0 cache_dma= align=64
+:t-0002048 reclaim_account=0 cache_dma= align=64
+:t-0003072 reclaim_account=0 cache_dma= align=64
+:t-0004096 reclaim_account=0 cache_dma= align=64
+:t-0008192 reclaim_account=0 cache_dma= align=64
+TCP reclaim_account=0 cache_dma= align=64
+TCPv6 reclaim_account=0 cache_dma= align=64
+UDP reclaim_account=0 cache_dma= align=64
+UDP-Lite reclaim_account=0 cache_dma= align=64
+UDPLITEv6 reclaim_account=0 cache_dma= align=64
+UDPv6 reclaim_account=0 cache_dma= align=64
+anon_vma reclaim_account=0 cache_dma= align=8
+bdev_cache reclaim_account=1 cache_dma= align=64
+inode_cache reclaim_account=1 cache_dma= align=8
+jffs2_i reclaim_account=1 cache_dma= align=8
+kmem_cache reclaim_account=0 cache_dma= align=64
+kmem_cache_node reclaim_account=0 cache_dma= align=64
+nf_conntrack_1 reclaim_account=0 cache_dma= align=8
+proc_inode_cache reclaim_account=1 cache_dma= align=8
+radix_tree_node reclaim_account=1 cache_dma= align=8
+request_sock_TCP reclaim_account=0 cache_dma= align=8
+request_sock_TCPv6 reclaim_account=0 cache_dma= align=8
+shmem_inode_cache reclaim_account=0 cache_dma= align=8
+sighand_cache reclaim_account=0 cache_dma= align=64
+sock_inode_cache reclaim_account=1 cache_dma= align=64
+squashfs_inode_cache reclaim_account=1 cache_dma= align=64
+tw_sock_TCP reclaim_account=0 cache_dma= align=8
+tw_sock_TCPv6 reclaim_account=0 cache_dma= align=8
+ubifs_inode_slab reclaim_account=1 cache_dma= align=8

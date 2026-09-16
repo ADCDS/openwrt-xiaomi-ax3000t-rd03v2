@@ -1,0 +1,46 @@
+=== v1.9 release artifacts: built, assembled, and flash-tested ===
+
+BUILDS (both from repo commit 76903c4 for files/, with only doc-only commits
+after; verified zero changes under files/ since):
+
+  plain : 1127 kmods, kernel 6.12.94~22588d2e9f0a25da3a9864a6592f9e13-r1
+  nss   : 1131 kmods, kernel 6.12.94~b8b357d59665e168c40d5dd63a78dd3b-r1
+          3 packages skipped by IGNORE_ERRORS="n m" as expected:
+          qca-mcs, qca-nss-crypto, dahdi-linux (none enters either image)
+
+The NSS build was interrupted by a host reboot mid-compile ("world Terminated").
+The tree was already fully prepared - feeds installed, NSS layering applied,
+rc.local carrying its 4 NSS writes - so it was resumed with `make world`
+directly rather than re-cloned.
+
+SHIPPED CONTENT VERIFIED BY unsquashfs, BOTH FLAVOURS:
+  etc/init.d/nss-bufpool   START=96, md5 2eec12e8 (matches repo HEAD exactly)
+  etc/rc.d/S96nss-bufpool  present (OpenWrt's own init-enable loop created it)
+  "echo 802816"            0 occurrences (extra_pbuf genuinely absent)
+  plain: 0 ecm autoload, 0 rc.local nss writes
+  nss  : 1 ecm autoload, 4 rc.local nss writes
+
+RELEASE ASSEMBLY (tools/mkrelease.sh, TAG=v1.9): 16 assets, self-verified for
+kmod/vermagic pairing and -wifi beacon read-back. All 15 sha256sums.txt entries
+verify.
+
+FLASH TEST - the artifact a user downloads, not a build tree:
+
+  1. initramfs-factory-nss.ubi written to ubi_kernel. Read-back: sha256 of the
+     first 15,238,500 bytes matches the .itb exactly.
+     (Note: the doc's `tail -c +N` trailing-0xff check is malformed against a
+     char device and reported nonsense; the prefix hash is the real check.)
+  2. Booted the RAM initramfs: tmpfs root, NSS present, S96nss-bufpool present,
+     logged "pool 8704 -> 4096" at boot, pool=4096 extra_pbuf=0.
+  3. sysupgrade -n of squashfs-sysupgrade-nss.bin from that initramfs
+     (sha bac1ed4e..., sysupgrade -T passed).
+  4. Booted from NAND:
+       logread: "nss-bufpool: pool 8704 -> 4096"
+       pool=4096  extra_pbuf=0
+       SUnreclaim 37,340 kB   MemAvailable 35,380 kB
+       dmesg OVERLAP count: 0          <- finding #3 confirmed in the release
+       both radios up, 6 qca_nss modules loaded
+
+So both v1.9 findings are confirmed in the released binary: the buffer pool is
+applied unattended at boot from the shipped init script, and the duplicate Q6
+reservation warning is gone.

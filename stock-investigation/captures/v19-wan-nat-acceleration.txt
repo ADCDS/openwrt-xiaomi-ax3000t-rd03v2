@@ -1,0 +1,70 @@
+=== THE GAP CLOSED: pool=4096 under ACCELERATED WAN<->LAN NAT ===
+
+Every earlier load test missed the one case that mattered. This one does not.
+
+--- Topology built for this test ---
+
+  syd (wired, in netns "bench")          RD03v2 bench            tiny (RPi)
+  enx00e04c125990 192.168.1.50/24  --->  lan3 -> eth1 (2.5G)
+                                         br-lan 192.168.1.1
+                                         [ NAT ]
+                                         wan  -> eth0 (1G)  ---> eth0 192.168.77.1/24
+                                                                 dnsmasq + iperf3
+  bench WAN lease: 192.168.77.141/24, default via 192.168.77.1
+
+This is the dual-CPU-port gateway topology docs/nss-offload.md requires: LAN on
+eth1, WAN on eth0, so WAN<->LAN routing crosses two CPU ports and ECM can build
+an accelerable rule.
+
+Two false starts worth recording:
+  - A Wi-Fi LAN client does NOT work. ath11k has no nss_offload parameter on
+    this build (WIFI_NSS_DONOR is opt-in and off), so a Wi-Fi ingress is a
+    non-NSS netdev and ECM refuses: ipv4_create_requests stayed 0 through a
+    full 20 s NAT run at 8.5 Mbit/s. That is why every previous test read 0.
+  - tiny's eth0 had to leave br0 and be driven manually; NetworkManager has it
+    pinned unmanaged via conf.d/10-unmanage-br0.conf.
+
+--- THE FAST PATH ENGAGED ---
+
+    ipv4_create_requests : 0 -> 2 (first run) -> 5 (after sustained runs)
+    throughput           : 940 Mbit/s, i.e. line rate on the 1G WAN port
+
+For contrast, every previous "forwarded traffic" test in this investigation ran
+at ~85 Mbit/s with ipv4_create_requests = 0. Those measured the exception path.
+This measures the accelerated one.
+
+--- THE ANSWER: 4096 does not starve ---
+
+  20 s  unidirectional : 2.19 GB at 940 Mbit/s
+  60 s  bidirectional  : 6.51 GB TX at 931 + 2.72 GB RX at 390 Mbit/s
+  ~9.2 GB of accelerated NAT traffic in total
+
+    n2h_payload_alloc_fails         : 5 -> 5    (frozen)
+    n2h_pbuf_def_alloc_fail_payload : 5 -> 5    (frozen)
+    n2h_pbuf_def_free_count         : 9982      (unchanged)
+
+Not one allocation failure at line rate.
+
+--- CONTROL: is 8704 any better? ---
+
+Put the pool back to the profile default and re-ran the same test:
+
+    pool=4096 : 940 / 931 / 389 Mbit/s   alloc_fails 5 -> 5   SUnreclaim 42,304 kB
+    pool=8704 : 939 Mbit/s               alloc_fails 5 -> 5   SUnreclaim 48,812 kB
+
+    throughput difference: 1 Mbit/s (0.1%, noise)
+    memory difference    : 6,508 kB = 6.4 MB, in favour of 4096
+
+So the larger pool buys nothing measurable at line rate and costs 6.4 MB. The
+v1.9 change is not a trade-off at this load - it is strictly better.
+
+--- What this does and does not prove ---
+
+PROVES: at 1G line rate, with the fast path genuinely accelerating (0 -> 5
+create_requests, ~12.5 GB total across the session), 4096 host buffers are
+sufficient, and the 6.4 MB saving is real under load rather than only at idle.
+
+STILL NOT PROVEN: many-client behaviour. This was one TCP flow (plus a
+bidirectional pair). A many-client workload with bursty small packets could
+drain the pool differently. Stock ships 4096 on identical silicon as a consumer
+gateway, which remains the best evidence for that case.

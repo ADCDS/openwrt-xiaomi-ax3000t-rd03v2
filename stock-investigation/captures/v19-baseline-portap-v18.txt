@@ -1,0 +1,79 @@
+=== identity (v1.8 NSS reference, READ-ONLY) ===
+DISTRIB_ID='OpenWrt'
+DISTRIB_RELEASE='SNAPSHOT'
+DISTRIB_REVISION='r35297-25ee12629e'
+DISTRIB_TARGET='qualcommax/ipq50xx'
+DISTRIB_ARCH='aarch64_cortex-a53'
+DISTRIB_DESCRIPTION='OpenWrt SNAPSHOT r35297-25ee12629e'
+DISTRIB_TAINTS='no-all'
+6.12.94
+ 15:31:08 up 8 days, 20:39,  load average: 0.00, 0.01, 0.00
+=== meminfo ===
+MemTotal:         175760 kB
+MemFree:           45280 kB
+MemAvailable:      31784 kB
+Slab:              68280 kB
+SReclaimable:       6776 kB
+SUnreclaim:        61504 kB
+=== NSS n2hcfg (the #1 knobs) ===
+extra_pbuf_core0 = 0
+host_bp_enable0 = 0
+mitigation_core0 = 1
+n2h_empty_paged_pool_buf_core0 = 0
+n2h_empty_pool_buf_core0 = 8704
+n2h_high_water_core0 = 8704
+n2h_low_water_core0 = 4352
+n2h_paged_high_water_core0 = 0
+n2h_paged_low_water_core0 = 0
+n2h_queue_limit_core0 = 256
+n2h_wifi_pool_buf = 0
+qos_mem_size = 0
+=== NSS n2h stats ===
+	n2h_pbuf_def_total_count          = 9984            special
+	n2h_payload_alloc_fails           = 45864           special
+=== sysctl vm + conntrack ===
+net.netfilter.nf_conntrack_max = 32768
+net.nf_conntrack_max = 32768
+vm.min_free_kbytes = 16384
+vm.watermark_boost_factor = 15000
+vm.watermark_scale_factor = 10
+=== nss modules ===
+ath11k                491520  1 ath11k_ahb
+ath11k_ahb             24576  0 
+cfg80211              372736  2 ath11k,mac80211
+compat                 12288  3 ath11k_ahb,mac80211,cfg80211
+ecm                   483328  0 
+l2tp_ppp               20480  1 ecm
+mac80211              720896  1 ath11k
+nf_conntrack           90112  8 nft_redir,nft_nat,nft_masq,nft_flow_offload,nft_ct,nf_nat,nf_flow_table,ecm
+ppp_generic            49152  7 ppp_async,qca_nss_pppoe,ecm,pppoe,l2tp_ppp,pptp,pppox
+pppoe                  20480  2 qca_nss_pppoe,ecm
+pptp                   24576  1 ecm
+qca_nss_dp             40960  1 qca_nss_drv
+qca_nss_drv           319488  2 qca_nss_pppoe,ecm
+qca_nss_pppoe          12288  0 
+qca_ssdk              516096  1 qca_nss_dp
+qmi_helpers            20480  1 ath11k
+
+=== ADDENDUM: n2h counter stability, 3 samples over ~60 s (v1.8 NSS, idle) ===
+15:31:23  pbuf_def_free=9982  pbuf_def_alloc_fail_payload=49262  payload_alloc_fails=45864
+15:31:48  pbuf_def_free=9982  pbuf_def_alloc_fail_payload=49262  payload_alloc_fails=45864
+15:32:13  pbuf_def_free=9982  pbuf_def_alloc_fail_payload=49262  payload_alloc_fails=45864
+
+Frozen across all three samples. These are cumulative-since-boot counters that
+are NOT advancing at idle on a box with 8 d 20 h uptime, so the large absolute
+values are historical (most plausibly NSS init, before the host pool was
+populated) rather than ongoing starvation.
+
+Consequences for finding #1:
+  - The doc's "stock sat at a constant 99" is an ABSOLUTE value on stock's own
+    firmware. Our v1.8 idles at 45864 with the CURRENT 8704-buffer pool, so the
+    absolute number is not comparable across the two firmwares and cannot be
+    the pass/fail test.
+  - The kill criterion must therefore be the DELTA measured across a load run
+    on OUR build: sample before, drive forwarded traffic, sample after. A pool
+    that is too small shows up as the delta growing once the pool is halved,
+    not as a large absolute count.
+  - pbuf_def_total_count = 9984 corroborates the doc's port-side figure exactly
+    (doc: "ours is 9,984"), which is the MEDIUM profile's NSS-side descriptor
+    pool with extra_pbuf_core0 = 0.

@@ -1,0 +1,31 @@
+=== POST-LOAD ===
+MemFree:           12800 kB
+MemAvailable:      64808 kB
+Cached:            53620 kB
+SwapCached:            0 kB
+Slab:              59532 kB
+SReclaimable:       8248 kB
+SUnreclaim:        51284 kB
+
+	n2h_rx_pkts                       = 9936464         common
+	n2h_rx_byts                       = 4300384899         common
+	n2h_pbuf_def_total_count          = 14884           special
+	n2h_pbuf_def_free_count           = 6692            special
+	n2h_payload_alloc_fails           = 99              special
+
+	wifili[0]_rx_deliverd                   = 52703           special
+	wifili[0]_tx_sent_count                 = 89733           special
+	wifili[0]_rx_desc_alloc_fail = 462052          special
+	wifili[0]_rx_deliverd                   = 1555635         special
+	wifili[0]_tx_sent_count                 = 212387          special
+	wifili[0]_rx_desc_alloc_fail = 5273354         special
+
+=== wl0 (5GHz) counters ===
+rx_bytes=2351984856
+
+=== crash counts still 0? ===
+qcom_q6v5_wcss=0
+q6v5_wcss_userpd1=0
+q6v5_wcss_userpd2=0
+
+ 14:32:04 up  1:34,  load average: 1.22, 1.23, 1.18

@@ -1,0 +1,41 @@
+#!/bin/sh
+# rrun <script.sh> - copy a phase script to the bench unit, run it with stdin
+# closed, then remove it.
+#
+# `ssh host 'sh -s' < script` feeds the script itself as the remote shell's
+# stdin, so any command that reads stdin (`bdata` with no args, for one) eats
+# the rest of the script and then hangs.  Staging the script in /tmp and running
+# it with </dev/null avoids that.  The script is a few KB and is deleted right
+# after, so it does not count against the "don't pile up in /tmp" rule.
+set -eu
+
+# Credentials come from ../.bench-env (gitignored) or the environment, never
+# from this file.
+envfile="$(dirname "$0")/../.bench-env"
+[ -f "$envfile" ] && . "$envfile"
+
+: "${STOCK_HOST:=192.168.31.1}"
+: "${STOCK_USER:=root}"
+if [ -z "${STOCK_PASS:-}" ]; then
+  echo "$(basename "$0"): STOCK_PASS is not set; put it in stock-investigation/.bench-env" >&2
+  exit 2
+fi
+: "${STOCK_TIMEOUT:=300}"
+
+SSH_OPTS="-F /dev/null
+  -o HostKeyAlgorithms=+ssh-rsa
+  -o PubkeyAcceptedAlgorithms=+ssh-rsa
+  -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile=/dev/null
+  -o LogLevel=ERROR
+  -o ConnectTimeout=10
+  -o ServerAliveInterval=15"
+
+script=$1
+remote=/tmp/.dsh-phase.$$.sh
+
+sshpass -p "$STOCK_PASS" ssh $SSH_OPTS "$STOCK_USER@$STOCK_HOST" \
+  "cat > $remote" < "$script"
+
+sshpass -p "$STOCK_PASS" ssh $SSH_OPTS "$STOCK_USER@$STOCK_HOST" \
+  "sh $remote </dev/null 2>&1; rm -f $remote"

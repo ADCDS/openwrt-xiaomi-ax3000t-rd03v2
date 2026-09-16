@@ -1,0 +1,7 @@
+# Raw captures hold the bench unit's serial number, MIoT device id/key, nvram
+# random keys, MAC addresses and SSIDs.  Only the scrubbed copies in captures/
+# are committed.  Regenerate captures/ with scripts/scrub.sh.
+raw/
+
+# Bench credentials.
+.bench-env

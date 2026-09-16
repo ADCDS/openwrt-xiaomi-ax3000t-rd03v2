@@ -65,6 +65,29 @@ Prebuilt images are on the [Releases](../../releases) page:
 Each file also comes in an `-nss` variant (`…-sysupgrade-nss.bin`), built with the experimental
 QCA NSS hardware offload — see [`docs/nss-offload.md`](docs/nss-offload.md). The two are not
 interchangeable: the NSS kernel differs, so its kmod tarball only matches its own image.
+
+> **`/etc/rc.local` survives every upgrade, so its NSS knobs can go stale.**
+> `rc.local` is listed in `/lib/upgrade/keep.d/base-files-essential`, and
+> `sysupgrade` saves config by default (`SAVE_CONFIG=1`) — so a **plain
+> `sysupgrade <image>`, with no flags at all**, tars your running `rc.local` and
+> restores it over the new image's copy in the overlay, where it shadows `/rom`.
+> `-f` is not required and `-n` (which discards all config) is the only flag that
+> avoids it.
+>
+> The NSS build puts `general/redirect` and the `ipv{4,6}_accel_mode` writes in
+> that file, so upgrading an NSS box — even NSS → NSS — keeps whatever `rc.local`
+> you already had. If the new release changed that block, you do not get the
+> change, and nothing logs it. After any NSS upgrade:
+>
+> ```sh
+> cmp -s /etc/rc.local /rom/etc/rc.local || cp /rom/etc/rc.local /etc/rc.local
+> reboot            # then: cat /proc/sys/dev/nss/general/redirect  -> 1
+> ```
+>
+> This is exactly why v1.9's buffer-pool knobs are **not** in `rc.local` but in
+> `/etc/init.d/nss-bufpool`, which is not in any keep list and therefore always
+> comes from the image.
+
 The four initramfs artifacts are `…-initramfs-uImage{,-nss}{,-wifi}.itb` and likewise for
 `-initramfs-factory…ubi`; the kmod tarball for a flavour matches **both** of its initramfs
 variants, because they come from one build and differ only in `/etc/rc.local`.
@@ -419,6 +442,16 @@ See [`MANIFEST.txt`](MANIFEST.txt) for every file and what it does.
 **Bridge VLAN filtering under `tag_8021q` (NSS build).** The NSS build swaps the Airoha special tag for DSA's `tag_8021q` (the NSS datapath cannot parse the 4-byte special tag, so it exceptions every routed frame to the host), which means the CPU link carries a plain 802.1Q header whose VID encodes the source port. That collides head-on with a VLAN-aware bridge, which wants the same VID space and the same per-port PVID register. Up to v1.4 the driver lost that collision badly: the inherited mt7530 `.port_vlan_filtering` forced the **CPU** port to `EG_CONSISTENT` ("untagged in, untagged out"), so the conduit received frames with no VLAN header at all, the tagger had no VID to demux, and the host RX path died for every user port on that CPU port — while TX kept working, so the box stayed visible in the upstream router's FDB while being unreachable. A config revert didn't recover it; only a reboot did. The fix (`999-2762`) follows the mainline sja1105/vsc73xx model: CPU-port egress tagging is owned by `an8855_setup()` alone, and the two writers of the PVID register — `tag_8021q` and the bridge — keep **shadow PVIDs** that a single `commit` function arbitrates on the port's VLAN-awareness. Bridge VLANs in 3072–4095 are now rejected instead of silently corrupting the `tag_8021q` table. See [`docs/an8855-vlan-filtering.md`](docs/an8855-vlan-filtering.md).
 
 **Memory (256 MB, and the smallbuffers fix).** After the SoC reserves ~66 MB for the WiFi co-processor and bootloader, Linux sees **175 MB** (`MemTotal: 175760 kB`) — and by default the two ath11k radios hold ~85–90 MB of *unswappable* kernel memory (DMA ring buffers + firmware host memory). That left only ~15 MB free, and under load the kernel OOM-killer would shoot `hostapd`/`netifd`, dropping WiFi. The fix is **`kmod-ath11k-smallbuffers`** — Ziyang Huang's [PR #21495](https://github.com/openwrt/openwrt/pull/21495), which shrinks ath11k's DP ring buffers (TX-completion 32768→2048, RX-DMA 4096→1024, monitor rings down to 128–512), mirroring the long-standing `ath10k-smallbuffers`. It cuts the ath11k footprint from ~85 MB to **~38 MB** (PR #21495's figures; the before-state was not re-measured on this board). Measured here on a v1.7 NSS build serving as an AP with both radios up and 6 clients: **~45 MB `MemFree`, ~33 MB `MemAvailable`** after a week of uptime — most of the ~65 MB Slab is unreclaimable, so `MemAvailable` is the honest figure. Not roomy, but stable. Tested: a 70 MB memory-pressure spike (far beyond any real load) produces **zero OOM kills** with both radios up — on real RAM alone, no swap needed. Trade-off: smaller buffers mean less headroom at extreme throughput, and monitor-mode capture is degraded. The first one does bite occasionally — the same AP logged one burst of ten `ath11k: failed to transmit frame -28` (ENOSPC on the shrunken TX ring) over that week, with no user-visible effect. It remains the right trade for a low-RAM device, but it is a real cost, not a free win.
+
+**v1.9 adds ~6 MB back.** Live inspection of a stock RD03v2 (ROM 2.0.28) showed stock hands the NSS
+only 4096 host-side buffers where the NSS memory profile defaults to 8704. Those are empty skbs pinned
+in Linux slab as `SUnreclaim`, so halving them is a straight return: measured boot-to-boot on the bench,
+same image, idle, `SUnreclaim` **44,576 → 38,204 / 38,144 kB** across two boots and `MemAvailable` **37,088 → ~42,800 kB**. It ships
+as `/etc/init.d/nss-bufpool` (NSS builds only in effect — on a plain build the sysctl tree does not exist
+and the script is a no-op). See [`stock-investigation/`](stock-investigation/) for the full comparison, and
+Verified under load: with the NSS fast path genuinely accelerating (`ipv4_create_requests` climbing, 940 Mbit/s line rate on the 1 G WAN port), ~9 GB of NAT'd traffic left `n2h_payload_alloc_fails` untouched, and a control run at the old 8704 was 1 Mbit/s apart while costing 6.4 MB more. Note what v1.9 deliberately does **not** take from stock: `extra_pbuf_core0`, which *costs* ~784 kB of host
+memory and whose allocator can `BUG_ON` at boot on a fragmented buddy list — a reboot loop on a board with
+`panic_on_oops=1`. The ~66 MB of carve-outs, by contrast, are not the problem: stock reserves 65 MB.
 
 ---
 
