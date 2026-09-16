@@ -68,3 +68,37 @@ port does not work (tag_8021q needs bridged ports - a single-port bridge is
 fine), the new network must be added to a firewall zone, and the driving host
 must DROP its address on the old subnet or the kernel treats the peer as on-link
 and never routes.
+
+=== WAN test rig (added to close the acceleration gap) ===
+
+  syd (netns "bench")              RD03v2 bench                 tiny (RPi)
+  enx00e04c125990         wired    lan3 -> eth1 (2.5G CPU)
+  192.168.1.50/24         ------>  br-lan 192.168.1.1
+                                   [ NAT ]
+                                   wan  -> eth0 (1G CPU)  wired  eth0 192.168.77.1/24
+                                   .77.141 (DHCP)        <------ dnsmasq + iperf3
+
+tiny setup (all runtime-only, nothing persisted to its config):
+  - wlan0 moved to the home SSID with ipv4.route-metric 50 and br0's default
+    route demoted to metric 700, so Tailscale keeps a path when eth0 leaves the
+    LAN. Proven by holding eth0 down 90 s while running SSH sessions that moved
+    200 kB each: 3/3 OK. NOTE tiny's own `tailscale ping` reports FAIL during
+    that window because it prefers an IPv6 endpoint via br0; the session
+    survives over DERP/wlan0 regardless, so ssh reachability is the signal to
+    trust, not tailscale ping.
+  - eth0 removed from br0 and addressed 192.168.77.1/24 by hand. NetworkManager
+    cannot manage it: /etc/NetworkManager/conf.d/10-unmanage-br0.conf pins both
+    br0 and eth0 unmanaged.
+  - dnsmasq on eth0 only (bind-interfaces, port=0, range .100-.150) plus
+    ip_forward=1 and MASQUERADE out of wlan0.
+
+To restore tiny: pkill the /tmp/dq.conf dnsmasq, `ip addr flush dev eth0`,
+`ip link set eth0 master br0`, drop the three iptables rules, and put its wlan0
+back on whichever AP it should use.
+
+WHY A WIRED LAN CLIENT IS REQUIRED: a Wi-Fi client cannot drive this test. On a
+build without the opt-in WIFI_NSS_DONOR integration, ath11k has no nss_offload
+parameter, so a Wi-Fi ingress is a non-NSS netdev and ECM will not build an
+accelerable rule - ipv4_create_requests stays 0 no matter how much traffic
+flows. That single fact explains every earlier "forwarded traffic" run in this
+investigation reading 0.
