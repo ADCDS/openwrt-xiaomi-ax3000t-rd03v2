@@ -1,10 +1,15 @@
 #!/bin/bash
-# verify-release.sh — independent check of an assembled v1.9 asset set.
+# verify-release.sh — independent check of an assembled release asset set.
 #
 # Deliberately re-derives everything from the artifacts rather than trusting
 # the build logs: the first v1.9 was pulled because its -nss image did not
 # contain the feature its notes advertised, and the build log looked fine.
 set -uo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BDF_PATH=lib/firmware/ath11k/IPQ5018/hw1.0/board-2.bin
+BDF_SOURCE="$REPO/files/package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.ipq5018"
+BDF_SHA=$(sha256sum <"$BDF_SOURCE" | cut -d' ' -f1)
 
 REL="${1:?usage: verify-release.sh <release-dir>}"
 PLAIN_TREE="${2:-}"
@@ -47,6 +52,8 @@ check_tree() {
 	[ -n "$sq" ] || { bad "$label: no root.squashfs"; return; }
 	d=$(mktemp -d)
 	unsquashfs -q -d "$d/x" "$sq" >/dev/null 2>&1
+	chk "$label IPQ5018 BDF" \
+		"$(sha256sum <"$d/x/$BDF_PATH" | cut -d' ' -f1)" "$BDF_SHA"
 
 	# v1.9 memory tuning — must be in BOTH flavours
 	chk "$label nss-bufpool START" "$(grep -hE '^START=' "$d/x/etc/init.d/nss-bufpool" 2>/dev/null)" "START=96"
@@ -97,13 +104,15 @@ echo "=== 7. -wifi initramfs beacons; ordinary images stay radio-silent ==="
 # point of the ordinary one is that it CANNOT bring radios up on its own.
 # Getting these backwards ships either a useless installer or a router that
 # beacons when it should not.
-EX="$(dirname "$0")/initramfs-extract.sh"
+EX="$REPO/tools/initramfs-extract.sh"
 [ -x "$EX" ] || EX=""
 for v in "" "-nss"; do
 	for k in "" "-wifi"; do
 		itb=$(ls "$REL"/*initramfs-uImage"$v$k".itb 2>/dev/null | head -1)
 		[ -n "$itb" ] || { bad "initramfs-uImage$v$k.itb missing"; continue; }
 		if [ -n "$EX" ]; then
+			chk "initramfs$v$k IPQ5018 BDF" \
+				"$("$EX" "$itb" "$BDF_PATH" 2>/dev/null | sha256sum | cut -d' ' -f1)" "$BDF_SHA"
 			n=$("$EX" "$itb" etc/rc.local 2>/dev/null | grep -cE 'installer WiFi beacon|wifi up')
 			if [ -n "$k" ]; then
 				[ "$n" -gt 0 ] && ok "initramfs$v$k beacons ($n markers)" || bad "initramfs$v$k does NOT beacon"
