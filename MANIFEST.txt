@@ -21,7 +21,10 @@ package/
          package; extends install-overlay to also pick up in-repo
          files/board-* (our board files are not in the upstream tarball).
  131240  package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.ipq5018  [bin]
-         2.4 GHz ath11k board data (board-2.bin) for the IPQ5018 radio.
+         Native WLAN.HK 2.7-layout 2.4 GHz board data for the IPQ5018 radio,
+         derived from Xiaomi's stock 2.5 calibration by the reproducible
+         tools/lift-ipq5018-bdf.py conversion. Fixes the real per-channel RX
+         gain/packet-loss defect left by the earlier generic BDF.
  131240  package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.qcn6122  [bin]
          5 GHz ath11k board data for the QCN6122 radio — the 2.7-compatible
          (version-matched) BDF that brings the 5 GHz radio up. An earlier
@@ -412,3 +415,9 @@ NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
   The switch-conduit RX-pause patch is not part of this integration:
     files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch applies to
     every build (ethtool -A eth1 rx on|off at runtime).
+
+Native IPQ5018 BDF (see docs/ipq5018-native-bdf.md):
+  tools/lift-ipq5018-bdf.py validates the two stock Xiaomi input hashes,
+    applies the common 2.5 -> 2.7 schema byte established by the accepted
+    QCN6122 conversion, rebuilds the XOR checksum, and verifies the exact
+    output hash before writing the board-2 container.
