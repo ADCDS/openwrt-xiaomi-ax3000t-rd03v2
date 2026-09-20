@@ -81,6 +81,9 @@ MIN_KMODS=500
 # comments — this still has to work if the comments are ever trimmed.
 MARKER='OpenWrt-RD03v2-Installer'
 EXTRACT="$REPO/tools/initramfs-extract.sh"
+BDF_PATH=lib/firmware/ath11k/IPQ5018/hw1.0/board-2.bin
+BDF_SOURCE="$REPO/files/package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.ipq5018"
+BDF_SHA=$(sha256sum <"$BDF_SOURCE" | cut -d' ' -f1)
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -118,6 +121,14 @@ check_beacon() {  # check_beacon <image> <yes|no> <label>
 	fi
 }
 
+check_bdf() {  # check_bdf <initramfs-image> <label>
+	local image=$1 label=$2 got
+	got=$("$EXTRACT" "$image" "$BDF_PATH" | sha256sum | cut -d' ' -f1) \
+		|| die "$label: could not extract $BDF_PATH from $(basename "$image")"
+	[ "$got" = "$BDF_SHA" ] \
+		|| die "$label: $(basename "$image") contains stale IPQ5018 BDF $got (want $BDF_SHA)"
+}
+
 check_tree() {  # check_tree <tree> <label>
 	local tree=$1 label=$2 i n
 	[ -d "$tree/$T" ] || die "$label: no $T — not a finished build tree"
@@ -150,11 +161,23 @@ check_tree() {  # check_tree <tree> <label>
 			|| die "$label: $wifi is byte-identical to $base — the second image pass did nothing"
 	done
 	for i in "${IMAGES[@]}"; do
-		case "$i" in *initramfs*) check_beacon "$tree/$T/$i" no "$label";; esac
+		case "$i" in
+			*initramfs*)
+				check_beacon "$tree/$T/$i" no "$label"
+				check_bdf "$tree/$T/$i" "$label"
+				;;
+		esac
 	done
 	for i in "${WIFI_IMAGES[@]}"; do
 		check_beacon "$tree/$T/$i" yes "$label"
+		check_bdf "$tree/$T/$i" "$label"
 	done
+	local sq got
+	sq=$(find "$tree/build_dir" -name root.squashfs -type f | head -n1)
+	[ -n "$sq" ] || die "$label: no root.squashfs found for BDF verification"
+	got=$(unsquashfs -cat "$sq" "$BDF_PATH" 2>/dev/null | sha256sum | cut -d' ' -f1)
+	[ "$got" = "$BDF_SHA" ] \
+		|| die "$label: root.squashfs contains stale IPQ5018 BDF $got (want $BDF_SHA)"
 	echo "    $label: $n kmods, kernel $(kver "$tree"), -wifi initramfs verified"
 }
 
