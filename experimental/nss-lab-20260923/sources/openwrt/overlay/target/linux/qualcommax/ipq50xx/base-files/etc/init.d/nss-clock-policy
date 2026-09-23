@@ -1,0 +1,44 @@
+#!/bin/sh /etc/rc.common
+# qosmio pbuf policy: CPU performance governor and NSS autoscale disabled.
+# User-requested extension: explicitly select IPQ5018's supported 1 GHz rate.
+# Keep recovery initramfs unchanged. No buffer or Wi-Fi reinitialization here.
+START=95
+STOP=10
+
+start() {
+    local policy governors clock waited rate failed=0
+    [ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = "xiaomi,mi-router-ax3000t-v2" ] || return 0
+    grep -q ' /rom squashfs ' /proc/mounts || return 0
+
+    for policy in /sys/devices/system/cpu/cpufreq/policy*; do
+        [ -r "$policy/scaling_available_governors" ] || continue
+        governors=" $(cat "$policy/scaling_available_governors") "
+        case "$governors" in
+            *" performance "*) echo performance > "$policy/scaling_governor" || failed=1 ;;
+            *) logger -t nss-clock-policy "ERROR: performance unavailable for $policy"; failed=1 ;;
+        esac
+    done
+
+    clock=/proc/sys/dev/nss/clock
+    waited=0
+    while [ ! -w "$clock/current_freq" ] || [ ! -w "$clock/auto_scale" ]; do
+        [ "$waited" -lt 30 ] || { logger -t nss-clock-policy 'ERROR: NSS clock interface unavailable'; return 1; }
+        sleep 1
+        waited=$((waited + 1))
+    done
+    echo 0 > "$clock/auto_scale" || return 1
+    echo 1000000000 > "$clock/current_freq" || return 1
+    # Frequency changes are queued by the driver; check the actual clock tree.
+    waited=0
+    while [ "$waited" -lt 5 ]; do
+        sleep 1
+        rate=$(awk '$1 == "gcc_ubi0_core_clk" {print $5; exit}' /sys/kernel/debug/clk/clk_summary)
+        [ "$rate" = 1000000000 ] && [ "$(cat "$clock/auto_scale")" = 0 ] && break
+        waited=$((waited + 1))
+    done
+    if [ "$rate" != 1000000000 ] || [ "$(cat "$clock/auto_scale")" != 0 ] || [ "$failed" != 0 ]; then
+        logger -t nss-clock-policy "ERROR: verification failed NSS=$rate CPU-policy-errors=$failed"
+        return 1
+    fi
+    logger -t nss-clock-policy 'CPU governor=performance NSS auto_scale=0 actual_clock=1000000000 Hz'
+}

@@ -1,0 +1,23 @@
+# NSS hardware offload runtime knobs. rc.local runs late in boot, after the
+# qca-nss modules are autoloaded, so the /proc/sys/dev/nss tree exists here.
+#  - general/redirect: hand exception/accelerated traffic to the NSS data plane
+#  - ipv{4,6}cfg/*_accel_mode: enable the connection-manager fast path
+echo 1 > /proc/sys/dev/nss/general/redirect 2>/dev/null
+echo 1 > /proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode 2>/dev/null
+echo 1 > /proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode 2>/dev/null
+
+# Confirm boot success to U-Boot's dual-boot failsafe so it never switches away
+# from this rootfs. The stock miwifi bootloader tracks per-system boot failures;
+# with no reset the counter eventually trips "boot failure on both systems" and
+# the box stops booting the image you installed. sysupgrade arms these flags once
+# at flash time (lib/upgrade/platform.sh), but nothing re-arms them afterwards —
+# so they have to be re-asserted on every boot, not just after an upgrade.
+# uboot-envtools generates fw_env.config for this board, so fw_setenv works.
+#
+# This file is the ONLY rc.local for both builds. build.sh (NSS=1) prepends the
+# NSS runtime knobs above this block at build time — do not add a second copy
+# under nss/overlay/.
+# The helper reports read/write failures; rc.local still finishes normally.
+/usr/sbin/rd03v2-confirm-boot
+
+exit 0

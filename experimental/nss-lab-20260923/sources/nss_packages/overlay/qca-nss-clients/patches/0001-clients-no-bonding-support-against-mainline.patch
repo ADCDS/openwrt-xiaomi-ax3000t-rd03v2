@@ -1,0 +1,72 @@
+clients: never define BONDING_SUPPORT against mainline bonding
+
+The three sub-Makefiles that build against a bond device gate -DBONDING_SUPPORT
+on the kernel's own CONFIG_BONDING:
+
+    ifneq (,$(filter $(CONFIG_BONDING),y m))
+    ccflags-y += -DBONDING_SUPPORT
+
+but what the define guards is not "the kernel has bonding" - it is "the kernel
+has QSDK's *patched* bonding". nss_connmgr_pppoe.c calls bond_get_id(), and the
+bridge/vlan managers use struct bond_cb; mainline's bonding driver exports
+neither. So on this tree the test is asking the wrong question, and when it
+answers yes the build stops:
+
+  nss_connmgr_pppoe.c:290:26: error: implicit declaration of function
+      'bond_get_id'; did you mean 'find_get_pid'? [-Wimplicit-function-declaration]
+
+Nothing noticed until KMODS=1, because CONFIG_BONDING was simply never set:
+build.sh already strips the +kmod-bonding dependency qca-nss-drv-pppoe declares
+(QSDK boilerplate for LAG over PPPoE), and nothing else pulled bonding in.
+ALL_KMODS selects every module, CONFIG_BONDING becomes m, and the define
+appears - in kmod-qca-nss-drv-pppoe, which is in DEVICE_PACKAGES, so the whole
+NSS build fails.
+
+Point the test at a symbol that does not exist rather than deleting the block,
+so it is obvious what the condition was and what would have to be true to
+restore it.
+
+No behaviour change for this port: with BONDING_SUPPORT undefined, PPPoE over a
+bond master leaves bondid at -1 and the connection is refused - which is what
+already happened here, since the module was always built without the define.
+LAG is not part of this board's topology.
+
+--- a/pppoe/Makefile
++++ b/pppoe/Makefile
+@@ -5,6 +5,9 @@
+ obj-m += qca-nss-pppoe.o
+ qca-nss-pppoe-objs := nss_connmgr_pppoe.o
+ 
+-ifneq (,$(filter $(CONFIG_BONDING),y m))
++# BONDING_SUPPORT gates calls into QSDK's patched bonding driver -
++# bond_get_id() here, struct bond_cb elsewhere. Mainline bonding has neither,
++# so the define is wrong on this tree whatever CONFIG_BONDING says.
++ifneq (,$(filter $(CONFIG_BONDING_QSDK_PATCHED),y m))
+ ccflags-y += -DBONDING_SUPPORT
+ endif
+--- a/bridge/Makefile
++++ b/bridge/Makefile
+@@ -15,6 +15,9 @@
+ ccflags-y += -DNSS_BRIDGE_MGR_PPE_SUPPORT
+ endif
+ 
+-ifneq (,$(filter $(CONFIG_BONDING),y m))
++# BONDING_SUPPORT gates calls into QSDK's patched bonding driver -
++# bond_get_id() here, struct bond_cb elsewhere. Mainline bonding has neither,
++# so the define is wrong on this tree whatever CONFIG_BONDING says.
++ifneq (,$(filter $(CONFIG_BONDING_QSDK_PATCHED),y m))
+ ccflags-y += -DBONDING_SUPPORT
+ endif
+--- a/vlan/Makefile
++++ b/vlan/Makefile
+@@ -11,6 +11,9 @@
+ ccflags-y += -DNSS_VLAN_MGR_DEBUG_LEVEL=4
+ ccflags-y += -Wall -Werror
+ 
+-ifneq (,$(filter $(CONFIG_BONDING),y m))
++# BONDING_SUPPORT gates calls into QSDK's patched bonding driver -
++# bond_get_id() here, struct bond_cb elsewhere. Mainline bonding has neither,
++# so the define is wrong on this tree whatever CONFIG_BONDING says.
++ifneq (,$(filter $(CONFIG_BONDING_QSDK_PATCHED),y m))
+ ccflags-y += -DBONDING_SUPPORT
+ endif

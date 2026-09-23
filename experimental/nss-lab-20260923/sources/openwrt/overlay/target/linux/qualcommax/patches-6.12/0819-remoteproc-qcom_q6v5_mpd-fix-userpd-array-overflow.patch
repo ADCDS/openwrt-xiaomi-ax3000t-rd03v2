@@ -1,0 +1,51 @@
+From: Adriel Santos <adriel.turox@gmail.com>
+Subject: [PATCH] remoteproc: qcom_q6v5_mpd: fix user PD array overflow
+
+qcom_get_pd_asid() derives the asid from the PD's spawn bit as bit / 8,
+so on IPQ5018 it returns 1, 2 and 3 for pd-1, pd-2 and pd-3 - never 0.
+q6_register_userpd() then stores each one at wcss->upd[pd_asid], but the
+array only has MAX_UPD (3) entries, so registering pd-3 writes one
+pointer past its end.
+
+The array is currently the last member of struct q6_wcss, so the write
+lands in slack space after the allocation and nothing visibly breaks.
+It corrupts whatever is placed after it instead, which makes any later
+addition to the structure fail in ways that have nothing to do with the
+change that exposed it - found by adding a work_struct there, whose
+->data the overflow clobbered so that schedule_work() silently did
+nothing.
+
+Size the array to hold asid MAX_UPD and reject an out-of-range asid
+instead of scribbling past the end.
+
+Signed-off-by: Adriel Santos <adriel.turox@gmail.com>
+---
+--- a/drivers/remoteproc/qcom_q6v5_mpd.c
++++ b/drivers/remoteproc/qcom_q6v5_mpd.c
+@@ -86,7 +86,11 @@
+ 	int num_clks;
+ 	const struct wcss_data *desc;
+ 	const char **firmware;
+-	struct userpd *upd[MAX_UPD];
++	/*
++	 * Indexed by pd_asid, which qcom_get_pd_asid() derives from the PD's
++	 * spawn bit and which therefore runs 1..MAX_UPD, not 0..MAX_UPD-1.
++	 */
++	struct userpd *upd[MAX_UPD + 1];
+ };
+ 
+ struct userpd {
+@@ -744,6 +748,13 @@
+ 	if (ret)
+ 		goto free_rproc;
+ 
++	if (upd->pd_asid >= ARRAY_SIZE(wcss->upd)) {
++		dev_err(wcss->dev, "%s: pd asid %u out of range\n",
++			userpd_np->name, upd->pd_asid);
++		ret = -ERANGE;
++		goto free_rproc;
++	}
++
+ 	wcss->upd[upd->pd_asid] = upd;
+ 	platform_set_drvdata(userpd_pdev, rproc);
+ 	qcom_add_ssr_subdev(rproc, &upd->ssr_subdev, userpd_pdev->name);

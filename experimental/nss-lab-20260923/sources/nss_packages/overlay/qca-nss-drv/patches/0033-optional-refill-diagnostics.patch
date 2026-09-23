@@ -1,0 +1,118 @@
+--- a/nss_core.c
++++ b/nss_core.c
+@@ -23,6 +23,7 @@
+  */
+ 
+ #include "nss_core.h"
++#include <linux/ktime.h>
+ #include <linux/module.h>
+ #include <linux/mm.h>
+ #include <linux/of.h>
+@@ -2108,6 +2109,35 @@
+ 	NSS_PKT_STATS_INC(&nss_top->stats_drv[NSS_DRV_STATS_TX_EMPTY]);
+ }
+ 
++/* Optional diagnostics: handler duration, not hardware IRQ scheduling latency. */
++static bool refill_diag;
++module_param(refill_diag, bool, 0644);
++MODULE_PARM_DESC(refill_diag, "Collect empty-buffer SOS diagnostics (default off)");
++
++static void nss_core_refill_diag(struct nss_ctx_instance *nss_ctx,
++		uint16_t slots, uint16_t submitted, u64 start)
++{
++	u64 elapsed = ktime_get_ns() - start;
++	unsigned int cpu = raw_smp_processor_id();
++	unsigned int bucket;
++
++	NSS_PKT_STATS_INC(&nss_ctx->nss_top->stats_drv[NSS_DRV_STATS_REFILL_CALLS]);
++	NSS_PKT_STATS_ADD(&nss_ctx->nss_top->stats_drv[NSS_DRV_STATS_REFILL_SLOTS], slots);
++	NSS_PKT_STATS_ADD(&nss_ctx->nss_top->stats_drv[NSS_DRV_STATS_REFILL_SUBMITTED], submitted);
++	if (!slots)
++		NSS_PKT_STATS_INC(&nss_ctx->nss_top->stats_drv[NSS_DRV_STATS_REFILL_ZERO_SLOTS]);
++	else if (submitted < slots)
++		NSS_PKT_STATS_INC(&nss_ctx->nss_top->stats_drv[NSS_DRV_STATS_REFILL_PARTIAL]);
++	if (cpu < 2)
++		NSS_PKT_STATS_INC(&nss_ctx->nss_top->stats_drv[NSS_DRV_STATS_REFILL_CPU0 + cpu]);
++	bucket = elapsed < 10000 ? NSS_DRV_STATS_REFILL_LT10US :
++		elapsed < 50000 ? NSS_DRV_STATS_REFILL_LT50US :
++		elapsed < 100000 ? NSS_DRV_STATS_REFILL_LT100US :
++		elapsed < 500000 ? NSS_DRV_STATS_REFILL_LT500US :
++		elapsed < 1000000 ? NSS_DRV_STATS_REFILL_LT1000US : NSS_DRV_STATS_REFILL_GE1000US;
++	NSS_PKT_STATS_INC(&nss_ctx->nss_top->stats_drv[bucket]);
++}
++
+ /*
+  * nss_core_handle_empty_buffer_sos()
+  *	Handle empty buffer SOS interrupt.
+@@ -2122,6 +2152,8 @@
+ 
+ 	int paged_mode = nss_core_get_paged_mode();
+ 	int jumbo_mru = nss_core_get_jumbo_mru();
++	bool diag = READ_ONCE(refill_diag);
++	u64 diag_start = diag ? ktime_get_ns() : 0;
+ 
+ 	/*
+ 	 * Check how many empty buffers could be filled in queue
+@@ -2144,6 +2176,8 @@
+ 	 * Note that total number of descriptors in queue cannot be more than (size - 1)
+ 	 */
+ 	if (!count) {
++		if (diag)
++			nss_core_refill_diag(nss_ctx, 0, 0, diag_start);
+ 		return;
+ 	}
+ 
+@@ -2163,6 +2197,9 @@
+ 	 * Inform NSS that new buffers are available
+ 	 */
+ 	nss_hal_send_interrupt(nss_ctx, NSS_H2N_INTR_EMPTY_BUFFER_QUEUE);
++	if (diag)
++		nss_core_refill_diag(nss_ctx, count,
++			(h2n_desc_ring->hlos_index - hlos_index) & mask, diag_start);
+ }
+ 
+ /*
+--- a/nss_drv_stats.h
++++ b/nss_drv_stats.h
+@@ -72,6 +72,19 @@
+ 	NSS_DRV_STATS_TX_PACKET_QUEUE_6,	/* H2N Data packets on queue6 */
+ 	NSS_DRV_STATS_TX_PACKET_QUEUE_7,	/* H2N Data packets on queue7 */
+ #endif
++	NSS_DRV_STATS_REFILL_CALLS,
++	NSS_DRV_STATS_REFILL_SLOTS,
++	NSS_DRV_STATS_REFILL_SUBMITTED,
++	NSS_DRV_STATS_REFILL_ZERO_SLOTS,
++	NSS_DRV_STATS_REFILL_PARTIAL,
++	NSS_DRV_STATS_REFILL_CPU0,
++	NSS_DRV_STATS_REFILL_CPU1,
++	NSS_DRV_STATS_REFILL_LT10US,
++	NSS_DRV_STATS_REFILL_LT50US,
++	NSS_DRV_STATS_REFILL_LT100US,
++	NSS_DRV_STATS_REFILL_LT500US,
++	NSS_DRV_STATS_REFILL_LT1000US,
++	NSS_DRV_STATS_REFILL_GE1000US,
+ 	NSS_DRV_STATS_MAX,
+ };
+ 
+--- a/nss_drv_strings.c
++++ b/nss_drv_strings.c
+@@ -66,6 +66,19 @@
+ 	{"tx_buffers_data_queue[6]"	, NSS_STATS_TYPE_SPECIAL},
+ 	{"tx_buffers_data_queue[7]"	, NSS_STATS_TYPE_SPECIAL},
+ #endif
++	{"refill_calls", NSS_STATS_TYPE_SPECIAL},
++	{"refill_slots", NSS_STATS_TYPE_SPECIAL},
++	{"refill_submitted", NSS_STATS_TYPE_SPECIAL},
++	{"refill_zero_slots", NSS_STATS_TYPE_SPECIAL},
++	{"refill_partial", NSS_STATS_TYPE_SPECIAL},
++	{"refill_cpu0", NSS_STATS_TYPE_SPECIAL},
++	{"refill_cpu1", NSS_STATS_TYPE_SPECIAL},
++	{"refill_lt10us", NSS_STATS_TYPE_SPECIAL},
++	{"refill_lt50us", NSS_STATS_TYPE_SPECIAL},
++	{"refill_lt100us", NSS_STATS_TYPE_SPECIAL},
++	{"refill_lt500us", NSS_STATS_TYPE_SPECIAL},
++	{"refill_lt1000us", NSS_STATS_TYPE_SPECIAL},
++	{"refill_ge1000us", NSS_STATS_TYPE_SPECIAL},
+ };
+ 
+ /*

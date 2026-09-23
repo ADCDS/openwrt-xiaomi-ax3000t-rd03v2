@@ -1,0 +1,509 @@
+diff --git a/feeds.conf.default b/feeds.conf.default
+index 05f5c8c47c..38008b53e4 100644
+--- a/feeds.conf.default
++++ b/feeds.conf.default
+@@ -1,8 +1,10 @@
+-src-git packages https://git.openwrt.org/feed/packages.git
+-src-git luci https://git.openwrt.org/project/luci.git
+-src-git routing https://git.openwrt.org/feed/routing.git
+-src-git telephony https://git.openwrt.org/feed/telephony.git
+-src-git video https://github.com/openwrt/video.git
++src-git packages https://git.openwrt.org/feed/packages.git^6e46ddbe2ddaee2b4381dbf1a5046ef942b8265b
++src-git luci https://git.openwrt.org/project/luci.git^7c91cb278d7cf19878069a44d5d1992f65c4e315
++src-git routing https://git.openwrt.org/feed/routing.git^4b9891b9136259f93294a424507ed24c5e8c1cbd
++src-git telephony https://git.openwrt.org/feed/telephony.git^5d68d53c160a325ea9d03fce393e051573bcc736
++src-git video https://github.com/openwrt/video.git^938621437fbf4abdea12792361173dd69164ab16
+ #src-git targets https://github.com/openwrt/targets.git
+ #src-git oldpackages http://git.openwrt.org/packages.git
+ #src-link custom /usr/src/openwrt/custom-feed
++src-git nss_packages https://github.com/qosmio/nss-packages.git^0d970dbf0185e3f53709bd803e8a466598023c57
++src-git sqm_scripts_nss https://github.com/qosmio/sqm-scripts-nss.git^4b4ed8639229be5e70cf94b73cdf7dbc09e66d5d
+diff --git a/include/kernel-defaults.mk b/include/kernel-defaults.mk
+index eb852a04ca..564ece825a 100644
+--- a/include/kernel-defaults.mk
++++ b/include/kernel-defaults.mk
+@@ -116,7 +116,7 @@ define Kernel/Configure/Default
+ 	awk '/^(#[[:space:]]+)?CONFIG_KERNEL/{sub("CONFIG_KERNEL_","CONFIG_");print}' $(TOPDIR)/.config >> $(LINUX_DIR)/.config.target
+ 	echo "# CONFIG_KALLSYMS_EXTRA_PASS is not set" >> $(LINUX_DIR)/.config.target
+ 	echo "# CONFIG_KALLSYMS_ALL is not set" >> $(LINUX_DIR)/.config.target
+-	echo "CONFIG_KALLSYMS_UNCOMPRESSED=y" >> $(LINUX_DIR)/.config.target
++	echo "# CONFIG_KALLSYMS_UNCOMPRESSED is not set" >> $(LINUX_DIR)/.config.target
+ 	$(SCRIPT_DIR)/package-metadata.pl kconfig $(TMP_DIR)/.packageinfo $(TOPDIR)/.config $(KERNEL_PATCHVER) > $(LINUX_DIR)/.config.override
+ 	$(SCRIPT_DIR)/kconfig.pl 'm+' '+' $(LINUX_DIR)/.config.target /dev/null $(LINUX_DIR)/.config.override > $(LINUX_DIR)/.config.set
+ 	$(call Kernel/SetNoInitramfs)
+@@ -183,7 +183,7 @@ ifneq ($(CONFIG_TARGET_ROOTFS_INITRAMFS),)
+ # For Separate Initramf with $2 declared, skip kernel compile, it has
+ # already been done previously on generic image build
+ define Kernel/CompileImage/Initramfs
+-	$(call locked,{ \
++	$(call locked,{ set -e; \
+ 		$(if $(2),$(call Kernel/PrepareConfigPerRootfs,$(LINUX_DIR)$(2));) \
+ 		$(call Kernel/Configure/Initramfs,$(if $(1),$(1),$(TARGET_DIR)),$(LINUX_DIR)$(2)); \
+ 		$(CP) $(GENERIC_PLATFORM_DIR)/other-files/init $(if $(1),$(1),$(TARGET_DIR))/init; \
+diff --git a/package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx b/package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx
+index 95f0e314d4..c3e21f7ba0 100644
+--- a/package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx
++++ b/package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx
+@@ -35,6 +35,9 @@ yuncore,ax830|\
+ yuncore,ax850)
+ 	ubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x10000"
+ 	;;
++xiaomi,mi-router-ax3000t-v2)
++	ubootenv_add_mtd "0:APPSBLENV" "0x0" "0x10000" "0x20000"
++	;;
+ esac
+ 
+ config_load ubootenv
+diff --git a/package/firmware/ipq-wifi/Makefile b/package/firmware/ipq-wifi/Makefile
+index 78d4abf3b8..437c7f00a5 100644
+--- a/package/firmware/ipq-wifi/Makefile
++++ b/package/firmware/ipq-wifi/Makefile
+@@ -106,6 +106,7 @@ ALLWIFIBOARDS:= \
+ 	xiaomi_ax3600 \
+ 	xiaomi_ax6000 \
+ 	xiaomi_ax9000 \
++	xiaomi_mi-router-ax3000t-v2 \
+ 	xiaomi_redmi-ax5400 \
+ 	yuncore_ax830 \
+ 	yuncore_ax850 \
+@@ -199,7 +200,7 @@ Do not install it for any other device!
+   endef
+ 
+   define Package/ipq-wifi-$(1)/install-overlay
+-    $$$$(foreach IPQ_WIFI_BOARD_FILE,$$$$(wildcard $(PKG_BUILD_DIR)/board-$(1).*),\
++    $$$$(foreach IPQ_WIFI_BOARD_FILE,$$$$(wildcard $(PKG_BUILD_DIR)/board-$(1).*) $$$$(wildcard files/board-$(1).*),\
+       $$$$(call ipq-wifi-install-one,$$$$(IPQ_WIFI_BOARD_FILE),$$(1)))
+   endef
+ 
+@@ -303,6 +304,7 @@ $(eval $(call generate-ipq-wifi-package,xiaomi_aiot-ac2350,Xiaomi AIoT AC2350))
+ $(eval $(call generate-ipq-wifi-package,xiaomi_ax3600,Xiaomi AX3600))
+ $(eval $(call generate-ipq-wifi-package,xiaomi_ax6000,Xiaomi AX6000))
+ $(eval $(call generate-ipq-wifi-package,xiaomi_ax9000,Xiaomi AX9000))
++$(eval $(call generate-ipq-wifi-package,xiaomi_mi-router-ax3000t-v2,Xiaomi Mi Router AX3000T v2))
+ $(eval $(call generate-ipq-wifi-package,xiaomi_redmi-ax5400,Xiaomi Redmi AX5400))
+ $(eval $(call generate-ipq-wifi-package,yuncore_ax830,Yuncore AX830))
+ $(eval $(call generate-ipq-wifi-package,yuncore_ax850,Yuncore AX850))
+diff --git a/package/kernel/linux/modules/netfilter.mk b/package/kernel/linux/modules/netfilter.mk
+index 6ef1522115..6fe458f7a4 100644
+--- a/package/kernel/linux/modules/netfilter.mk
++++ b/package/kernel/linux/modules/netfilter.mk
+@@ -340,7 +340,7 @@ define KernelPackage/ipt-ipopt
+   KCONFIG:=$(KCONFIG_IPT_IPOPT)
+   FILES:=$(foreach mod,$(IPT_IPOPT-m),$(LINUX_DIR)/net/$(mod).ko)
+   AUTOLOAD:=$(call AutoProbe,$(notdir $(IPT_IPOPT-m)))
+-  $(call AddDepends/ipt)
++  $(call AddDepends/ipt,+kmod-nf-conntrack)
+ endef
+ 
+ define KernelPackage/ipt-ipopt/description
+diff --git a/package/kernel/mac80211/Makefile b/package/kernel/mac80211/Makefile
+index aec88b692b..10f3483894 100644
+--- a/package/kernel/mac80211/Makefile
++++ b/package/kernel/mac80211/Makefile
+@@ -9,6 +9,7 @@ include $(TOPDIR)/rules.mk
+ include $(INCLUDE_DIR)/kernel.mk
+ 
+ PKG_NAME:=mac80211
++SCAN_DEPS = *.mk
+ 
+ PKG_VERSION:=6.18.26
+ PKG_RELEASE:=1
+@@ -36,6 +37,7 @@ PKG_CONFIG_DEPENDS:= \
+ 	CONFIG_PACKAGE_MAC80211_DEBUGFS \
+ 	CONFIG_PACKAGE_MAC80211_MESH \
+ 	CONFIG_PACKAGE_MAC80211_TRACING \
++	CONFIG_PACKAGE_MAC80211_NSS_SUPPORT \
+ 	CONFIG_PACKAGE_IWLWIFI_DEBUG \
+ 	CONFIG_PACKAGE_IWLWIFI_DEBUGFS \
+ 	CONFIG_PACKAGE_RTLWIFI_DEBUG \
+@@ -130,7 +132,7 @@ define KernelPackage/mac80211
+   $(call KernelPackage/mac80211/Default)
+   TITLE:=Linux 802.11 Wireless Networking Stack
+   # +kmod-crypto-cmac is a runtime only dependency of net/mac80211/aes_cmac.c
+-  DEPENDS+= +kmod-cfg80211 +kmod-crypto-cmac +kmod-crypto-ccm +kmod-crypto-gcm +hostapd-common
++  DEPENDS+= +kmod-cfg80211 +kmod-crypto-cmac +kmod-crypto-ccm +kmod-crypto-gcm +hostapd-common +ATH11K_NSS_SUPPORT:kmod-qca-nss-drv
+   KCONFIG:=\
+ 	CONFIG_AVERAGE=y
+   FILES:= $(PKG_BUILD_DIR)/net/mac80211/mac80211.ko
+@@ -139,6 +141,17 @@ define KernelPackage/mac80211
+ endef
+ 
+ define KernelPackage/mac80211/config
++
++	config ATH11K_NSS_SUPPORT
++		bool "Experimental RD03v2 ath11k NSS offload"
++		depends on TARGET_qualcommax_ipq50xx
++		select PACKAGE_MAC80211_NSS_SUPPORT
++		default n
++
++	config PACKAGE_MAC80211_NSS_SUPPORT
++		bool
++		default n
++
+   if PACKAGE_kmod-mac80211
+ 
+ 	config PACKAGE_MAC80211_DEBUGFS
+@@ -280,6 +293,19 @@ C_DEFINES=
+ 
+ ifeq ($(BUILD_VARIANT),smallbuffers)
+ 	C_DEFINES+= -DCONFIG_ATH10K_SMALLBUFFERS
++	C_DEFINES+= -DCONFIG_ATH11K_SMALLBUFFERS
++endif
++
++ifdef CONFIG_ATH11K_NSS_SUPPORT
++	IREMAP_CFLAGS+=-I$(STAGING_DIR)/usr/include/qca-nss-drv -I$(STAGING_DIR)/usr/include/qca-nss-clients
++endif
++config-$(CONFIG_PACKAGE_MAC80211_NSS_SUPPORT) += MAC80211_NSS_SUPPORT
++
++PKG_CONFIG_DEPENDS += CONFIG_NSS_FIRMWARE_VERSION_12_5
++ifdef CONFIG_ATH11K_NSS_SUPPORT
++ifdef CONFIG_NSS_FIRMWARE_VERSION_12_5
++  C_DEFINES += -DNSS_FIRMWARE_VERSION_12_5
++endif
+ endif
+ 
+ MAKE_OPTS:= \
+@@ -354,6 +380,11 @@ define Build/Patch
+ 	$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/mwl,mwl/)
+ 	$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/brcm,brcm/)
+ 	$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/rtl,rtl/)
++ifdef CONFIG_ATH11K_NSS_SUPPORT
++	$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/nss/subsys,nss/subsys/)
++	$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/nss/ath10k,nss/ath10k/)
++	$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/nss/ath11k,nss/ath11k/)
++endif
+ 	$(if $(QUILT),touch $(PKG_BUILD_DIR)/.quilt_used)
+ endef
+ 
+diff --git a/package/kernel/mac80211/ath.mk b/package/kernel/mac80211/ath.mk
+index 9adb8914cd..0d30207694 100644
+--- a/package/kernel/mac80211/ath.mk
++++ b/package/kernel/mac80211/ath.mk
+@@ -1,6 +1,6 @@
+ PKG_DRIVERS += \
+ 	ath ath5k ath6kl ath6kl-sdio ath6kl-usb ath9k ath9k-common ath9k-htc ath10k ath10k-smallbuffers \
+-	ath11k ath11k-ahb ath11k-pci ath12k carl9170 owl-loader ar5523 wil6210 qcom-qmi-helpers
++	ath11k ath11k-smallbuffers ath11k-ahb ath11k-pci ath12k carl9170 owl-loader ar5523 wil6210 qcom-qmi-helpers
+ 
+ PKG_CONFIG_DEPENDS += \
+ 	CONFIG_PACKAGE_ATH_DEBUG \
+@@ -14,7 +14,9 @@ PKG_CONFIG_DEPENDS += \
+ 	CONFIG_ATH10K_THERMAL \
+ 	CONFIG_ATH11K_THERMAL \
+ 	CONFIG_ATH12K_THERMAL \
+-	CONFIG_ATH_USER_REGD
++	CONFIG_ATH_USER_REGD \
++	CONFIG_ATH11K_NSS_SUPPORT \
++	CONFIG_ATH11K_MEM_PROFILE_256M
+ 
+ ifdef CONFIG_PACKAGE_MAC80211_DEBUGFS
+   config-y += \
+@@ -60,14 +62,17 @@ config-$(CONFIG_ATH9K_UBNTHSR) += ATH9K_UBNTHSR
+ config-$(CONFIG_ATH10K_LEDS) += ATH10K_LEDS
+ config-$(CONFIG_ATH10K_THERMAL) += ATH10K_THERMAL
+ config-$(CONFIG_ATH11K_THERMAL) += ATH11K_THERMAL
++config-$(CONFIG_ATH11K_NSS_SUPPORT) += ATH11K_NSS_SUPPORT
++config-$(CONFIG_ATH11K_MEM_PROFILE_256M) += ATH11K_MEM_PROFILE_256M
+ config-$(CONFIG_ATH12K_THERMAL) += ATH12K_THERMAL
+ 
+ config-$(call config_package,ath9k-htc) += ATH9K_HTC
+ config-$(call config_package,ath10k,regular) += ATH10K ATH10K_PCI
+ config-$(call config_package,ath10k-smallbuffers,smallbuffers) += ATH10K ATH10K_PCI ATH10K_SMALLBUFFERS
+-config-$(call config_package,ath11k) += ATH11K
+-config-$(call config_package,ath11k-ahb) += ATH11K_AHB
+-config-$(call config_package,ath11k-pci) += ATH11K_PCI
++config-$(call config_package,ath11k,regular) += ATH11K
++config-$(call config_package,ath11k-smallbuffers,smallbuffers) += ATH11K ATH11K_SMALLBUFFERS
++config-$(call config_package,ath11k-ahb,smallbuffers) += ATH11K_AHB
++config-$(call config_package,ath11k-pci,smallbuffers) += ATH11K_PCI
+ config-$(call config_package,ath12k) += ATH12K
+ 
+ config-$(call config_package,ath5k) += ATH5K ATH5K_PCI
+@@ -312,35 +317,63 @@ define KernelPackage/ath10k-smallbuffers
+   PROVIDES:=@kmod-ath10k-any
+ endef
+ 
+-define KernelPackage/ath11k
++define KernelPackage/ath11k/Default
+   $(call KernelPackage/mac80211/Default)
+   TITLE:=Qualcomm 802.11ax wireless chipset support (common code)
+   URL:=https://wireless.wiki.kernel.org/en/users/drivers/ath11k
+   DEPENDS+= +kmod-ath +@DRIVER_11AC_SUPPORT +@DRIVER_11AX_SUPPORT \
+   +kmod-crypto-michael-mic +ATH11K_THERMAL:kmod-hwmon-core \
+-  +ATH11K_THERMAL:kmod-thermal +kmod-qcom-qmi-helpers
++  +ATH11K_THERMAL:kmod-thermal +kmod-qcom-qmi-helpers \
++  +ATH11K_NSS_SUPPORT:kmod-qca-nss-drv \
++  +@(ATH11K_NSS_SUPPORT):NSS_DRV_WIFIOFFLOAD_ENABLE \
++  +@(ATH11K_NSS_SUPPORT):NSS_DRV_WIFI_EXT_VDEV_ENABLE
++ifdef CONFIG_ATH11K_NSS_SUPPORT
++  AUTOLOAD:=$(call AutoProbe,ath11k)
++  MODPARAMS.ath11k:=nss_offload=1 frame_mode=2
++endif
++  PROVIDES:=kmod-ath11k
+   FILES:=$(PKG_BUILD_DIR)/drivers/net/wireless/ath/ath11k/ath11k.ko
+ endef
+ 
++define KernelPackage/ath11k
++  $(call KernelPackage/ath11k/Default)
++  VARIANT:=regular
++  DEFAULT_VARIANT:=1
++  CONFLICTS:=kmod-ath11k-smallbuffers
++endef
++
+ define KernelPackage/ath11k/description
+ This module adds support for Qualcomm Technologies 802.11ax family of
+ chipsets.
+ endef
+ 
+ define KernelPackage/ath11k/config
++       config ATH11K_MEM_PROFILE_256M
++               bool "Compact RD03v2 256M ath11k host profile"
++               depends on ATH11K_NSS_SUPPORT
++               depends on PACKAGE_kmod-ath11k || PACKAGE_kmod-ath11k-smallbuffers
++               default n
++
+ 
+        config ATH11K_THERMAL
+                bool "Enable thermal sensors and throttling support"
+-               depends on PACKAGE_kmod-ath11k
++               depends on PACKAGE_kmod-ath11k || PACKAGE_kmod-ath11k-smallbuffers
+                default y if TARGET_qualcommax
+ 
+ endef
+ 
++define KernelPackage/ath11k-smallbuffers
++  $(call KernelPackage/ath11k/Default)
++  TITLE+= (small buffers for low-RAM devices)
++  VARIANT:=smallbuffers
++endef
++
+ define KernelPackage/ath11k-ahb
+   $(call KernelPackage/mac80211/Default)
+   TITLE:=Qualcomm 802.11ax AHB wireless chipset support
+   URL:=https://wireless.wiki.kernel.org/en/users/drivers/ath11k
+-  DEPENDS+= @TARGET_qualcommax +kmod-ath11k +kmod-qrtr-smd
++  VARIANT:=smallbuffers
++  DEPENDS+= @TARGET_qualcommax +kmod-ath11k-smallbuffers +kmod-qrtr-smd
+   FILES:=$(PKG_BUILD_DIR)/drivers/net/wireless/ath/ath11k/ath11k_ahb.ko
+   AUTOLOAD:=$(call AutoProbe,ath11k_ahb)
+ endef
+@@ -354,7 +387,8 @@ define KernelPackage/ath11k-pci
+   $(call KernelPackage/mac80211/Default)
+   TITLE:=Qualcomm 802.11ax PCI wireless chipset support
+   URL:=https://wireless.wiki.kernel.org/en/users/drivers/ath11k
+-  DEPENDS+= @PCI_SUPPORT +kmod-qrtr-mhi +kmod-ath11k
++  VARIANT:=smallbuffers
++  DEPENDS+= @PCI_SUPPORT +kmod-qrtr-mhi +kmod-ath11k-smallbuffers
+   FILES:=$(PKG_BUILD_DIR)/drivers/net/wireless/ath/ath11k/ath11k_pci.ko
+   AUTOLOAD:=$(call AutoProbe,ath11k_pci)
+ endef
+diff --git a/package/system/zram-swap/files/zram.init b/package/system/zram-swap/files/zram.init
+index 1a9cefeff5..2637f84800 100755
+--- a/package/system/zram-swap/files/zram.init
++++ b/package/system/zram-swap/files/zram.init
+@@ -18,8 +18,8 @@ zram_getsize()	# in megabytes
+ 	local ram_size="$( ram_getsize )"
+ 
+ 	if [ -z "$zram_size" ]; then
+-		# e.g. 6mb for 16mb-routers or 61mb for 128mb-routers
+-		echo $(( ram_size / 2048 ))
++		# Conservative logical capacity; backing RAM is allocated on demand.
++		echo 32
+ 	else
+ 		echo "$zram_size"
+ 	fi
+@@ -154,7 +154,16 @@ start()
+ 	zram_reset "$zram_dev" "enforcing defaults"
+ 	zram_comp_algo "$zram_dev"
+ 	echo $(( $zram_size * 1024 * 1024 )) >"/sys/block/$( basename "$zram_dev" )/disksize"
+-	busybox mkswap "$zram_dev"
++	# Bound compressed-pool allocation before swap becomes available.
++	# Metadata and compressor workspace are additional to this pool limit.
++	local mem_limit="$( uci -q get system.@system[0].zram_memory_limit_mb )"
++	mem_limit="${mem_limit:-16}"
++	case "$mem_limit" in
++		*[!0-9]*|'') logger -t zram_start "invalid memory limit"; return 1 ;;
++	esac
++	[ "$mem_limit" -gt 0 ] || return 1
++	echo $(( mem_limit * 1024 * 1024 )) >"/sys/block/$( basename "$zram_dev" )/mem_limit" || return 1
++	busybox mkswap "$zram_dev" || return 1
+ 	busybox swapon -d -p $zram_priority "$zram_dev"
+ }
+ 
+diff --git a/target/linux/qualcommax/config-6.12 b/target/linux/qualcommax/config-6.12
+index 43f4e25744..05f6de36f5 100644
+--- a/target/linux/qualcommax/config-6.12
++++ b/target/linux/qualcommax/config-6.12
+@@ -623,3 +623,13 @@ CONFIG_ZONE_DMA32=y
+ CONFIG_ZSTD_COMMON=y
+ CONFIG_ZSTD_COMPRESS=y
+ CONFIG_ZSTD_DECOMPRESS=y
++CONFIG_SKB_RECYCLER=y
++CONFIG_SKB_RECYCLER_MULTI_CPU=y
++# CONFIG_SKB_RECYCLER_PREALLOC is not set
++CONFIG_SKB_RECYCLE_SIZE=2304
++CONFIG_NF_CONNTRACK_DSCPREMARK_EXT=y
++
++# tag_8021q DSA tagger: the MTK special-tag hides the EtherType from the NSS
++# parser so the WAN<->LAN fast path is exceptioned; the hardware-agnostic
++# 802.1Q tagger keeps offload working across both CPU ports. See docs/nss-offload.md.
++CONFIG_NET_DSA_TAG_VSC73XX_8021Q=y
+diff --git a/target/linux/qualcommax/image/ipq50xx.mk b/target/linux/qualcommax/image/ipq50xx.mk
+index c62bb985c7..917d1afd83 100644
+--- a/target/linux/qualcommax/image/ipq50xx.mk
++++ b/target/linux/qualcommax/image/ipq50xx.mk
+@@ -229,6 +229,20 @@ define Device/xiaomi_ax6000
+ endef
+ TARGET_DEVICES += xiaomi_ax6000
+ 
++define Device/xiaomi_mi-router-ax3000t-v2
++	$(call Device/xiaomi_ipq50xx_ax_base)
++	DEVICE_MODEL := Mi Router AX3000T
++	DEVICE_VARIANT := v2
++	DEVICE_DTS_CONFIG := config@mp03.3
++	KERNEL_IN_UBI := 1
++	DEVICE_PACKAGES := kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-pppoe nss-firmware-ipq50xx kmod-ath11k-smallbuffers \
++		ath11k-firmware-ipq5018-qcn6122 \
++		ipq-wifi-xiaomi_mi-router-ax3000t-v2 \
++		ppp ppp-mod-pppoe
++	DEVICE_PACKAGES += -kmod-usb3 -kmod-usb-dwc3 -kmod-usb-dwc3-qcom -kmod-fs-ext4 -e2fsprogs -losetup
++endef
++TARGET_DEVICES += xiaomi_mi-router-ax3000t-v2
++
+ define Device/xiaomi_redmi-ax5400
+ 	$(call Device/xiaomi_ipq50xx_ax_base)
+ 	DEVICE_MODEL := Redmi AX5400
+diff --git a/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network b/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
+index 7f3c7db25b..8f86da91c7 100644
+--- a/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
++++ b/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
+@@ -37,6 +37,13 @@ ipq50xx_setup_interfaces()
+ 		ucidef_set_network_device_conduit "lan3" "eth1"
+ 		ucidef_set_network_device_conduit "wan" "eth0"
+ 		;;
++	xiaomi,mi-router-ax3000t-v2)
++		# NSS offload gateway: user ports default to eth1 (2.5G CPU port); the
++		# WAN is moved to eth0 (1G CPU port) so WAN<->LAN routing is offloaded
++		# across the two CPU ports by the NSS firmware. See docs/nss-offload.md.
++		ucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"
++		ucidef_set_network_device_conduit "wan" "eth0"
++		;;
+ 	esac
+ }
+ 
+diff --git a/target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata b/target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
+index dbe13c5475..41cb91bdb2 100644
+--- a/target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
++++ b/target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
+@@ -51,6 +51,9 @@ case "$FIRMWARE" in
+ 	xiaomi,redmi-ax5400)
+ 		caldata_extract "0:art" 0x1000 0x20000
+ 		;;
++	xiaomi,mi-router-ax3000t-v2)
++		caldata_extract "0:ART" 0x1000 0x20000
++		;;
+ 	yuncore,ax830|\
+ 	yuncore,ax850)
+ 		caldata_extract "0:ART" 0x1000 0x20000
+@@ -98,6 +101,9 @@ case "$FIRMWARE" in
+ 		ath11k_remove_regdomain
+ 		ath11k_set_macflag
+ 		;;
++	xiaomi,mi-router-ax3000t-v2)
++		caldata_extract "0:ART" 0x26800 0x20000
++		;;
+ 	yuncore,ax830)
+ 		caldata_extract "0:ART" 0x4c000 0x20000
+ 		label_mac=$(mtd_get_mac_binary 0:ART 0)
+diff --git a/target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh b/target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
+index 13ccc3986e..e3f3a35039 100644
+--- a/target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
++++ b/target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
+@@ -166,12 +166,34 @@ linksys_mx_pre_upgrade() {
+ }
+ 
+ platform_check_image() {
++	case "$(board_name)" in
++	xiaomi,mi-router-ax3000t-v2)
++		# This board stores the kernel in a UBI volume (KERNEL_IN_UBI) and
++		# boots via the locked stock Xiaomi U-Boot. A bootable kernel UBI is
++		# only produced when platform_pre_upgrade -> xiaomi_initramfs_prepare
++		# runs, and that only ubiformats the UBI partitions when the running
++		# rootfs is tmpfs, i.e. when sysupgrade is started from the RAM-booted
++		# initramfs image. An in-place sysupgrade from the installed NAND
++		# system skips that wipe and leaves a UBI that Linux can read but the
++		# stock bootloader cannot attach ("UBI init error 22") -> unbootable.
++		# Refuse it with guidance instead of silently bricking the device.
++		if [ "$(rootfs_type)" != "tmpfs" ]; then
++			v "AX3000T RD03v2: flash to NAND only from a RAM-booted initramfs."
++			v "TFTP-boot the ...-initramfs-uImage.itb (see README), then run"
++			v "sysupgrade from that RAM system. Do NOT sysupgrade in place from"
++			v "the installed system, and never wrap sysupgrade in 'timeout' or a"
++			v "droppable ssh session (a torn NAND write bricks the same way)."
++			return 1
++		fi
++		;;
++	esac
+ 	return 0;
+ }
+ 
+ platform_pre_upgrade() {
+ 	case "$(board_name)" in
+-	xiaomi,ax6000)
++	xiaomi,ax6000|\
++	xiaomi,mi-router-ax3000t-v2)
+ 		xiaomi_initramfs_prepare
+ 		;;
+ 	esac
+@@ -214,7 +236,8 @@ platform_do_upgrade() {
+ 		nand_do_upgrade "$1"
+ 		;;
+ 	xiaomi,ax6000|\
+-	xiaomi,redmi-ax5400)
++	xiaomi,redmi-ax5400|\
++	xiaomi,mi-router-ax3000t-v2)
+ 		# Make sure that UART is enabled
+ 		fw_setenv boot_wait on
+ 		fw_setenv uart_en 1
+diff --git a/target/linux/qualcommax/ipq50xx/config-default b/target/linux/qualcommax/ipq50xx/config-default
+index 5864b7a801..33af43e843 100644
+--- a/target/linux/qualcommax/ipq50xx/config-default
++++ b/target/linux/qualcommax/ipq50xx/config-default
+@@ -1,20 +1,28 @@
++CONFIG_AIR_AN8855_PHY=y
+ CONFIG_GRO_CELLS=y
+ CONFIG_IPQ_CMN_PLL=y
+ CONFIG_IPQ_GCC_5018=y
+ CONFIG_LEDS_PWM=y
++CONFIG_LEDS_TRIGGER_PATTERN=y
+ CONFIG_MAXLINEAR_GPHY=y
++CONFIG_MDIO_AN8855=y
++CONFIG_MFD_AIROHA_AN8855=y
+ CONFIG_MTD_SPI_NAND=y
+ CONFIG_NET_DEVLINK=y
+ CONFIG_NET_DSA=y
++CONFIG_NET_DSA_AN8855=y
+ CONFIG_NET_DSA_QCA8K=y
+ CONFIG_NET_DSA_QCA8K_LEDS_SUPPORT=y
++CONFIG_NET_DSA_TAG_MTK=y
+ CONFIG_NET_DSA_TAG_QCA=y
++CONFIG_NVMEM_AN8855_EFUSE=y
+ CONFIG_PHYLINK=y
+ CONFIG_PHY_QCOM_M31_USB=y
+ CONFIG_PHY_QCOM_UNIPHY_PCIE_28LP=y
+ CONFIG_PINCTRL_IPQ5018=y
+ CONFIG_POLYNOMIAL=y
+ CONFIG_PWM=y
++CONFIG_PWM_GPIO=y
+ CONFIG_PWM_IPQ=y
+ CONFIG_QCA83XX_PHY=y
+ CONFIG_QCOM_APM=y
+@@ -22,3 +30,8 @@ CONFIG_QCOM_Q6V5_MPD=y
+ CONFIG_QCOM_Q6V5_WCSS_SEC=y
+ CONFIG_QCOM_TMEL_QMP_MAILBOX=y
+ CONFIG_SPI_QPIC_SNAND=y
++
++# Lean RD03v2: no external USB hardware
++# CONFIG_USB_SUPPORT is not set
++# CONFIG_PHY_QCOM_M31_USB is not set
++CONFIG_NR_CPUS=2

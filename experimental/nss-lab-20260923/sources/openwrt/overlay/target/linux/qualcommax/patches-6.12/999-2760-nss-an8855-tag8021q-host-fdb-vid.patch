@@ -1,0 +1,154 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] nss: an8855: install host FDB/MDB entries in the tag_8021q VID (layered after 999-2757)
+
+Under tag_8021q the data path never classifies frames into VID 0: a
+bridged port's PVID is the tag_8021q bridge VID, a standalone port's
+PVID is its standalone VID, and the FDB runs independent VLAN learning
+(IVL). But .port_fdb_add/.port_fdb_del receive vid 0 for every host
+entry installed by assisted learning on the CPU port (the bridge is
+VLAN-unaware), and the driver's "default vid" fallback keeps it 0
+(AN8855_PORT_VID_DEFAULT is 0).
+
+The result is two disjoint FDB keyspaces: host entries for wifi/CPU-side
+MACs live at (mac, 0) -> CPU while hardware learning on the bridged
+user ports (re-enabled per BR_LEARNING) populates (mac, bridge VID) ->
+LAN port. A client roaming from a peer AP onto local wifi still has its
+stale hardware-learned (mac, bridge VID) entry pointing at the backhaul
+LAN port; the CPU host entry at (mac, 0) never displaces it. Every
+downstream unicast to the client - DHCP OFFER/ACK first of all -
+ingresses that same backhaul port, hits the stale entry, and is
+same-port filtered. DHCP-after-roam fails until the entry ages out
+(~300 s), which the client's retry loop usually re-arms.
+
+Verified live on the failing unit via the an8855_dsa netlink interface:
+a (mac, bridge VID) -> CPU entry delivers LAN-ingress unicast through
+the vbid RX path to the wifi netdevs, the stale -> ingress-port entry
+black-holes it, and an absent entry floods correctly via UNUF.
+
+Fix like sja1105_fdb_add does: translate vid 0 per the dsa_db the entry
+belongs to (DSA_DB_BRIDGE -> dsa_tag_8021q_bridge_vid, DSA_DB_PORT ->
+dsa_tag_8021q_standalone_vid), and set ds->fdb_isolation so DSA keeps
+db.bridge.num intact. The host entry then lands on the same IVL key as
+the stale learned entry and overwrites it, steering downstream unicast
+to the CPU. Apply the same translation to the MDB ops (same vid-0
+fallback; inert with IGMP snooping off, but keeps the keyspace
+consistent), and hide the tag_8021q VIDs from 'bridge fdb' dumps like
+sja1105 does.
+
+Layered after 999-2757 (add an8855 v2p0p1 + netlink) for the same
+reason as 999-2758: that patch rewrites the surrounding hunks on top of
+the files overlay. NSS-only; the base MTK-tag build has a single FDB
+keyspace and is unaffected.
+
+Link: https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/7
+--- a/drivers/net/dsa/an8855.c
++++ b/drivers/net/dsa/an8855.c
+@@ -546,6 +546,31 @@
+ 	mutex_unlock(&priv->reg_mutex);
+ }
+ 
++/* tag_8021q: data-path frames never classify into VID 0 - a bridged port's
++ * PVID is the tag_8021q bridge VID and a standalone port's PVID is its
++ * standalone VID, and the FDB runs independent VLAN learning. Host entries
++ * from assisted learning arrive here with vid 0 (VLAN-unaware bridge), so
++ * they must be translated into the VID the lookup actually uses. Otherwise a
++ * client roaming onto local wifi keeps hitting the stale hardware-learned
++ * (mac, bridge VID) entry that still points at the LAN port it used to live
++ * behind - and every downstream frame to it ingresses that same port and is
++ * same-port filtered (issue #7). Same model as sja1105.
++ */
++static u16 an8855_fdb_vid(u16 vid, struct dsa_db db)
++{
++	if (vid)
++		return vid;
++
++	switch (db.type) {
++	case DSA_DB_PORT:
++		return dsa_tag_8021q_standalone_vid(db.dp);
++	case DSA_DB_BRIDGE:
++		return dsa_tag_8021q_bridge_vid(db.bridge.num);
++	default:
++		return 0;
++	}
++}
++
+ static int an8855_port_fdb_add(struct dsa_switch *ds, int port,
+ 			       const unsigned char *addr, u16 vid,
+ 			       struct dsa_db db)
+@@ -554,9 +579,9 @@
+ 	u8 port_mask = BIT(port);
+ 	int ret;
+ 
+-	/* With VLAN-Unaware entry, set vid to default vid */
++	vid = an8855_fdb_vid(vid, db);
+ 	if (!vid)
+-		vid = AN8855_PORT_VID_DEFAULT;
++		return -EOPNOTSUPP;
+ 
+ 	mutex_lock(&priv->reg_mutex);
+ 	an8855_fdb_write(priv, vid, port_mask, addr, true);
+@@ -574,9 +599,9 @@
+ 	u8 port_mask = BIT(port);
+ 	int ret;
+ 
+-	/* With VLAN-Unaware entry, set vid to default vid */
++	vid = an8855_fdb_vid(vid, db);
+ 	if (!vid)
+-		vid = AN8855_PORT_VID_DEFAULT;
++		return -EOPNOTSUPP;
+ 
+ 	mutex_lock(&priv->reg_mutex);
+ 	an8855_fdb_write(priv, vid, port_mask, addr, false);
+@@ -634,7 +659,12 @@
+ 
+ 			if (!_fdb.live)
+ 				continue;
+-			ret = cb(_fdb.mac, _fdb.vid, _fdb.noarp, data);
++			/* Hide the tag_8021q VIDs from the user, like
++			 * sja1105 does - they are an implementation detail.
++			 */
++			ret = cb(_fdb.mac,
++				 vid_is_dsa_8021q(_fdb.vid) ? 0 : _fdb.vid,
++				 _fdb.noarp, data);
+ 			if (ret < 0)
+ 				break;
+ 		}
+@@ -1007,9 +1037,10 @@
+ 	u32 val;
+ 	int ret;
+ 
+-	/* With VLAN-Unaware entry, set vid to default vid */
++	/* Same tag_8021q VID translation as the FDB entries above */
++	vid = an8855_fdb_vid(vid, db);
+ 	if (!vid)
+-		vid = AN8855_PORT_VID_DEFAULT;
++		return -EOPNOTSUPP;
+ 
+ 	mutex_lock(&priv->reg_mutex);
+ 
+@@ -1044,9 +1075,10 @@
+ 	u32 val;
+ 	int ret;
+ 
+-	/* With VLAN-Unaware entry, set vid to default vid */
++	/* Same tag_8021q VID translation as the FDB entries above */
++	vid = an8855_fdb_vid(vid, db);
+ 	if (!vid)
+-		vid = AN8855_PORT_VID_DEFAULT;
++		return -EOPNOTSUPP;
+ 
+ 	mutex_lock(&priv->reg_mutex);
+ 
+@@ -2236,6 +2268,12 @@
+ 	 */
+ 	ds->assisted_learning_on_cpu_port = true;
+ 
++	/* Keep db.bridge.num intact in fdb_add/del calls - without this DSA
++	 * forces it to 0 and the tag_8021q bridge-VID translation in
++	 * an8855_fdb_vid() would compute the wrong VID. Matches sja1105.
++	 */
++	ds->fdb_isolation = true;
++
+ 	/* tag_8021q bridging: bridges must get unique nonzero numbers so
+ 	 * dsa_tag_8021q_bridge_join() derives a distinct bridge VID. DSA only
+ 	 * hands those out when max_num_bridges is set; otherwise bridge.num

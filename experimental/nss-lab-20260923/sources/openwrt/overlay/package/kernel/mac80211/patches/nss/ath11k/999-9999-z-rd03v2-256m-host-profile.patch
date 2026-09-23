@@ -1,0 +1,193 @@
+Subject: [PATCH] ath11k: implement compact RD03v2 256M host profile
+
+--- a/drivers/net/wireless/ath/ath11k/hw.h
++++ b/drivers/net/wireless/ath/ath11k/hw.h
+@@ -11,6 +11,9 @@
+ #include "wmi.h"
+ 
+ /* Target configuration defines */
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) && defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
++#error "Select only one ath11k host memory profile"
++#endif
+ #ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
+ 
+ #define TARGET_NUM_VDEVS(ab)	8
+@@ -27,6 +30,19 @@
+  * 18byte mesh hdr + 8byte snap + 1500 eth payload
+  */
+ #define ATH11K_DP_RXDMA_NSS_REFILL_RING_SIZE	1816
++#elif defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
++/* RD03v2 compact host resources; firmware mode is selected through DT. */
++#define TARGET_NUM_VDEVS(ab) 4
++#define TARGET_NUM_STATIONS(ab) 64
++#define TARGET_NUM_PEERS_PDEV(ab) (TARGET_NUM_STATIONS(ab) + TARGET_NUM_VDEVS(ab))
++#define ATH11K_QMI_TARGET_MEM_MODE ATH11K_QMI_TARGET_MEM_MODE_256M
++#define ATH11K_DP_TX_COMP_RING_SIZE 2048
++#define ATH11K_DP_RXDMA_MON_STATUS_RING_SIZE 512
++#define ATH11K_DP_RXDMA_MONITOR_BUF_RING_SIZE 128
++#define ATH11K_DP_RXDMA_MONITOR_DST_RING_SIZE 128
++#define ATH11K_DP_RXDMA_REFILL_RING_SIZE 2048
++/* Same compact descriptor/TLV layout as the 512M profile. */
++#define ATH11K_DP_RXDMA_NSS_REFILL_RING_SIZE 1816
+ #else
+ /* Num VDEVS per radio */
+ #define TARGET_NUM_VDEVS(ab)	(ab->hw_params.num_vdevs_peers[ab->qmi.target_mem_mode].num_vdevs)
+@@ -304,7 +320,7 @@
+ 	u8* (*rx_desc_mpdu_start_addr2)(struct hal_rx_desc *desc);
+ 	u32 (*get_ring_selector)(struct sk_buff *skb);
+ 	u32 (*rx_desc_get_hal_mpdu_len)(struct hal_rx_mpdu_info *mpdu_info);
+-#ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ 	void (*rx_desc_get_offset)(struct htt_rx_ring_tlv_filter *tlv_filter);
+ #endif
+ 	u16 (*rx_desc_get_mpdu_frame_ctl)(struct hal_rx_desc *desc);
+--- a/drivers/net/wireless/ath/ath11k/hw.c
++++ b/drivers/net/wireless/ath/ath11k/hw.c
+@@ -260,7 +260,7 @@
+ 
+ static u8 *ath11k_hw_ipq8074_rx_desc_get_hdr_status(struct hal_rx_desc *desc)
+ {
+-#ifndef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if !defined(CPTCFG_ATH11K_MEM_PROFILE_512M) && !defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ 	return desc->u.ipq8074.hdr_status;
+ #else
+ 	return NULL;
+@@ -420,7 +420,7 @@
+ 	return &desc->u.ipq8074.msdu_payload[0];
+ }
+ 
+-#ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ static void ath11k_hw_ipq8074_rx_desc_get_offset(struct htt_rx_ring_tlv_filter *tlv_filter)
+ {
+ 	tlv_filter->rx_mpdu_end_offset = __le16_to_cpu(offsetof
+@@ -557,7 +557,7 @@
+ 
+ static u8 *ath11k_hw_qcn9074_rx_desc_get_hdr_status(struct hal_rx_desc *desc)
+ {
+-#ifndef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if !defined(CPTCFG_ATH11K_MEM_PROFILE_512M) && !defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ 	return desc->u.qcn9074.hdr_status;
+ #else
+ 	return NULL;
+@@ -748,7 +748,7 @@
+ 
+ static u8 *ath11k_hw_wcn6855_rx_desc_get_hdr_status(struct hal_rx_desc *desc)
+ {
+-#ifndef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if !defined(CPTCFG_ATH11K_MEM_PROFILE_512M) && !defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ 	return desc->u.wcn6855.hdr_status;
+ #else
+ 	return NULL;
+@@ -902,7 +902,7 @@
+ {
+ 	return desc->u.wcn6855.mpdu_start.addr2;
+ }
+-#ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ static void ath11k_hw_qcn9074_rx_desc_get_offset(struct htt_rx_ring_tlv_filter *tlv_filter)
+ {
+ 	tlv_filter->rx_mpdu_end_offset = __le16_to_cpu(offsetof
+@@ -1205,7 +1205,7 @@
+ 	.rx_desc_mpdu_start_addr2 = ath11k_hw_ipq8074_rx_desc_mpdu_start_addr2,
+ 	.get_ring_selector = ath11k_hw_ipq8074_get_tcl_ring_selector,
+ 	.rx_desc_get_hal_mpdu_len = ath11k_hw_ipq8074_rx_desc_get_hal_mpdu_len,
+-#ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ 	.rx_desc_get_offset = ath11k_hw_ipq8074_rx_desc_get_offset,
+ #endif
+ 	.rx_desc_get_mpdu_frame_ctl = ath11k_hw_ipq8074_rx_desc_get_mpdu_frame_ctl,
+@@ -1254,7 +1254,7 @@
+ 	.rx_desc_mpdu_start_addr2 = ath11k_hw_ipq8074_rx_desc_mpdu_start_addr2,
+ 	.get_ring_selector = ath11k_hw_ipq8074_get_tcl_ring_selector,
+ 	.rx_desc_get_hal_mpdu_len = ath11k_hw_ipq8074_rx_desc_get_hal_mpdu_len,
+-#ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ 	.rx_desc_get_offset = ath11k_hw_ipq8074_rx_desc_get_offset,
+ #endif
+ 	.rx_desc_get_mpdu_frame_ctl = ath11k_hw_ipq8074_rx_desc_get_mpdu_frame_ctl,
+@@ -1303,7 +1303,7 @@
+ 	.rx_desc_mpdu_start_addr2 = ath11k_hw_ipq8074_rx_desc_mpdu_start_addr2,
+ 	.get_ring_selector = ath11k_hw_ipq8074_get_tcl_ring_selector,
+ 	.rx_desc_get_hal_mpdu_len = ath11k_hw_ipq8074_rx_desc_get_hal_mpdu_len,
+-#ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ 	.rx_desc_get_offset = ath11k_hw_ipq8074_rx_desc_get_offset,
+ #endif
+ 	.rx_desc_get_mpdu_frame_ctl = ath11k_hw_ipq8074_rx_desc_get_mpdu_frame_ctl,
+@@ -1352,7 +1352,7 @@
+ 	.rx_desc_mpdu_start_addr2 = ath11k_hw_qcn9074_rx_desc_mpdu_start_addr2,
+ 	.get_ring_selector = ath11k_hw_ipq8074_get_tcl_ring_selector,
+ 	.rx_desc_get_hal_mpdu_len = ath11k_hw_qcn9074_rx_desc_get_hal_mpdu_len,
+-#ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ 	.rx_desc_get_offset = ath11k_hw_qcn9074_rx_desc_get_offset,
+ #endif
+ 	.rx_desc_get_mpdu_frame_ctl = ath11k_hw_qcn9074_rx_desc_get_mpdu_frame_ctl,
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c
+@@ -316,7 +316,7 @@
+ 	return ab->hw_params.hw_ops->rx_desc_mpdu_start_addr2(desc);
+ }
+ 
+-#ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ static void ath11k_dp_get_rx_header_offset(struct ath11k_base *ab,
+ 					   struct htt_rx_ring_tlv_filter *tlv_filter)
+ {
+@@ -5447,7 +5447,7 @@
+ 	ath11k_dp_rxdma_pdev_buf_free(ar);
+ }
+ 
+-#ifdef CPTCFG_ATH11K_MEM_PROFILE_512M
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
+ static int ath11k_dp_rxdma_ring_sel_config(struct ath11k *ar)
+ {
+ 	struct ath11k_pdev_dp *dp = &ar->dp;
+--- a/drivers/net/wireless/ath/ath11k/core.c
++++ b/drivers/net/wireless/ath/ath11k/core.c
+@@ -1003,8 +1003,13 @@
+ 		.num_peers = 128,
+ 	},
+ 	{
++		#ifdef CPTCFG_ATH11K_MEM_PROFILE_256M
++		.num_vdevs = 4,
++		.num_peers = 64,
++#else
+ 		.num_vdevs = 8,
+ 		.num_peers = 128,
++#endif
+ 	}
+ };
+ 
+@@ -2933,6 +2938,16 @@
+ 			ath11k_info(ab, "Unsupported FW memory mode: %u\n", fw_mem_mode);
+ 	}
+ 
++#ifdef CPTCFG_ATH11K_MEM_PROFILE_256M
++	/* Keep the WMI resource request and advertised interface limits aligned. */
++	if (ab->hw_params.fw_mem_mode != ATH11K_QMI_TARGET_MEM_MODE_256M) {
++		ath11k_err(ab, "256M host profile requires DT firmware memory mode 2\n");
++		return -EINVAL;
++	}
++	ab->hw_params.num_vdevs = TARGET_NUM_VDEVS(ab);
++	ab->hw_params.num_peers = TARGET_NUM_STATIONS(ab);
++#endif
++
+ 	ath11k_info(ab, "%s\n", ab->hw_params.name);
+ 	ath11k_info(ab, "FW memory mode: %d\n", ab->hw_params.fw_mem_mode);
+ 
+@@ -2996,8 +3011,13 @@
+ 		.num_peers = 128,
+ 	},
+ 	{
++		#ifdef CPTCFG_ATH11K_MEM_PROFILE_256M
++		.num_vdevs = 4,
++		.num_peers = 64,
++#else
+ 		.num_vdevs = 8,
+ 		.num_peers = 128,
++#endif
+ 	},
+ };
+ 

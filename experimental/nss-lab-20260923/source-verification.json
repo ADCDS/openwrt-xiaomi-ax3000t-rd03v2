@@ -1,0 +1,47 @@
+{
+  "repositories": {
+    "openwrt": {
+      "commit": "25ee12629edcc38feffbd06255dd47840cd7af7e",
+      "tracked_diff_matches": true,
+      "overlay_files": 186
+    },
+    "luci": {
+      "commit": "7c91cb278d7cf19878069a44d5d1992f65c4e315",
+      "tracked_diff_matches": true,
+      "overlay_files": 0
+    },
+    "nss_packages": {
+      "commit": "0d970dbf0185e3f53709bd803e8a466598023c57",
+      "tracked_diff_matches": true,
+      "overlay_files": 9
+    },
+    "packages": {
+      "commit": "6e46ddbe2ddaee2b4381dbf1a5046ef942b8265b",
+      "tracked_diff_matches": true,
+      "overlay_files": 1
+    },
+    "routing": {
+      "commit": "4b9891b9136259f93294a424507ed24c5e8c1cbd",
+      "tracked_diff_matches": true,
+      "overlay_files": 0
+    },
+    "sqm_scripts_nss": {
+      "commit": "4b4ed8639229be5e70cf94b73cdf7dbc09e66d5d",
+      "tracked_diff_matches": true,
+      "overlay_files": 0
+    },
+    "telephony": {
+      "commit": "5d68d53c160a325ea9d03fce393e051573bcc736",
+      "tracked_diff_matches": true,
+      "overlay_files": 0
+    },
+    "video": {
+      "commit": "938621437fbf4abdea12792361173dd69164ab16",
+      "tracked_diff_matches": true,
+      "overlay_files": 0
+    }
+  },
+  "config_changes": {},
+  "full_rebuild_performed": false,
+  "kconfig_recursive_dependency_diagnostics": 3
+}
