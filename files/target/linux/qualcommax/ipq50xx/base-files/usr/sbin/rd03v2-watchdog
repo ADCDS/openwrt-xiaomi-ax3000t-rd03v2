@@ -76,6 +76,7 @@ ARM_MIN_UPTIME=120     # earliest uptime at which the expected radio set is take
 SETTLE_ATH=20          # seconds to let an ath11k reset take effect
 SETTLE_PD=35           # seconds to let a user PD restart take effect
 SETTLE_RELOAD=30       # seconds to let the radios settle after a driver reload
+REJOIN_TRIES=5         # samples to retry a mesh re-join that failed (~2.5min)
 IW_TIMEOUT=10
 EVID_DIR=/overlay/rd03v2-watchdog
 STATE_DIR=/tmp/rd03v2-watchdog
@@ -953,7 +954,8 @@ respawn_suppressed() {
 # numbers from zero. The mesh peers stay established and drop what the radio
 # sends. A new peering is not enough; the mesh has to be joined again with new
 # group keys. Reloading the mesh's wpa_supplicant interface does that and
-# leaves the radio's APs alone.
+# leaves the radio's APs alone. Right after a restart netifd or the supplicant
+# may not answer yet, so a failed attempt is retried on the next samples.
 
 # In-place recoveries ath11k has logged, as "device count" lines.
 recoveries() {
@@ -978,21 +980,42 @@ recovered_devs() {
 	echo "$rd_now" > "$STATE_DIR/recoveries"
 }
 
-# iface_conf IFACE KEY: a key of the interface's configuration, as netifd has it.
-iface_conf() {
-	bounded 10 ubus call network.wireless status | \
-		jsonfilter -e "@[*].interfaces[@.ifname=\"$1\"].config.$2" 2>/dev/null
-}
-
-# Join the encrypted meshes on radio DEV again.
+# Join the encrypted meshes on radio DEV again. Returns 1 if netifd's status or
+# a supplicant reload failed, for the caller to try again later.
 mesh_rejoin() {
+	mr_st=$(bounded 10 ubus call network.wireless status) || return 1
+	mr_rc=0
 	for mr_ifc in $(dev_ifaces "$1"); do
-		[ "$(iface_conf "$mr_ifc" mode)" = mesh ] || continue
-		case "$(iface_conf "$mr_ifc" encryption)" in ''|none) continue ;; esac
+		mr_sel="@[*].interfaces[@.ifname='$mr_ifc'].config"
+		[ "$(jsonfilter -q -s "$mr_st" -e "$mr_sel.mode")" = mesh ] || continue
+		case "$(jsonfilter -q -s "$mr_st" -e "$mr_sel.encryption")" in ''|none) continue ;; esac
 		if bounded 10 ubus call "wpa_supplicant.$mr_ifc" reload > /dev/null; then
 			log "$1 restarted in place: joined the encrypted mesh on $mr_ifc again"
 		else
-			log "$1 restarted in place: could not reload the mesh on $mr_ifc"
+			mr_rc=1
+		fi
+	done
+	return $mr_rc
+}
+
+# Radios with a mesh re-join still to do, one file each holding the tries left.
+rejoin_pending() {
+	for rp_dev in $(recovered_devs); do
+		echo "$REJOIN_TRIES" > "$STATE_DIR/rejoin_$rp_dev"
+	done
+	for rp_f in "$STATE_DIR"/rejoin_*; do
+		[ -f "$rp_f" ] || continue
+		rp_dev=${rp_f#"$STATE_DIR"/rejoin_}
+		if mesh_rejoin "$rp_dev"; then
+			rm -f "$rp_f"
+			continue
+		fi
+		rp_left=$(( $(cat "$rp_f") - 1 ))
+		if [ "$rp_left" -gt 0 ]; then
+			echo "$rp_left" > "$rp_f"
+		else
+			log "$rp_dev restarted in place: could not join its encrypted mesh again after $REJOIN_TRIES tries"
+			rm -f "$rp_f"
 		fi
 	done
 }
@@ -1073,9 +1096,7 @@ main() {
 			continue
 		fi
 
-		for rd_dev in $(recovered_devs); do
-			mesh_rejoin "$rd_dev"
-		done
+		rejoin_pending
 
 		# A radio that turned up after arming is expected from now on.
 		# shellcheck disable=SC2046 # one device per word
