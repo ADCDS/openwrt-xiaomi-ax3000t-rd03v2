@@ -277,3 +277,14 @@ CLEAN BUILD 2, END TO END (27 Sep, no instrumentation)
     Peer router unchanged before and after.
   Lab restored: bench radio0/radio1 SAE benchmesh24/benchmesh, syd SAE peered, no 10.99 addresses.
   Bench now: ubi_kernel = build-2 initramfs (RAM boot), NAND rootfs still v1.10, rollback kit unchanged.
+
+SAE RE-JOIN AFTER AN IN-PLACE RESTART: WATCHDOG RULE (27 Sep)
+  rd03v2-watchdog counts ath11k "pdev N successfully recovered" per device (baselined at arm time, like
+  the respawn-suppressed check). When a device's count goes up, it reloads that radio's encrypted mesh
+  supplicants (netifd config mode=mesh, encryption != none) via `ubus call wpa_supplicant.<if> reload`,
+  under a deadline. APs and open meshes are left alone.
+  Bench test on the clean build: the watchdog's code sourced on the bench, baseline taken, hw-restart
+    of c000000.wifi with the SAE mesh to syd up. recovered_devs -> [c000000.wifi]; mesh_rejoin logged
+    "c000000.wifi restarted in place: joined the encrypted mesh on phy0-mesh0 again"; the next sample
+    was quiet. syd re-peered, pings 0, 0, 6/10, 10/10. Without it, SAE stayed at 0 until a manual
+    reload.

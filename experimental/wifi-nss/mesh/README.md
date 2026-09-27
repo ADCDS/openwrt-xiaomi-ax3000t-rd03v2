@@ -44,13 +44,14 @@ mt76 (MT7981) peer. Evidence: `stock-investigation/captures/v110-nss-mesh-12.5-b
 - Firmware restart (hw-restart) with an open mesh: the peers come back and
   traffic resumes after path rediscovery (about 10 s).
 
-## Not solved yet
+## Not solved yet / caveats
 
 - SAE mesh after an in-place firmware restart: the peer link stays up but
-  traffic stops. A re-join fixes it (`ubus call wpa_supplicant.<mesh-if>
-  reload`, which leaves the AP alone). Nothing triggers that automatically
-  yet. Patch 960 already reconnects AP stations for the same reason (CCMP
-  packet numbers restart at zero), but it does not cover mesh.
+  traffic stops until the mesh is joined again. `rd03v2-watchdog` now does
+  that: when ath11k logs an in-place recovery of a radio, it reloads that
+  radio's encrypted mesh supplicants. The re-join logic was tested on the
+  bench by sourcing the watchdog (traffic came back 10/10); a full watchdog
+  run still isn't covered, because the bench profile disables it.
 - SAE on the 5 GHz radio with a real peer was not run. The keyed path is the
   same one that works on the 2.4 GHz radio.
 - `bench-safeboot/` is a test-only `PROFILE=` overlay; see its README.
