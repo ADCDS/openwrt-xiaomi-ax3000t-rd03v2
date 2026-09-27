@@ -4,9 +4,9 @@ Subject: [PATCH] wifi: ath11k: nss: cap the Tx queue per radio below the payload
 NSS gives every radio 8192 Tx descriptors, plus a 1024-packet queue for
 packets waiting for one. Each packet held there pins an NSS payload
 buffer until its Tx completion, and the same pool refills every Rx ring.
-The RD03v2 caps that pool at 4096 (nss-bufpool), with ~2300 of them in
-the Rx rings at idle, so one radio's Tx side can hold more buffers than
-the whole pool.
+NSS may hold at most 8704 of them on the RD03v2 (4096 on v1.9 and
+v1.10), with ~2300 in the Rx rings at idle, so one radio's Tx side could
+take more buffers than NSS may have in total.
 
 When a client receives slower than another sends to it, TCP fills the
 AP's queue to that client. On the bench, a VHT80 station sending to an
@@ -44,18 +44,19 @@ restores the old descriptor count and queue.
 ---
 --- a/drivers/net/wireless/ath/ath11k/nss.c
 +++ b/drivers/net/wireless/ath/ath11k/nss.c
-@@ -4267,6 +4267,22 @@
+@@ -4267,6 +4267,23 @@
  	return 0;
  }
  
 +/* How many packets NSS may hold in one radio's Tx path. Each one pins an
 + * NSS payload buffer until its Tx completion, and the same buffers refill
-+ * every Rx ring. The donor's 8192 per radio is twice the RD03v2's whole
-+ * pool (n2h_empty_pool_buf_core0 = 4096, ~2300 of them sitting in the Rx
-+ * rings), so the queue to one slow client could take every free buffer:
-+ * Rx refill then fails, the radio's datapath freezes for seconds, and TCP
-+ * falls into retransmission timeouts (issue #18). With the cap, a full
-+ * queue drops at enqueue instead, which TCP treats as ordinary loss.
++ * every Rx ring. The donor's 8192 per radio is about all NSS may hold on the
++ * RD03v2 (n2h_high_water_core0: 8704, and 4096 on v1.9-v1.10), with ~2300 of
++ * them in the Rx rings, so the queue to one slow client could take every
++ * free buffer: Rx refill then fails, the radio's datapath freezes for
++ * seconds, and TCP falls into retransmission timeouts (issue #18). With the
++ * cap, a full queue drops at enqueue instead, which TCP treats as ordinary
++ * loss.
 + */
 +#define ATH11K_NSS_TX_DESC_MIN		256
 +#define ATH11K_NSS_TX_DESC_DEFAULT	1024
@@ -67,7 +68,7 @@ restores the old descriptor count and queue.
  static int ath11k_nss_fill_tx_desc_info(struct ath11k_base *ab,
  					struct nss_wifili_init_msg *wim)
  {
-@@ -4277,10 +4293,21 @@
+@@ -4277,10 +4294,21 @@
  	u32 tx_desc_limit_1 = 0;
  	u32 tx_desc_limit_2 = 0;
  	u32 dam_page_idx = 0;
@@ -90,7 +91,7 @@ restores the old descriptor count and queue.
  
  	dim = &wim->wtdim;
  	dam = &wim->wtdam;
-@@ -4291,16 +4318,16 @@
+@@ -4291,16 +4319,16 @@
  	//TODO Revisit below calc based on platform/mem cfg
  	switch (dim->num_pool) {
  	case 1:

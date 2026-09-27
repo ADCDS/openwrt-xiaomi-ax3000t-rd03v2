@@ -44,7 +44,8 @@ DONOR_REV = "92a2d104145c8d265851c4b388a41bd8e9c21cd9"
 # The two are decoupled, and v1.9 ships that split: MEDIUM's connection table is
 # selected here, while the smaller host pool is applied at runtime by
 # files/target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-bufpool
-# (START=96, one write of n2h_empty_pool_buf_core0=4096). Nothing in the driver
+# (START=96: n2h_empty_pool_buf_core0=4096, then n2h_high_water_core0 back to
+# 8704, because the pool write lowers it too). Nothing in the driver
 # binds table size to pool size — the profile macro's only consumers are the
 # connection counts and LOW's pool clamp — and it is measured, not assumed:
 # SUnreclaim 44,576 -> ~38,200 kB on matched idle boots, about 6.3 MB.
