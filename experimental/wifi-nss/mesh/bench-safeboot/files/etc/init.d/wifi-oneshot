@@ -1,0 +1,25 @@
+#!/bin/sh /etc/rc.common
+# Bench-only (issue #21 mesh experiment). /etc/modules.conf holds back the
+# Wi-Fi half (mesh manager + ath11k); this loads it for exactly ONE boot, when
+# armed with
+#
+#   fw_setenv rd03v2_wifi_arm 1
+#
+# It disarms before loading anything, so if the new code takes the box down -
+# a panic (panic_on_oops=1, kernel.panic=3) or a dead network (wifi-load's
+# dead-man) - the reboot that follows comes up in safe mode instead of
+# looping. The flag lives in the U-Boot environment, so it also survives
+# reboots of the RAM initramfs.
+#
+# START=11 is right after S10boot's kmodloader and before network (S20):
+# where autoload would have put ath11k.
+
+START=11
+
+boot() {
+	[ "$(fw_printenv -n rd03v2_wifi_arm 2>/dev/null)" = 1 ] || return 0
+	fw_setenv rd03v2_wifi_arm 0
+	sync
+	logger -t wifi-oneshot "armed: disarmed, loading the Wi-Fi half for this boot only"
+	/usr/sbin/wifi-load --deadman 300
+}
