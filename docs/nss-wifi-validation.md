@@ -371,6 +371,63 @@ Status:
   NSS package's kbuild flags. The default-build ath11k sources also compile
   against that configuration.
 
+## Regression check against v1.10 (mesh-enabled build)
+
+On 2026-09-27 the v1.10 NSS Wi-Fi image and this build (commit cb3bf85, with
+mesh offload and the #22-#24 fixes) ran the same scripts back to back on one
+bench. Both were RAM-booted with the watchdog idle. A USB BCM43569 client sat
+on the 5 GHz AP (ch36 HE80) and a PCIe QCA9377 on the 2.4 GHz AP (ch1 HE20),
+both WPA2-PSK. The iperf3 peer was a wired host on a LAN port, so every flow
+crossed the router: 15 s of TCP per direction, two passes per image.
+
+| | v1.10 | This build |
+| --- | ---: | ---: |
+| 5 GHz TCP up / down, Mbit/s | 357-358 / 360 | 360 / 360 |
+| 2.4 GHz TCP up / down, Mbit/s | 32 / 55-56 | 34-37 / 55 |
+| Routed + NAT, 5 GHz to / from Wi-Fi, Mbit/s | 360 / 359 | 359 / 360 |
+| Routed + NAT, 2.4 GHz to / from Wi-Fi, Mbit/s | 56 / 32 | 55 / 42 |
+| 100 pings per band | 100/100 | 100/100 |
+| Firmware restart, 5 GHz: traffic back | 7 s (5 of 5) | 7 s (5 of 5) |
+| Firmware restart, 2.4 GHz: traffic back | 5-7 s, 15-17 s in 4 of 10 | 7 s, 17 s in 3 of 8 |
+| Kernel log hard failures | 0 | 0 |
+
+For the routed rows, the Wi-Fi clients sat on their own subnet behind
+masquerade, and hal (on the LAN) opened the connections. Every run sampled
+mid-transfer had two ECM connections accelerated, and NSS IPv4 counted a rule
+hash hit for every packet. `SUnreclaim` stayed at about 40 MB on both images.
+
+The slow 2.4 GHz restarts follow one sequence on both images:
+
+1. Patch 960 disconnects the station after the restart (reason 34).
+2. The client reassociates within a second.
+3. That reassociation's 4-way handshake times out.
+4. The client waits out a 10 s back-off.
+
+This build did not introduce it.
+
+Changes that are fixes:
+
+- The AP netdev RX counter and station inactive time now follow NSS peer
+  stats (#23). For 100 pings, v1.10 counted 0 RX packets with an inactive time
+  of about 110 s; this build counts 100 with about 140 ms.
+- `frame_mode=1` now falls back to 2 with a warning (#24). On this build
+  both radios' clients completed WPA afterwards.
+
+Side effects:
+
+- Host-originated TX to a client is counted twice in the netdev TX counter.
+- Every NSS init of the second radio, and every in-place recovery, logs
+  `debugfs: Directory 'dbg_infra' with parent 'ath11k' already present!`
+  (mesh code, harmless).
+- 5 GHz pings to the router averaged 0.3-0.7 ms higher in both passes, with
+  the same 1.1 ms minimum. 2.4 GHz was unchanged. Two samples; not
+  investigated.
+
+The images' userland differs (release versus bench profile), so this does not
+compare CPU load or `MemAvailable`. Not covered: WAN (the bench WAN port had no
+link), PPPoE, IPv6, VLAN-aware bridges, long runs. Evidence:
+`stock-investigation/captures/v110-nss-mesh-12.5-bench.txt`.
+
 ## Final installed-image test
 
 Hardware: one RD03v2, 256 MB RAM, IPQ5018 + QCN6122 + AN8855. A wired WSL2 host
