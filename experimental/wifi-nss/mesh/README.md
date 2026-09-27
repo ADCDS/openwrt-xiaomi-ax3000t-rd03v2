@@ -31,6 +31,10 @@ not needed here.
   rebuilds the NSS mesh path table empty. mac80211 kept its paths and sent only
   UPDATEs, which NSS rejected, so the node stopped transmitting to its peers.
   The fix flushes the mesh paths on reconfig so they are added again.
+- `999-993-rd03v2-nss-mesh-create-dbg-infra-once.patch`: the mesh debugfs
+  directory `dbg_infra` holds module-wide files, but the donor created it at
+  every radio's NSS init and after every firmware restart, and each repeat
+  logged "already present". It is now created once.
 
 ## Verified on the bench (2026-09-26/27)
 
@@ -67,7 +71,4 @@ mt76 (MT7981) peer. Evidence: `stock-investigation/captures/v110-nss-mesh-12.5-b
   and the mesh group started again; after a restart of an AP-only radio it did
   nothing. That run had no peer, so traffic recovery through the running
   watchdog rests on the sourced tests.
-- Every NSS init of the second radio, and every in-place recovery, logs
-  `debugfs: Directory 'dbg_infra' with parent 'ath11k' already present!`. The
-  donor mesh code creates one global debugfs directory per radio. Harmless.
 - `bench-safeboot/` is a test-only `PROFILE=` overlay; see its README.

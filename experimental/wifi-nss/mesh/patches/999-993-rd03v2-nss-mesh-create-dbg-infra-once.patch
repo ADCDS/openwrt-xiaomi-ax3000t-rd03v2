@@ -1,0 +1,36 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: nss: create the mesh dbg_infra directory once
+
+ath11k_nss_init() calls ath11k_debugfs_nss_soc_create() for every radio
+and again after every firmware restart, and each call creates
+dbg_infra directly under the module's ath11k debugfs directory. Every
+call after the first logs
+
+  debugfs: Directory 'dbg_infra' with parent 'ath11k' already present!
+
+and creates nothing. Its two files, links and mpp_mode, work on
+module-wide state (the mesh_vaps list and the mpp_mode variable), so the
+directory is only needed once for the module's lifetime. Return early
+when it already exists.
+
+Seen on IPQ5018 + QCN6122: the warning at the second radio's NSS init
+and at every in-place recovery.
+---
+--- a/drivers/net/wireless/ath/ath11k/debug_nss.c
++++ b/drivers/net/wireless/ath/ath11k/debug_nss.c
+@@ -910,6 +910,15 @@
+ {
+ 	struct dentry *debugfs_dbg_infra;
+ 
++	/* Its files are module-wide (mesh_vaps, mpp_mode), but this runs for
++	 * every radio and again after every firmware restart.
++	 */
++	debugfs_dbg_infra = debugfs_lookup("dbg_infra", debugfs_ath11k);
++	if (debugfs_dbg_infra) {
++		dput(debugfs_dbg_infra);
++		return;
++	}
++
+ 	debugfs_dbg_infra = debugfs_create_dir("dbg_infra", debugfs_ath11k);
+ 
+ 	debugfs_create_file("links", 0200,
