@@ -326,3 +326,94 @@ ISSUES #22-#24 FIXED AND VERIFIED LIVE (27 Sep, second night)
     (each run deleted the shared ok-file) fired. The safe-boot kit brought it back in safe mode; the
     reload script now keeps one dead-man at a time, with a per-run token.
   syd was offline all night (unreachable from hal and the gateway), so no RT3070 peer.
+
+FINAL IMAGE (cb3bf85) AND REGRESSION A/B AGAINST v1.10 (27 Sep, second night)
+  Build: clean build.sh run of cb3bf85 (NSS=1 WIFI_NSS_DONOR=... KMODS=0 PROFILE=bench-safeboot),
+    no TEMP patch in the tree or the image (the only "TEMP" string in ath11k.ko is
+    WMI_PDEV_GET_TEMPERATURE). Checked in the prepared sources and objects: 999-997 wrapper uses the
+    registered pointer, -DNSS_FIRMWARE_VERSION_12_5 on the nss.o compile line, 999-995 and 999-991
+    strings in ath11k.ko, 999-937/999-992 hooks in mac80211. Image hashes: mesh-nss/artifacts-final.sha256
+    (.itb 15040368 bytes, md5 0a54170ff4c330ccc5912b79084e75ce). Modules (md5, 12 chars): ath11k
+    19bde5d3ba3b, ath11k_ahb e00af43375c1, mac80211 4f98923ac8fc, qca-nss-drv 4c2950249bdd,
+    qca-nss-wifi-meshmgr 4814dfed3623. nss_packages is 0d970db in this build and in the v1.10 tree.
+  Pivot: read-back verified. Safe mode came up as designed (NSS core, dp, ECM, PPPoE loaded; ath11k,
+    ath11k_ahb, meshmgr held back; watchdog idle). wifi-load --deadman 300: mac80211 -> meshmgr ->
+    ath11k nss_offload=1 frame_mode=2 -> ath11k_ahb, nss init soc 203 and 215. PASS.
+
+  Method: same bench, same clients, same scripts, v1.10 NSS Wi-Fi initramfs first, then this image,
+  both RAM-booted, watchdog idle on both. Clients on hal, each in its own netns: USB BCM43569 on the
+  5 GHz AP (ch36 HE80, -30 dBm), PCIe QCA9377 on the 2.4 GHz AP (ch1 HE20, -21..-24 dBm), both
+  WPA2-PSK. iperf3 server: hal's wired dongle on lan2, so every flow crosses the router. 15 s TCP
+  per direction, bench CPU from /proc/stat over the run, ECM sampled mid-transfer. Two passes each.
+
+                                     v1.10 (pass 1 / pass 2)      cb3bf85 (pass 1 / pass 2)
+  5 GHz  100 pings to the router     100/100 avg 1.71 / 1.62 ms   100/100 avg 2.00 / 2.29 ms (min 1.1 on all)
+         TCP up / down, Mbit/s       357.8/359.6, 357.1/360.3     359.8/359.5, 359.7/359.8
+         bench CPU busy up / down    7.7/7.1, 8.0/8.4 %           5.9/5.9, 6.3/5.7 %
+         station inactive time       290360 / 175180 ms           100 / 100 ms
+  2.4 GHz 100 pings                  100/100 avg 3.01 / 3.30 ms   100/100 avg 3.01 / 3.25 ms
+         TCP up / down, Mbit/s       31.9/54.9, 32.3/56.3         37.4/55.1, 34.3/54.5
+         bench CPU busy up / down    6.7/5.5, 5.8/5.8 %           2.7/2.7, 2.5/3.0 %
+         station inactive time       295480 / 203680 ms           80 / 160 ms
+  ECM mid-transfer                   2 accelerated (pass 2)        2 accelerated, every run
+  NSS ipv4 hash hits, up/down run    5 GHz +490k/+500k,           5 GHz +494k/+514k,
+                                     2.4 GHz +62k/+83k (pass 2)    2.4 GHz +67-73k/+84-86k
+  dmesg hard-fail lines              0 / 0                        0 / 0
+  SUnreclaim before -> after, kB     39960->39912, 40064->40452   39776->39688, 39648->40036
+
+  Routed + NAT: both APs moved to 192.168.51.0/24 in their own zone with masquerade, lan->rt
+  forwarding; hal (lan) runs the iperf3 client, the Wi-Fi clients serve. conntrack mid-run:
+  src=192.168.1.50 dst=192.168.51.6x, reply dst=192.168.51.1 (SNAT). ECM 2 accelerated on both images.
+                                     v1.10                        cb3bf85
+         5 GHz to / from Wi-Fi       359.8 / 358.9 Mbit/s         359.4 / 360.4 Mbit/s
+         2.4 GHz to / from Wi-Fi     56.2 / 32.1 Mbit/s           55.2 / 41.6 Mbit/s
+
+  AP counters across 100 pings (#23):
+         v1.10:   AP netdev rx +0, tx +102; station rx/tx packets +0/+0; inactive 106 s -> 112 s
+         cb3bf85: AP netdev rx +100, tx +200; station +100/+100; inactive 590 ms -> 140 ms (5 GHz),
+                  9260 ms -> 220 ms (2.4 GHz). tx +200 is the known double count of host TX.
+
+  Firmware restart (hw-restart) with the client connected, seconds until the client passes traffic:
+         5 GHz:   v1.10 7,7 + 7,7,7            cb3bf85 7,7 + 7,7,7
+         2.4 GHz: v1.10 5,7 + 7,17,7,7,7,17,17,15      cb3bf85 7,17 + 7,17,7,7,7,17
+  Every slow 2.4 GHz case is the same sequence on both images: patch 960 disconnects the station
+  after the restart ("excessive missing ACKs", reason 34), the QCA9377 reassociates within about a
+  second, that 4-way handshake times out (hostapd deauths after 8 s, reason 15), and the client
+  waits out a 10 s back-off. Fast cases reassociate about 2 s after the kick and complete at once.
+  v1.10 4/10 slow, cb3bf85 3/8: pre-existing, not introduced by this branch. The 5 GHz client
+  (BCM43569) never hit it.
+
+  Reading: no regression in throughput, acceleration, recovery or kernel memory. The bench CPU
+  numbers are lower on cb3bf85, but the two images' userland differs (release image vs bench
+  profile), so no claim. 5 GHz pings to the router averaged 0.3-0.7 ms higher on cb3bf85 in both
+  passes with the same minimum; 2.4 GHz was identical. Not chased: two samples each, and no change
+  in this branch touches the host path of an AP vdev.
+  New log line from the branch: every NSS init of the second radio and every in-place recovery
+  prints "debugfs: Directory 'dbg_infra' with parent 'ath11k' already present!". The donor mesh code
+  creates one global dbg_infra directory per radio (ath11k_debugfs_nss_soc_create); debugfs ignores
+  the failed parent. Cosmetic.
+
+  #24 on cb3bf85: reloaded ath11k with frame_mode=1 -> "frame_mode 1 does not work with nss_offload,
+    using ethernet (2)", parameter reads 2, EAPOL-4WAY-HS-COMPLETED on both radios, 50/50 pings each.
+  #22 on cb3bf85: no instrumentation in the image; checked in the prepared source (above). The live
+    check was the instrumented build of the same source.
+
+  rd03v2-watchdog, full loop on cb3bf85 (enabled for the test, idle again after): armed with both
+    radios. hw-restart of b00a040.wifi with the AP and an SAE mesh on it: "b00a040.wifi restarted in
+    place: joined the encrypted mesh on phy3-mesh0 again", MESH-GROUP-STARTED 2 s later. hw-restart
+    of c000000.wifi (AP only): no action. No later decision, no reboot.
+
+  GATEWAY WINDOW 8 (04:52:07-04:53:55Z), open mesh, 5 GHz, cb3bf85: plink ESTAB, peer->bench 10/10,
+    10/10, 1400 B 10/10; bench side: peer authorized, inactive time 40 ms, mesh netdev counters
+    moving. The window's restart step used a ping flag the peer's busybox rejects, so it measured
+    nothing; window 9 redid it.
+  GATEWAY WINDOW 9 (04:55:20-04:57:05Z), same setup: 10/10 x3, NSS mesh decap rx 31 packets.
+    hw-restart of b00a040.wifi: 0/5 until ~43 s, 5/5 at 49 s, then 10/10; decap rx 31 -> 51; no
+    mpath update failures, no oops. (Build 2, window 6: ~30-40 s.)
+  Peer router in both windows: WAN up, 1.1.1.1 ~7 ms, DNS fine, the same stations on the same APs
+    and channels before and after, nothing left behind.
+
+  Afterwards: bench back on v1.10 from NAND. sysupgrade from the v1.10 NSS Wi-Fi initramfs with the
+  config backup taken before the first pivot (sha256 checked on both ends, NSS core healthy,
+  sysupgrade -T first). Came up on ubifs overlay, benchtest on both radios, nss_offload=1,
+  frame_mode=2, watchdog running, no oops. hal's Wi-Fi adapters back on their own profiles.

@@ -64,7 +64,8 @@ matches, and the module quietly autoloads anyway.
 ## Status
 
 The first image built with this kit shipped the meshmgr-only blacklist and did
-**not** hold anything back (see above). The files here are the fix. The
-`wifi-load` fresh-boot `insmod` path is still unexercised; only its
-already-loaded paths and options parsing were checked on the bench.
-Rebuild before relying on it, e.g. before any NAND flash.
+**not** hold anything back (see above). The files here are the fix. Two later
+builds booted with them on the bench (2026-09-27): ath11k, ath11k_ahb and the
+mesh manager stayed out, NSS, ECM and PPPoE loaded, and `wifi-load --deadman
+300` loaded the Wi-Fi half and brought both radios up. The one-boot path
+(`rd03v2_wifi_arm` + `wifi-oneshot`) has not been exercised.

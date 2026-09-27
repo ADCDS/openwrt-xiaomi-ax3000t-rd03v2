@@ -43,7 +43,17 @@ mt76 (MT7981) peer. Evidence: `stock-investigation/captures/v110-nss-mesh-12.5-b
 - The router's own DHCP and DNS over the mesh work with no ethtool
   workaround.
 - Firmware restart (hw-restart) with an open mesh: the peers come back and
-  traffic resumes after path rediscovery (about 10 s).
+  traffic resumes after path rediscovery (about 10 s on 2.4 GHz, 30-50 s on
+  5 GHz with the mt76 peer).
+- The final branch build (commit cb3bf85, with the #22-#24 fixes), on 5 GHz
+  with the mt76 peer: open mesh peered and passed 10/10 at 64 and 1400 bytes.
+  The peer is authorized in NSS and its inactive time is correct (40 ms). After
+  a firmware restart, traffic came back in about 45 s, with no path update
+  failures.
+- The same build against v1.10 with AP clients on both radios: same
+  throughput, bridged and routed with NAT, every flow accelerated, same restart
+  recovery, same kernel memory. See "Regression check against v1.10" in
+  `docs/nss-wifi-validation.md`.
 
 ## Not solved yet / caveats
 
@@ -52,6 +62,12 @@ mt76 (MT7981) peer. Evidence: `stock-investigation/captures/v110-nss-mesh-12.5-b
   that: when ath11k logs an in-place recovery of a radio, it reloads that
   radio's encrypted mesh supplicants. The re-join logic was tested on both
   radios by sourcing the watchdog on the bench (RT3070 and mt76 peers;
-  traffic back 10/10). A full watchdog run still isn't covered, because the
-  bench profile disables it.
+  traffic back 10/10). The running watchdog was then tested on the final
+  build: after a restart of the radio with the SAE mesh it logged the re-join
+  and the mesh group started again; after a restart of an AP-only radio it did
+  nothing. That run had no peer, so traffic recovery through the running
+  watchdog rests on the sourced tests.
+- Every NSS init of the second radio, and every in-place recovery, logs
+  `debugfs: Directory 'dbg_infra' with parent 'ath11k' already present!`. The
+  donor mesh code creates one global debugfs directory per radio. Harmless.
 - `bench-safeboot/` is a test-only `PROFILE=` overlay; see its README.
