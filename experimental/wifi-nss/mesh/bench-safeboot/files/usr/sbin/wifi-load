@@ -27,21 +27,30 @@ log() {
 	logger -t wifi-load "$*"
 }
 
+usage() {
+	echo "usage: wifi-load [--deadman SECONDS]" >&2
+	exit 2
+}
+
 deadman=0
 while [ $# -gt 0 ]; do
 	case "$1" in
-	--deadman) deadman="$2"; shift ;;
-	*)
-		echo "usage: wifi-load [--deadman SECONDS]" >&2
-		exit 2
-		;;
+	--deadman)
+		# A typo must not turn into an unprotected load.
+		case "${2:-}" in ''|*[!0-9]*) usage ;; esac
+		[ "$2" -gt 0 ] || usage
+		deadman=$2; shift ;;
+	*) usage ;;
 	esac
 	shift
 done
 
-if [ "$deadman" -gt 0 ] 2>/dev/null; then
+if [ "$deadman" -gt 0 ]; then
+	# One dead-man at a time. The ok-file is shared, so an earlier run's
+	# timer would otherwise fire on its own deadline once it is removed.
+	[ -f /tmp/wifi-load.deadman.pid ] && kill "$(cat /tmp/wifi-load.deadman.pid)" 2>/dev/null
 	rm -f /tmp/wifi-load.ok
-	setsid sh -c "sleep $deadman; [ -e /tmp/wifi-load.ok ] || { logger -t wifi-load 'dead-man: no /tmp/wifi-load.ok after ${deadman}s, rebooting into safe mode'; sync; reboot -f; }" \
+	setsid sh -c "echo \$\$ > /tmp/wifi-load.deadman.pid; sleep $deadman; [ -e /tmp/wifi-load.ok ] || { logger -t wifi-load 'dead-man: no /tmp/wifi-load.ok after ${deadman}s, rebooting into safe mode'; sync; reboot -f; }" \
 		</dev/null >/dev/null 2>&1 &
 	log "dead-man armed: ${deadman}s (touch /tmp/wifi-load.ok to keep this boot)"
 fi
