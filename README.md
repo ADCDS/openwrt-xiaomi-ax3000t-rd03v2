@@ -463,6 +463,17 @@ Verified under load: with the NSS fast path genuinely accelerating (`ipv4_create
 memory and whose allocator can `BUG_ON` at boot on a fragmented buddy list — a reboot loop on a board with
 `panic_on_oops=1`. The ~66 MB of carve-outs, by contrast, are not the problem: stock reserves 65 MB.
 
+**…but v1.9 also capped NSS at 4096 buffers (fixed after v1.10).** The pool write also sets the NSS
+*high water mark*, the most buffers NSS may hold, to the pool size, and v1.9 and v1.10 left it there.
+Stock sets its high water separately (16336), and was holding 10,557 buffers when captured. NSS Wi-Fi
+offload, new in the same release, needs more than 4096 under load: both radios' Rx rings, the Ethernet
+Rx ring and the Wi-Fi Tx queues all draw on them. A slow Wi-Fi client could drain them and freeze a
+radio for seconds (issue #18). `nss-bufpool` now raises the high water mark back to 8704 after the pool
+write. The idle saving stays, because it comes from the pool and the low water mark (4096/2048).
+On the bench, idle `MemAvailable` was 28.4 MB, against 29.0 MB with the hard cap, on a fresh boot. Once
+the wired port has carried traffic, NSS keeps ~1,400 more buffers, about 4.5 MB, which the hard cap had
+been denying it. Reverting the pool to 8704 instead would have cost ~7 MB more for the same result.
+
 ---
 
 ## Known limitations

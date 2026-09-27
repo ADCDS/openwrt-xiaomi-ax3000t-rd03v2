@@ -58,6 +58,9 @@ check_tree() {
 	# v1.9 memory tuning — must be in BOTH flavours
 	chk "$label nss-bufpool START" "$(grep -hE '^START=' "$d/x/etc/init.d/nss-bufpool" 2>/dev/null)" "START=96"
 	[ -L "$d/x/etc/rc.d/S96nss-bufpool" ] && ok "$label S96 symlink" || bad "$label S96 symlink MISSING"
+	# The pool write also lowers the high water mark; without raising it back,
+	# 4096 is a hard cap that NSS Wi-Fi offload runs dry (issue #18).
+	chk "$label nss-bufpool high water" "$(grep -hE '^WANT_HIGH=' "$d/x/etc/init.d/nss-bufpool" 2>/dev/null)" "WANT_HIGH=8704"
 	# NOTE: count actual WRITES, not text mentions. rc.local documents the NSS
 	# knobs in comments, and an earlier version of this script counted those and
 	# reported a correct image as broken.

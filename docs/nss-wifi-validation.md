@@ -102,20 +102,27 @@ Cause: every packet NSS holds for transmit pins a payload buffer until its Tx
 completion, and the same pool refills every Rx ring.
 - NSS gave each radio 8192 Tx descriptors, plus a 1024-packet queue for packets
   waiting for one.
-- The pool is capped at 4096 by `nss-bufpool` (v1.9), and ~2300 of those sit in
-  the Rx rings at idle.
+- NSS may hold at most `n2h_high_water_core0` buffers. v1.9 and v1.10 left
+  that at 4096 without meaning to: `nss-bufpool`'s pool write lowers it too.
+  ~2300 of those sit in the Wi-Fi Rx rings at idle. After the wired port has
+  carried traffic, ~1000 more sit in the Ethernet Rx ring.
 
 When a client receives slower than another sends to it, TCP fills the AP's queue
 to that client. The pool then runs dry, Rx refill fails, and the radio's datapath
-freezes for ~3.5 s, the same length as the hold behind #25. `999-994` caps the
-descriptors at 1024 per radio and the waiting queue at a quarter of that. A full
-queue then drops at enqueue instead, which TCP treats as ordinary loss.
-`ath11k.nss_tx_desc` (256-8192) sets another size; 8192 restores the old one.
+freezes for ~3.5 s, the same length as the hold behind #25.
+
+The fix has two parts:
+- `999-994` caps the descriptors at 1024 per radio, and the waiting queue at a
+  quarter of that. A full queue then drops at enqueue instead, which TCP treats
+  as ordinary loss. `ath11k.nss_tx_desc` (256-8192) sets another size; 8192
+  restores the old one.
+- `nss-bufpool` raises the high water mark back to 8704 after its pool write,
+  as stock sets its own separately (see "Buffer limit" below).
 
 Bench: two stations in their own netns on hal. The sender is a VHT80 2x2 USB
 card. The receiver is a QCA9377 joined HT20-only, so the AP's link to it is
 72 Mbit/s. iperf3, 2 streams, 30 s, on one RAM image, switching only
-`nss_tx_desc`:
+`nss_tx_desc` (buffer limit 4096, as on v1.10):
 
 | `nss_tx_desc` | 0 bit/s | Retransmits | Free payloads (min) | Alloc failures | 5 GHz Rx ring (min) | Received |
 |---|---|---|---|---|---|---|
@@ -135,18 +142,33 @@ Other results at the default:
 - **Memory:** idle `MemAvailable` +3.6 MB. The descriptor pools shrink from
   ~2.2 MB to ~0.4 MB per radio.
 
-Limits:
-- **The pool is still tight once the wired side has seen traffic.** After the
-  first fast wired flow, ~1000 more buffers stayed in use at idle (most likely
-  the Ethernet Rx ring filling up), and only ~750 were free. The same
-  slow-client flood still drove the pool to 0 then. Both radios queuing at once
-  did too. There was no stall in either case: the Rx rings stayed at ≥ 730 and
-  1023, and no second fell to 0 bit/s. A 6144 pool removed that too (free
-  payloads ≥ 1841), at +5.4 MB `SUnreclaim`. That trade-off belongs to
-  `nss-bufpool` and is not taken here.
-- **Not measured with Wi-Fi 6/7 clients or 160 MHz.** Their larger aggregates
-  need more packets in flight. If peak throughput to such a client drops, raise
-  `nss_tx_desc`.
+Buffer limit: the cap alone leaves 4096 too tight. After the wired port had
+carried traffic, only ~750 buffers were free at idle. The slow-client flood still
+drained them then, and so did both radios queuing at once. There was no stall
+(Rx rings ≥ 730, no second at 0 bit/s), but Rx refill failed.
+
+NSS keeps "low water" buffers free at idle, and only takes more than that when
+it needs them. So raising just the high mark costs little until the buffers are
+actually used. Same RAM image, same sequence, three settings. `MemAvailable` is
+at idle; the stress cases are the slow-client flood with 2 and 8 streams,
+cross-band, and both radios at once:
+
+| NSS buffers (pool / low / high) | Idle, fresh boot | Idle, after wired traffic | Stress cases |
+|---|---|---|---|
+| 4096 / 2048 / 4096 (v1.10) | 29.0 MB | 28.7 MB, ~800 free | buffers run out, no stalls (earlier runs) |
+| 4096 / 2048 / 8704 (now) | 28.4 MB | 24.2 MB, ~2100 free | 0 failures, ≥ 2010 free |
+| 8704 / 4352 / 8704 (driver default) | 21.3 MB | 17.5 MB, ~4400 free | 0 failures, ≥ 4063 free |
+
+The Ethernet Rx ring fills under all three settings. The ~4.5 MB after wired
+traffic is NSS refilling its free reserve to 2048; under the hard cap that
+reserve had shrunk to ~800. Throughput to fast clients was the same in all three
+(173-360 Mbit/s). This sequence's stress counters for the v1.10 setting were
+lost, so that row's stress result comes from the earlier runs on the same
+image.
+
+Limit: **not measured with Wi-Fi 6/7 clients or 160 MHz.** Their larger
+aggregates need more packets in flight. If peak throughput to such a client
+drops, raise `nss_tx_desc`.
 
 ### QCN6122 register addressing
 
