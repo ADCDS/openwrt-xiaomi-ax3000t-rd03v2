@@ -24,8 +24,16 @@ connections at 512 per IP family — note stock RD03v2 runs exactly that 512, so
 the cap alone is not the argument for MEDIUM; see the rationale in
 `tools/integrate-wifi-nss.py`), and assigns radio
 priorities 0/1 to the board's `wifi`/`wifi1` labels. It tracks memory-profile
-configuration changes in the NSS driver's package stamp. Mesh and generic
-mac80211 redirect remain disabled. The existing firmware memory mode is retained.
+configuration changes in the NSS driver's package stamp. It also builds 802.11s
+mesh offload (`ATH11K_NSS_MESH_SUPPORT` and the NSS Wi-Fi mesh manager) and
+applies the fixes in `experimental/wifi-nss/mesh/patches` after every other
+patch; see [its README](../experimental/wifi-nss/mesh/README.md). NSS Wi-Fi
+images also carry `experimental/wifi-nss/files`: a uci-defaults script that
+gives the WPA 4-way handshake 8 tries (see "Regression check against v1.10").
+Generic mac80211 redirect remains disabled. ath11k is compiled with `-DNSS_FIRMWARE_VERSION_12_5`,
+like qca-nss-drv and ECM, so it reads NSS messages with the same struct layout
+(without it, per-peer stats were misparsed, see below). The existing firmware
+memory mode is retained.
 
 Four donor patch overrides preserve the device's small-buffer definitions and
 rebase surrounding contexts; original patch authorship is retained. Two RD03v2
@@ -33,7 +41,11 @@ patches follow the series: `999-998` moves the NSS teardown in firmware-crash
 recovery after the interrupt quiesce added by `953` (the donor hunk lands before
 it) and clears freed tx-descriptor addresses so a failed re-setup cannot free
 them twice; `999-999` is the QCN6122 register fix below. `999-996` keeps
-`sta_state` from returning with `conf_mutex` held, and the other
+`sta_state` from returning with `conf_mutex` held. `999-995` makes NSS offload
+use Ethernet frame mode: with `frame_mode=1` no client got past the WPA 4-way
+handshake. `999-997` hands the wifili exception callback the real
+`ath11k_base` (the donor wrapper passed a pointer into the middle of it). The
+other
 `999-999-rd03v2-*` patches are described under "Crash recovery with offload on"
 and "ECM VLAN tags for Wi-Fi over a VLAN-aware bridge". The donor
 series itself is fetched from the pinned source, not re-attributed here.
@@ -54,6 +66,30 @@ the [RAM-initramfs pivot](no-uart-reflash.md); this feature does not change the
 board's flash procedure. Do not mix kernel modules from different builds.
 
 ## Fixes and evidence
+
+### NSS peer stats layout, wifili exception pointer, frame mode (issues #22-#24)
+
+- **Peer stats layout (#23).** qca-nss-drv and ECM are built with
+  `-DNSS_FIRMWARE_VERSION_12_5`, and ath11k was not. `struct
+  nss_wifili_rx_ctrl_stats` and the retry stats carry fields that exist only
+  under that define, so every per-peer entry the firmware sends is 16 bytes
+  longer than ath11k's view. Every entry after the first was misread: its
+  `peer_id` did not match, and its stats were dropped. Those stats are on by
+  default with `nss_offload=1`, and they are the only source of a client's RX
+  counters and of mac80211's `last_rx`.
+  - Bench, before: after 50 pings, the station's inactive time read 64 s and
+    the AP netdev counted 0 RX packets.
+  - After: inactive time 140 ms, and exactly one RX packet per ping.
+- **Wifili exception pointer (#22).** The donor wrapper recovered `ab` with
+  `netdev_priv()` from a pointer that is `ab` itself. On the bench, the
+  callback now resolves `ab` to the right device (`b00a040.wifi`), from live
+  invalid-peer traffic. Only the TKIP MIC-error branch dereferenced the bad
+  pointer.
+- **Frame mode (#24).** With `frame_mode=1`, both radios' clients associated
+  but never finished WPA (reason 15). NSS counted nothing received from them,
+  not even as unauthorized drops. With NSS offload, ath11k now warns and uses
+  `frame_mode=2`: the same client then completed the handshake and answered
+  50/50 pings.
 
 ### QCN6122 register addressing
 
@@ -337,6 +373,91 @@ Status:
   NSS package's kbuild flags. The default-build ath11k sources also compile
   against that configuration.
 
+## Regression check against v1.10 (mesh-enabled build)
+
+On 2026-09-27 the v1.10 NSS Wi-Fi image and this build (commit cb3bf85, with
+mesh offload and the #22-#24 fixes) ran the same scripts back to back on one
+bench. Both were RAM-booted with the watchdog idle. A USB BCM43569 client sat
+on the 5 GHz AP (ch36 HE80) and a PCIe QCA9377 on the 2.4 GHz AP (ch1 HE20),
+both WPA2-PSK. The iperf3 peer was a wired host on a LAN port, so every flow
+crossed the router: 15 s of TCP per direction, two passes per image.
+
+| | v1.10 | This build |
+| --- | ---: | ---: |
+| 5 GHz TCP up / down, Mbit/s | 357-358 / 360 | 360 / 360 |
+| 2.4 GHz TCP up / down, Mbit/s | 32 / 55-56 | 34-37 / 55 |
+| Routed + NAT, 5 GHz to / from Wi-Fi, Mbit/s | 360 / 359 | 359 / 360 |
+| Routed + NAT, 2.4 GHz to / from Wi-Fi, Mbit/s | 56 / 32 | 55 / 42 |
+| 100 pings per band | 100/100 | 100/100 |
+| Firmware restart, 5 GHz: traffic back | 7 s (5 of 5) | 7 s (5 of 5) |
+| Firmware restart, 2.4 GHz: traffic back | 5-7 s, 15-17 s in 4 of 10 | 7 s, 17 s in 3 of 8 |
+| Kernel log hard failures | 0 | 0 |
+
+For the routed rows, the Wi-Fi clients sat on their own subnet behind
+masquerade, and hal (on the LAN) opened the connections. Every run sampled
+mid-transfer had two ECM connections accelerated, and NSS IPv4 counted a rule
+hash hit for every packet. `SUnreclaim` stayed at about 40 MB on both images.
+
+The slow 2.4 GHz restarts follow one sequence on both images, so this build
+did not introduce them:
+
+1. The client is disconnected right after the restart: by patch 960 (reason
+   34), or by a reason-7 deauth it gets as the radio comes back.
+2. It associates again within about a second.
+3. That association's 4-way handshake times out.
+4. The client waits out a 10 s back-off.
+
+The cause is in NSS. After an in-place firmware restart of the IPQ5018 radio,
+NSS does not service that radio's REO rings for about 3.6-4.5 s. The client
+transmits normally, and the AP hardware acknowledges every frame (no client
+retries), but NSS delivers nothing until the hold ends. Then it delivers
+everything at once: pings sent during the hold come back together, with RTTs
+from 3.7 s down to 0.2 s.
+
+- A handshake that starts inside the hold outlasts hostapd's default four
+  tries (about 3 s). The held msg 2 frames then arrive after the peer is gone
+  and are dropped.
+- A client that associates about 2 s after the restart gets through when the
+  hold ends; one that associates 5 s after sees no hold at all.
+- Without a restart, the same disconnect and fast rejoin succeed every time.
+
+The REO registers the host programs read the same before and after the
+restart, and nothing the host sees marks the end of the hold, so ath11k cannot
+fix it. hostapd's `wpa_pairwise_update_count=8`
+(`list hostapd_bss_options 'wpa_pairwise_update_count=8'` on the wifi-iface)
+keeps msg 1 going for about 7 s. With it, 4 of 4 restarts were back in 7 s,
+including the early-rejoin case that took 17 s every time before.
+
+NSS Wi-Fi images set it by default. A uci-defaults script
+(`experimental/wifi-nss/files/.../uci-defaults/99-rd03v2-nss-wifi-4way-retries`)
+adds it once to every AP interface that doesn't set it already. It then
+records that it ran in `/etc/config/rd03v2`, so removing the option later
+stays removed across upgrades. AP interfaces created later don't get it.
+
+Changes that are fixes:
+
+- The AP netdev RX counter and station inactive time now follow NSS peer
+  stats (#23). For 100 pings, v1.10 counted 0 RX packets with an inactive time
+  of about 110 s; this build counts 100 with about 140 ms.
+- `frame_mode=1` now falls back to 2 with a warning (#24). On this build
+  both radios' clients completed WPA afterwards.
+
+Side effects:
+
+- Host-originated TX to a client is counted twice in the netdev TX counter.
+- The mesh code logged `debugfs: Directory 'dbg_infra' with parent 'ath11k'
+  already present!` at every NSS init of the second radio and after every
+  in-place recovery. Mesh patch 999-993 creates the directory once; on the
+  bench it no longer appeared, through five restarts.
+- 5 GHz pings to the router averaged 0.3-0.7 ms higher in both passes, with
+  the same 1.1 ms minimum. 2.4 GHz was unchanged. Two samples; not
+  investigated.
+
+The images' userland differs (release versus bench profile), so this does not
+compare CPU load or `MemAvailable`. Not covered: WAN (the bench WAN port had no
+link), PPPoE, IPv6, VLAN-aware bridges, long runs. Evidence:
+`stock-investigation/captures/v110-nss-mesh-12.5-bench.txt`.
+
 ## Final installed-image test
 
 Hardware: one RD03v2, 256 MB RAM, IPQ5018 + QCN6122 + AN8855. A wired WSL2 host
@@ -386,6 +507,6 @@ functional check, not a throughput benchmark - the three clients span
 8.5 to 201 Mbit/s on the same path (85.2 up / 86.9 down, 8.5 / 9.4, and
 70.6 / 201 Mbit/s), a 24x range that measures the clients, not a NAT ceiling), runtime IPv6 acceleration,
 long-duration or many-client
-load, guest isolation, mesh and recovery under NSS Wi-Fi load (VLAN-aware
+load, guest isolation, recovery under NSS Wi-Fi load (VLAN-aware
 bridges: see patch 0029 above). The original stock/NSS-without-Wi-Fi whole-router hang is not proven to
 have the same cause as the QCN6122 NSS peer-join crash diagnosed here.

@@ -1,0 +1,33 @@
+#!/bin/sh
+# NSS Wi-Fi images: let hostapd send the first 4-way handshake message 8 times
+# instead of 4 (issue #25).
+#
+# After an in-place firmware restart of the IPQ5018 radio, NSS holds that
+# radio's received frames for about 4 s. A client that joins again straight
+# away starts its handshake inside the hold. With hostapd's default 4 tries
+# (about 3 s) the handshake fails and the client backs off for 10 s; 8 tries
+# (about 7 s) outlast the hold. See docs/nss-wifi-validation.md.
+#
+# Adds `list hostapd_bss_options 'wpa_pairwise_update_count=8'` to every AP
+# interface that does not set wpa_pairwise_update_count itself (hostapd ignores
+# it on open networks), then records in /etc/config/rd03v2 that it ran, so an
+# option removed later stays removed across upgrades. Interfaces created later
+# do not get it. With no Wi-Fi configuration yet, it runs again next boot.
+
+[ "$(uci -q get rd03v2.defaults.four_way_retries)" = 1 ] && exit 0
+
+ifaces=$(uci -q -X show wireless | sed -n 's/^wireless\.\([^.=]*\)=wifi-iface$/\1/p')
+[ -n "$ifaces" ] || exit 1
+
+for s in $ifaces; do
+	[ "$(uci -q get "wireless.$s.mode")" = ap ] || continue
+	uci -q get "wireless.$s.hostapd_bss_options" | grep -q 'wpa_pairwise_update_count=' && continue
+	uci add_list "wireless.$s.hostapd_bss_options=wpa_pairwise_update_count=8"
+done
+
+touch /etc/config/rd03v2
+uci set rd03v2.defaults=defaults
+uci set rd03v2.defaults.four_way_retries=1
+uci commit wireless
+uci commit rd03v2
+exit 0

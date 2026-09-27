@@ -74,6 +74,14 @@ if [ "$WITH_NSS" = "1" ]; then
 	}
 	# extra feeds: qosmio nss-packages (qca-nss-drv/ecm/...) + sqm-scripts-nss
 	cat ../nss/feeds.conf.append >> feeds.conf.default
+	# NSS Wi-Fi builds (which include 802.11s mesh offload) pin the moving
+	# NSS-12.5-K6.x branch, so the mesh manager and the patches built against
+	# it stay reproducible. 0d970db is the commit the v1.10 bench and AP builds
+	# used (and still the branch head on 2026-09-26).
+	if [ -n "${WIFI_NSS_DONOR:-}" ]; then
+		sed -i 's#^\(src-git nss_packages [^;^]*\);NSS-12.5-K6.x$#\1^0d970dbf0185e3f53709bd803e8a466598023c57#' feeds.conf.default
+		anchor 1 'nss-packages\.git\^0d970dbf0185e3f53709bd803e8a466598023c57$' feeds.conf.default
+	fi
 	# overlay NSS files: kernel patches, reserved-mem + NSS-node dtsi,
 	# skb_recycler, conntrack DSCP-remark, the tag_8021q an8855 driver, the
 	# gateway board.d (WAN->eth0 conduit) + rc.local redirect, and ecm autoload
@@ -403,8 +411,14 @@ EOF
 		CLIENTS=feeds/nss_packages/qca-nss-clients/Makefile
 		[ -f "$CLIENTS" ] || { echo "ERROR: $CLIENTS not found" >&2; exit 1; }
 		# Derived from the feed, not hardcoded: the list moves with the feed.
+		# NSS Wi-Fi also needs the Wi-Fi mesh manager, which ath11k's mesh
+		# offload calls directly; dropping it would make kconfig re-select it
+		# and trip the check further down.
+		NSS_CLIENT_KEEP='qca-nss-drv-pppoe'
+		[ -n "${WIFI_NSS_DONOR:-}" ] && NSS_CLIENT_KEEP="$NSS_CLIENT_KEEP
+qca-nss-drv-wifi-meshmgr"
 		NSS_CLIENT_DROP=$(grep -o '^define KernelPackage/[a-zA-Z0-9_-]*' "$CLIENTS" \
-			| sed 's#.*/##' | sort -u | grep -vx 'qca-nss-drv-pppoe')
+			| sed 's#.*/##' | sort -u | grep -vxF "$NSS_CLIENT_KEEP")
 		n=$(echo "$NSS_CLIENT_DROP" | wc -l)
 		[ "$n" -ge 10 ] || { echo "ERROR: found only $n qca-nss-clients subpackages (want >=10)" >&2; exit 1; }
 		for p in $NSS_CLIENT_DROP; do
@@ -480,10 +494,12 @@ fi
 # without kmod-qca-nss-ecm boots fine, accelerates nothing, and says nothing.
 # See the DEPENDS rewrite above for how that happened. Check every one.
 if [ "$WITH_NSS" = "1" ]; then
-	for p in kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-pppoe nss-firmware-ipq50xx; do
+	NSS_IMAGE_PKGS="kmod-qca-nss-drv kmod-qca-nss-ecm kmod-qca-nss-drv-pppoe nss-firmware-ipq50xx"
+	[ -n "${WIFI_NSS_DONOR:-}" ] && NSS_IMAGE_PKGS="$NSS_IMAGE_PKGS kmod-qca-nss-drv-wifi-meshmgr"
+	for p in $NSS_IMAGE_PKGS; do
 		grep -q "^CONFIG_PACKAGE_$p=y\$" .config || {
 			echo "ERROR: $p is '$(grep -m1 "^CONFIG_PACKAGE_$p=" .config || echo unset)', not y." >&2
-			echo "       It is in DEVICE_PACKAGES, so this image would ship without it." >&2
+			echo "       The image needs it built in, so this image would ship without it." >&2
 			exit 1
 		}
 	done
