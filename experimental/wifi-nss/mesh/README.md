@@ -1,10 +1,11 @@
-# NSS 802.11s mesh offload (issue #21, bench only)
+# NSS 802.11s mesh offload (issue #21)
 
-`WIFI_NSS_MESH=1` on an NSS build (`NSS=1 WIFI_NSS_DONOR=...`) turns on the
-donor's `ATH11K_NSS_MESH_SUPPORT`, builds the NSS mesh manager
-(`kmod-qca-nss-drv-wifi-meshmgr`) into the image, and applies `patches/` below
-after every other mac80211/ath11k patch. Without the flag nothing here is
-used: the integration output is byte-identical to a normal NSS build.
+Every NSS Wi-Fi build (`NSS=1 WIFI_NSS_DONOR=...`) includes 802.11s mesh
+offload. It turns on the donor's `ATH11K_NSS_MESH_SUPPORT`, builds the NSS mesh
+manager (`kmod-qca-nss-drv-wifi-meshmgr`) into the image, and applies
+`patches/` below after every other mac80211/ath11k patch. There is no separate
+switch. A build without NSS keeps mainline ath11k, where mesh uses the host
+data path.
 
 It stays on the 12.5 NSS firmware (`NSS.FW.12.5-210-MP.R`). On IPQ5018 that
 firmware accepts ath11k's mesh capability message and the mesh manager's
