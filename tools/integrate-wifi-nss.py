@@ -144,6 +144,7 @@ def integrate(tree, donor):
     mk = replace_once(mk, "  if PACKAGE_kmod-mac80211\n", options + "  if PACKAGE_kmod-mac80211\n")
     mk = replace_once(mk, "MAKE_OPTS:= \\\n", """ifdef CONFIG_ATH11K_NSS_SUPPORT
 \tIREMAP_CFLAGS+=-I$(STAGING_DIR)/usr/include/qca-nss-drv -I$(STAGING_DIR)/usr/include/qca-nss-clients
+\tIREMAP_CFLAGS+=$(if $(CONFIG_NSS_FIRMWARE_VERSION_12_5),-DNSS_FIRMWARE_VERSION_12_5)
 endif
 config-$(CONFIG_PACKAGE_MAC80211_NSS_SUPPORT) += MAC80211_NSS_SUPPORT
 
