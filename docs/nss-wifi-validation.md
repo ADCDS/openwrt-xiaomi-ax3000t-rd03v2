@@ -396,14 +396,36 @@ masquerade, and hal (on the LAN) opened the connections. Every run sampled
 mid-transfer had two ECM connections accelerated, and NSS IPv4 counted a rule
 hash hit for every packet. `SUnreclaim` stayed at about 40 MB on both images.
 
-The slow 2.4 GHz restarts follow one sequence on both images:
+The slow 2.4 GHz restarts follow one sequence on both images, so this build
+did not introduce them:
 
-1. Patch 960 disconnects the station after the restart (reason 34).
-2. The client reassociates within a second.
-3. That reassociation's 4-way handshake times out.
+1. The client is disconnected right after the restart: by patch 960 (reason
+   34), or by a reason-7 deauth it gets as the radio comes back.
+2. It associates again within about a second.
+3. That association's 4-way handshake times out.
 4. The client waits out a 10 s back-off.
 
-This build did not introduce it.
+The cause is in NSS. After an in-place firmware restart of the IPQ5018 radio,
+NSS does not service that radio's REO rings for about 3.6-4.5 s. The client
+transmits normally, and the AP hardware acknowledges every frame (no client
+retries), but NSS delivers nothing until the hold ends. Then it delivers
+everything at once: pings sent during the hold come back together, with RTTs
+from 3.7 s down to 0.2 s.
+
+- A handshake that starts inside the hold outlasts hostapd's default four
+  tries (about 3 s). The held msg 2 frames then arrive after the peer is gone
+  and are dropped.
+- A client that associates about 2 s after the restart gets through when the
+  hold ends; one that associates 5 s after sees no hold at all.
+- Without a restart, the same disconnect and fast rejoin succeed every time.
+
+The REO registers the host programs read the same before and after the
+restart, and nothing the host sees marks the end of the hold, so ath11k cannot
+fix it. hostapd's `wpa_pairwise_update_count=8`
+(`list hostapd_bss_options 'wpa_pairwise_update_count=8'` on the wifi-iface)
+keeps msg 1 going for about 7 s. With it, 4 of 4 restarts were back in 7 s,
+including the early-rejoin case that took 17 s every time before. It is not
+yet set by default.
 
 Changes that are fixes:
 
@@ -416,9 +438,10 @@ Changes that are fixes:
 Side effects:
 
 - Host-originated TX to a client is counted twice in the netdev TX counter.
-- Every NSS init of the second radio, and every in-place recovery, logs
-  `debugfs: Directory 'dbg_infra' with parent 'ath11k' already present!`
-  (mesh code, harmless).
+- The mesh code logged `debugfs: Directory 'dbg_infra' with parent 'ath11k'
+  already present!` at every NSS init of the second radio and after every
+  in-place recovery. Mesh patch 999-993 creates the directory once; on the
+  bench it no longer appeared, through five restarts.
 - 5 GHz pings to the router averaged 0.3-0.7 ms higher in both passes, with
   the same 1.1 ms minimum. 2.4 GHz was unchanged. Two samples; not
   investigated.

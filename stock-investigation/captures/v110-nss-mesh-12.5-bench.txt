@@ -417,3 +417,40 @@ FINAL IMAGE (cb3bf85) AND REGRESSION A/B AGAINST v1.10 (27 Sep, second night)
   config backup taken before the first pivot (sha256 checked on both ends, NSS core healthy,
   sysupgrade -T first). Came up on ubifs overlay, benchtest on both radios, nss_offload=1,
   frame_mode=2, watchdog running, no oops. hal's Wi-Fi adapters back on their own profiles.
+
+ISSUES #25 AND #26 INVESTIGATED (27 Sep, day)
+  #26 fixed: experimental/wifi-nss/mesh/patches/999-993 creates dbg_infra once. Its two files work on
+    module-wide state (mesh_vaps, mpp_mode), so one directory per module is right; the donor created it
+    on every radio's NSS init and after every restart. Test build (the cb3bf85 tree plus 999-993) on
+    the bench: dbg_infra present once, and no "already present" line at the second radio's init or
+    after five in-place restarts.
+  #25 root cause: after an in-place firmware restart of the IPQ5018 radio, NSS does not service that
+    radio's REO rings for about 3.6-4.5 s. The client transmits normally (its TX counters rise with 0
+    retries and 0 failures: the AP hardware ACKs every frame), but NSS wifili reo_reaped stays flat,
+    then 19-23 frames come out in one burst together with the REO exception ring (err_ring_pkts +5/+6),
+    and traffic is normal from then on. Pings sent during the hold come back at the same moment
+    (RTT 3.7 s down to 0.2 s). Nothing is logged at the release. The REO aging registers read the same
+    before, at and after the restart (GEN_ENABLE 0x03fff35d, 40 ms on all four ACs), so this is not the
+    host's REO setup.
+    Why only some restarts cost 17 s: a client that joins again within about a second of the recovery
+    (because of patch 960's kick, reason 34, or a reason-7 deauth it gets right after the restart) starts
+    its 4-way handshake inside the hold. hostapd's default 4 tries give up after about 3 s (reason 15),
+    the held msg 2 frames come out after the peer is gone ("Desc addr zero", dropped by NSS), and the
+    client waits out a 10 s back-off. A client that joins about 2 s later gets its msg 2 through when the
+    hold ends (the "7 s" cases); one that joins 5 s later sees no hold at all. Without a restart, ten
+    960-style kicks in a row reconnected in 1 s each.
+    Instrumented ath11k (TEMP, bench only): the new peer is mapped and its REO queues requested within the
+    same millisecond as always; nothing from it reaches the host (no NSS delivery, no null-queue path)
+    until the hold ends. The kick is not the cause: with hostapd's low-ACK disconnect off and no kick, a
+    reason-7 disconnect at +0.27 s led to the same 17 s.
+    Not fixable in ath11k host code: the hold is inside NSS, and nothing the host logs or programs marks
+    its end. Mitigation, verified: `wpa_pairwise_update_count=8` for the AP (UCI:
+    list hostapd_bss_options 'wpa_pairwise_update_count=8') lets hostapd keep resending msg 1 for about
+    7 s, so the held msg 2 is answered. With 960's kick active: 4/4 restarts back in 7 s, including a
+    reason-34 early rejoin (5 rounds of msg 1/2, then msg 3), the case that took 17 s in every earlier run.
+    Not shipped as a default yet (the user's call).
+  Side finding, bench stability: hw-restarts repeated every 35-90 s crashed the Q6 root PD twice (after 9
+    and after 6 restarts on one boot; v1.10 on NAND and this branch alike). The port's respawn suppression
+    then left both radios' user PDs down until a reboot, as designed (the watchdog reboots in that state;
+    it was idle for the tests). Earlier runs today did 13-15 restarts on one boot without it.
+  Bench afterwards: v1.10 on NAND again (sysupgrade with the pre-work config backup), watchdog running.
