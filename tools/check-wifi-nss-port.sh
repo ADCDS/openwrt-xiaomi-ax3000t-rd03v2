@@ -46,6 +46,8 @@ cp -a "$work/openwrt/package/kernel/mac80211/patches/." "$work/patches/baseline/
 cp -a "$repo/files/package/kernel/mac80211/patches/." "$work/patches/baseline/"
 cp -a "$work/donor/package/kernel/mac80211/patches/nss/." "$work/patches/nss/"
 cp -a "$repo/experimental/wifi-nss/patch-overrides/." "$work/patches/nss/"
+mkdir -p "$work/patches/nss/mesh"
+cp -a "$repo/experimental/wifi-nss/mesh/patches/." "$work/patches/nss/mesh/"
 
 log="$work/patches.log"
 manifest="$work/applied.tsv"
@@ -72,7 +74,8 @@ apply_group() {
 for group in build subsys ath ath5k ath9k ath10k ath11k ath12k rt2x00 mt7601u mwl brcm rtl; do
     apply_group baseline "$group"
 done
-for group in subsys ath10k ath11k; do
+# Same order as the build's series (tools/integrate-wifi-nss.py): mesh last.
+for group in subsys ath10k ath11k mesh; do
     apply_group nss "$group"
 done
 printf 'Patch application passed. Source: %s\n' "$target"

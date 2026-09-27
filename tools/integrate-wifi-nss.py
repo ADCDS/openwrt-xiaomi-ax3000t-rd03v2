@@ -90,6 +90,11 @@ MESH_PATCHES = REPO / "experimental/wifi-nss/mesh/patches"
 IMAGE_FILES = REPO / "experimental/wifi-nss/files"
 
 
+def sha256_manifest(files, base):
+    """{path relative to base: sha256} for the given files."""
+    return {str(p.relative_to(base)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+
+
 def replace_once(text, old, new):
     if text.count(old) != 1:
         raise SystemExit(f"Expected one integration anchor: {old!r}")
@@ -249,10 +254,9 @@ endif
         config.write("\n# Experimental RD03v2 NSS Wi-Fi; hardware test scope is documented\n")
         config.writelines(f"CONFIG_{key}=y\n" for key in ENABLED)
         config.writelines(f"# CONFIG_{key} is not set\n" for key in DISABLED)
-    manifest = {str(p.relative_to(package)): hashlib.sha256(p.read_bytes()).hexdigest()
-                for p in sorted(target.rglob("*.patch"))}
-    image_files = {str(p.relative_to(IMAGE_FILES)): hashlib.sha256(p.read_bytes()).hexdigest()
-                   for p in sorted(IMAGE_FILES.rglob("*")) if p.is_file()}
+    manifest = sha256_manifest(sorted(target.rglob("*.patch")), package)
+    image_files = sha256_manifest((p for p in sorted(IMAGE_FILES.rglob("*")) if p.is_file()),
+                                  IMAGE_FILES)
     (tree / "wifi-nss-integration.json").write_text(json.dumps({
         "donor_commit": DONOR_REV, "status": "experimental", "patches": manifest,
         "image_files": image_files,
