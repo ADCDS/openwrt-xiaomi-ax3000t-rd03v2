@@ -1,0 +1,56 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: nss: authorize keyless mesh peers in NSS
+
+NSS drops everything a peer sends until the peer is authorized in NSS.
+ath11k does that only in ath11k_mac_op_set_key(), right after it installs
+the pairwise key. An open mesh (no SAE) never installs a key, so its peers
+are never authorized. The mesh peers (plink ESTAB) but no data gets
+through: NSS reaps each frame from REO and drops it before the mesh decap
+node.
+
+Measured on IPQ5018 + QCN6122, NSS 12.5, with NSS peer stats enabled:
+- open mesh on the IPQ5018 radio with an RT3070 peer: 0/20 pings,
+  peer_unauth_rx_pkt_drop 23, nothing reaches the host;
+- same setup with this change: rx_recvd 21, unauth drops 0, and 20/20
+  once the mesh path had settled;
+- open mesh on the QCN6122 radio with an mt76 peer: 20/20 with this
+  change, where it had passed nothing before.
+SAE mesh works without this change: set_key authorizes those peers
+(checked on the IPQ5018 radio).
+
+Authorize a mesh peer in NSS when mac80211 moves it to AUTHORIZED. For an
+SAE peer this repeats what set_key already did, which is harmless.
+---
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -10537,14 +10537,29 @@
+ 				    arvif->vdev_id, ret);
+ 	} else if (old_state == IEEE80211_STA_ASSOC &&
+ 		   new_state == IEEE80211_STA_AUTHORIZED) {
++		int nss_auth_id = -1;
++
+ 		spin_lock_bh(&ar->ab->base_lock);
+ 
+ 		peer = ath11k_peer_find(ar, arvif->vdev_id, sta->addr);
+-		if (peer)
++		if (peer) {
+ 			peer->is_authorized = true;
++			/* Only ath11k_mac_op_set_key() authorizes a peer in NSS,
++			 * and NSS drops what an unauthorized peer sends. A mesh
++			 * peer without keys (open mesh) never gets a key, so
++			 * authorize it here.
++			 */
++			if (vif->type == NL80211_IFTYPE_MESH_POINT)
++				nss_auth_id = peer->peer_id;
++		}
+ 
+ 		spin_unlock_bh(&ar->ab->base_lock);
+ 
++		if (nss_auth_id >= 0 &&
++		    ath11k_nss_set_peer_authorize(ar, nss_auth_id))
++			ath11k_warn(ar->ab, "failed to authorize mesh peer %pM in nss\n",
++				    sta->addr);
++
+ 		if (vif->type == NL80211_IFTYPE_STATION && arvif->is_up) {
+ 			ret = ath11k_wmi_set_peer_param(ar, sta->addr,
+ 							arvif->vdev_id,

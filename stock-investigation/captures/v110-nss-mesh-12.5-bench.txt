@@ -1,0 +1,460 @@
+NSS 802.11s mesh offload on NSS firmware 12.5 - bench run, 2026-09-26 (issue #21, "fix 1")
+==========================================================================================
+Bench unit only (192.168.1.1, reached over hal's USB-eth on lan2). Branch nss-mesh
+(worktree mesh-nss/), flag WIFI_NSS_MESH=1.
+
+PHASE 0 - capability handshake on the installed v1.10 12.5 image (probe kmod, no flash)
+  NSS_WIFILI_SEND_MESH_CAPABILITY_INFO, sent the way donor ath11k_nss_mesh_capability() sends it:
+    if 203 (NSS_WIFILI_INTERNAL_INTERFACE, radio0): response ACK (0) error 0
+    if 215 (NSS_WIFILI_EXTERNAL_INTERFACE0, radio1): response ACK (0) error 0
+  cap_info.mesh_enable in the reply echoes the request (sent 0 -> 0, sent 1 -> 1), so it
+  carries no signal. Only the response code counts, and ath11k enables mesh offload on != EMSG.
+
+BUILD (NSS=1 WIFI_NSS_MESH=1 WIFI_NSS_DONOR=../wifi-nss-donor KMODS=0 PROFILE=bench-safeboot)
+  Firmware NSS.FW.12.5-210-MP.R (unchanged). nss_packages pinned ^0d970db.
+  First-ever compile of ath11k's #ifdef CPTCFG_ATH11K_NSS_MESH_SUPPORT code on backports
+  6.18.26: clean. qca-nss-wifi-meshmgr (12.5 clients, 51be82d) on kernel 6.12: clean.
+  ath11k.ko depends=qca-nss-drv,mac80211,qca-nss-wifi-meshmgr,cfg80211,qmi_helpers,compat
+  and references 18 nss_wifi_meshmgr_* functions.
+  Non-mesh integration output (Makefile, ath.mk, .config, patches, json) byte-identical to main.
+  The first build attempt died fetching nss-firmware (the build host lost its uplink). It was
+  rebuilt offline from a local dl cache, same commit and feed, every file hash-checked by OpenWrt.
+  Artifact sha256: mesh-nss/artifacts-build1.sha256
+
+PIVOT to the RAM initramfs (docs/no-uart-reflash.md), NAND untouched
+  ubi_kernel = mtd18. Uploaded only initramfs-factory.ubi (the bench had ~30 MB free); the .itb
+  size/md5 (15039212 / 145c3306...6046) were passed in for the prefix read-back check.
+  Verified, rebooted, came up: rootfs tmpfs, flags re-armed by rc.local, no panic.
+
+SAFE-BOOT KIT FINDING
+  blacklist qca-nss-wifi-meshmgr did NOT hold anything back: ath11k autoloaded and pulled the
+  manager in. ubox kmodloader load_moddeps() sets every non-LOADED dependency to PROBE,
+  overwriting BLACKLISTED; a blacklist only stops a module's own top-level entry. Kit fixed to
+  blacklist ath11k_ahb + ath11k + qca-nss-wifi-meshmgr (needs a rebuild; fresh-boot insmod path
+  unexercised). The bench was safe anyway: in the RAM initramfs any Wi-Fi config is tmpfs and
+  gone after a reboot, so a mesh-triggered crash cannot loop.
+
+MESH ON THE BENCH (no peer yet)
+  Both phys advertise SUPPORTS_NSS_OFFLOAD SUPPORTS_MESH_NSS_OFFLOAD.
+  radio1: AP "benchtest" + mesh "benchmesh" (SAE, mesh_fwding 1, network lan), ch36 HE80:
+    nss_wifi_meshmgr_if_create_sync: Successfully registered encap and decap iface for Mesh
+    nss_wifi_meshmgr_if_create_sync: WiFi Mesh interface count:1.
+    wpa_supplicant: phy1-mesh0: joining mesh benchmesh / MESH-GROUP-STARTED ssid="benchmesh"
+    phy1-mesh0 and phy1-ap0 both operstate up, carrier 1 -> the AP on the same radio KEEPS
+    beaconing (the side effect seen with the failed mesh in issue #21 is gone once mesh joins).
+  Over the air, from hal's QCA9377:
+    BSS 52:92:6a:f3:3f:5f  MESH ID: benchmesh
+    BSS 50:92:6a:f3:3f:5f  SSID: benchtest   (5 GHz AP, same radio)
+    BSS 50:92:6a:f3:3f:5e  SSID: benchtest   (2.4 GHz AP)
+  radio0: added mesh "benchmesh24" beside its AP -> create OK, count 2, MESH-GROUP-STARTED,
+    all four interfaces carrier 1. Both radios work; the donor's "only one radio" caveat
+    (MX4300) does not apply here.
+  NSS stats/wifi_mesh: decap_stats encap_stats exception_stats path_stats proxy_path_stats.
+  ath11k netdev:phy1-mesh0/nss_mesh: dbg_infra dump_nss_mpath_table dump_nss_mpp_table.
+
+  wifi down/up radio1 x5: every teardown logs "Mesh handle cleanup called for: phy1-mesh0",
+  with no dealloc failure. Every create succeeds and the count returns to 1. Mesh + AP carrier
+  came back each cycle; MemAvailable 20.4-23.1 MB, no drift; no warn, error or call trace.
+  (The raw Phase-0 probe could not free an inner node; the real meshmgr sequence, if_down +
+  unregister + dealloc outer then inner, has no such problem.)
+
+CRASH RECOVERY with mesh up (the gap the design review flagged)
+  hw-restart on b00a040 (mesh on both radios): meshmgr cleanup -> HW restart -> create (count 2)
+  -> "pdev 1 successfully recovered" within ~1.5 s. No reboot, all 4 ifaces carrier 1, hard-fail
+  grep (COREDUMP|NSS-FW logbuffer|coredump finished|peer delete failed|failed to free nss) = 0.
+  assert on b00a040: root Q6 fatal (wlan_wmi.c:692 Assertion 0), pd-1/pd-2 torn down and
+  respawned, meshmgr cleanup for phy0-mesh0 AND phy1-mesh0, both recreated (count 1 -> 2), both
+  radios "successfully recovered", 808.49 -> 810.05 s. No reboot, all 4 ifaces carrier 1,
+  hard-fail grep 0, no warn or call trace.
+
+NOT YET TESTED (needs a peer: syd RT3070 first, then the gateway under its rules)
+  peering (plink ESTAB), forwarding + offload proof (NSS mesh encap/decap counters, CPU vs
+  nss_offload=0), locally generated UDP checksums over the mesh (openwrt-nss-edma 999-937),
+  SAE re-peer after a firmware restart (patch 960 skips mesh peers), soak, NAND boot.
+
+VERDICT SO FAR
+  On IPQ5018 the 12.5-210-MP firmware accepts ath11k's mesh capability AND the mesh manager's
+  interface create; openwrt-nss-edma reports the create NACKed on IPQ807x 12.5-210. The 11.4
+  switch is not needed for bring-up here. Whether the data path works is next.
+
+PEER TEST WITH syd's RT3070 (rt2800usb, 2.4 GHz ch1, phy moved into netns "meshns"), same day
+  Peering: SAE with the RT3070's hardware crypto -> plink ESTAB both ends, MESH-PEER-CONNECTED.
+  Mesh path offloaded into NSS: dump_nss_mpath_table shows dest 14:cc:20:23:9a:f1, hop 1,
+    flags 0x5, link_vap_id 50; path_stats add_success 1, update_success 16..50.
+  IP over the mesh: syd->bench and syd->hal (bridged through the bench's lan2) ping OK; syd got
+    a SLAAC address from the bench's RA over the mesh.
+  CHECKSUM BUG REPRODUCED: every DHCP OFFER the bench sourced reached syd as
+    "[bad udp cksum 0x84fb -> ...!]" and busybox udhcpc dropped them ("no lease").
+    `ethtool -K <mesh> tx off` on the bench -> "[udp sum ok]", lease 192.168.1.100 obtained.
+    Root cause as openwrt-nss-edma 999-937 describes: the offloaded mesh netdev advertises HW
+    checksum and the NSS mesh encap node never completes it. Fix for the next build: that patch
+    in the mesh patch group; until then the ethtool workaround.
+  Offload evidence (iperf3 syd->hal): ECM tcp_accelerated_count +2, NSS mesh encap +673 and
+    decap +1567 pkts (mp_active = link_enqueue = packets; rx_fwd_success = rx; no drop
+    counter set anywhere), bench CPU 1.8% busy.
+  Throughput INCONCLUSIVE because of the peer: TCP ran 7-9 Mbit/s and then stalled with NSS
+    offload; the host path (nss_offload=0, same peer and position) also stalled (4-9 Mbit/s with
+    gaps, dead from 17 s). High-rate pings to the bench itself failed in BOTH modes. The RT3070
+    shows heavy tx retries (867/1756) and the bench hears it at -22..-27 dBm (very close; possible
+    receiver saturation). Packets lost during the stall never reached NSS decap. Needs a
+    reliable peer.
+  Re-peering after a bench ath11k reload got stuck half-open (syd ESTAB, bench LISTEN ->
+    BLOCKED) until syd's supplicant and the bench's radio0 were restarted. Revisit with a
+    reliable peer (cf. patch 960, which skips mesh peers).
+  Minor: after the assert recovery, "debugfs: Directory 'nss_mesh' with parent
+    'netdev:phy0-mesh0' already present!" - the recreate path does not remove the old dir.
+  tiny (RPi, brcmfmac) cannot be a peer: no mesh point mode.
+
+GATEWAY 5 GHz WINDOW (peer: an MT7981/mt76 OpenWrt router), 23:53-23:58 GMT
+  Rules: dead-man armed first, ephemeral iw-only OPEN mesh (no second wpa_supplicant),
+  LAA MAC 02:99:7f:3a:2c:01, disable_ipv6, arp_ignore/announce, 10.99.0.0/24, no UCI/nft/installs.
+  mt76 needs `beacon-interval 100` on mesh join to coexist with the APs
+    (combination "STA/AP BI must match"); without it: Resource busy (-16).
+  Peering: gwmesh0 <-> bench radio1 mesh plink ESTAB, -45 dBm (a healthy link, unlike the RT3070).
+  RESULT - NSS mesh RX IS BROKEN ON RADIO1 (b00a040, QCN6122, wifili EXTERNAL_INTERFACE0):
+    NSS on:  gateway gwmesh0 tx increments (it sends), bench phy5-mesh0 rx_packets 0 and
+             NSS wifi_mesh decap/encap 0 for it; gateway->hal and bench->gateway pings fail.
+             The gateway DID receive the bench's frames (gwmesh0 rx 0 -> 3): bench TX is fine,
+             bench radio1 RX of mesh data is dropped before mac80211/NSS decap.
+    NSS off (same peer, same window): gateway->hal ping 10/10, 4.9 ms avg.
+  => radio0 (IPQ5018 internal, wifili INTERNAL) passes mesh data with NSS offload (syd test);
+     radio1 does not. Matches the donor's "only one radio works with mesh" (MX4300) caveat.
+     Issue #21's reporter runs mesh on phy1 = radio1, so the 5 GHz case is NOT fixed by
+     12.5 + ATH11K_NSS_MESH_SUPPORT alone.
+  The peer router's own services and clients were checked before and after every window and
+    were unchanged; gwmesh0, /tmp files and the dead-man processes removed.
+  Not used: ephemeral iperf3 - `apk extract` rejects a fetched apk as "UNTRUSTED signature"
+    (index-signed repos); it would need --allow-untrusted.
+
+GATEWAY 5 GHz WINDOW 2 (instrumented), ~00:06-00:14 GMT 27 Sep
+  Same rules as window 1 (dead-man armed first, iw-only open mesh, LAA MAC, 10.99.0.0/24). For the
+  window the bench's radio1 mesh joined the same open mesh ID, and br-lan got 10.99.0.2/24.
+  Peering ESTAB, -42 dBm; gateway tx bitrate HE-MCS 10, 2 streams, 80 MHz.
+  Broadcast phase (gateway pings with no neighbour entry, so only ARP broadcasts go out): 0/20, gwmesh0 rx 0.
+  Unicast phase (static neighbour on gwmesh0: 10.99.0.2 -> bench mesh MAC), three bursts of 20 pings:
+    QCN6122 wifili[0]_reo_reaped 3 -> 23 -> 43 -> 63: exactly +20 per burst. The frames reach the
+      REO destination ring and NSS reaps them.
+    Nothing downstream moves: phy9-mesh0 rx_packets 0, NSS wifi_mesh decap/exception 0, no wifili
+      drop or error counter, and the mac80211 station rx count only tracks beacons/mgmt.
+    Gateway station stats: the bench's hardware ACKed 21 of 24 unicast frames.
+  REO "NULL queue" (wifili_wbm_src_reo_code_nullq, identical deltas to ath11k soc_dp_stats "Desc addr
+    zero") runs at 6-18/s on the QCN6122 and ~2/s on the IPQ5018 whether or not we ping. That is
+    traffic from non-peers (other BSSs on the channel), NOT the mesh peer. The window-1 nullq
+    hypothesis is withdrawn.
+  => On radio1, received mesh data is lost after NSS wifili reaps it and before the mesh decap node,
+     and no counter records it. Code reading found two host paths that would swallow it silently:
+     ath11k_nss_mesh_link_vdev_data_receive() frees every frame ("data callback for mesh link vap is
+     not expected"), and ath11k_nss_vdev_cfg_cb() completes on any response, so a NACKed vdev config
+     (e.g. the MESH_LINK ext mode on the QCN6122 soc) goes unnoticed. Next step: an instrumented ath11k
+     (callback counters, NSS response logging) on the bench.
+  Peer router unchanged after teardown; gwmesh0, the /tmp files and the dead-man processes are gone
+    (busybox has no pkill; killed by PID).
+  ath11k's debug_mask does nothing in this build (CONFIG_ATH11K_DEBUG is off).
+
+DONOR CODE FINDINGS (qosmio/openwrt-ipq main-nss @ 92a2d104 = our pin; nothing reported upstream)
+  1. ath11k_nss_mesh_vdev_free() (ath11k/300) unlinks EVERY entry of the global mesh_vaps list, not
+     just its own. Bench: after `wifi up radio1`, dbg_infra/links showed only radio1's new link (35);
+     radio0's link 31 was gone while phy8-mesh0 stayed up. Debug tooling only (links, assoc_link).
+     Fix: experimental/wifi-nss/mesh/patches/999-990-rd03v2-nss-mesh-unlink-only-own-vap.patch.
+  2. ath11k_nss_wifili_ext_callback_wrapper() (ath11k/999-904) applies netdev_priv() to the pointer it
+     registered, which is ab itself (nss_core.c: ext_cb(ndev, ...), ndev = the registered pointer),
+     so the callback gets a bogus ab. Latent: only TKIP MIC-error packets use it. Also affects
+     non-mesh builds, so it is not fixed here.
+  3. Cosmetic: each soc creates "dbg_infra" under the shared ath11k debugfs root, so every boot and
+     recovery logs "Directory 'dbg_infra' with parent 'ath11k' already present!".
+
+INSTRUMENTED ath11k ON THE BENCH (no gateway involved), 27 Sep
+  Build: the existing build tree plus the mesh patch group: 999-990 (mesh_vaps fix) and a TEMP
+  instrumentation patch that lives only in the build tree and is never committed. ath11k.ko was
+  hot-swapped on the RAM initramfs (wifi down, rmmod, insmod, wifi up) under a 600 s dead-man.
+  The original module is kept in /tmp/origko on the bench, and a reboot reverts everything.
+  mesh_vaps fix: links "41 45" before `wifi up radio1`, "41 29" after. radio0's link stays; FIXED.
+  NSS responses: every vdev config ACKed (rsp 0) on both socs, including ext_mode 1 (MESH_LINK)
+    on the QCN6122 (soc_if 215); assoc_link_vap status 0 and vdev UP ACKed on both. The
+    "radio1 mesh link config NACKed" hypothesis is refuted.
+  Per-soc mapping: IPQ5018 soc_if 203 radio_if 38; QCN6122 soc_if 215 radio_if 39. AP vdev 0 and
+    mesh vdev 1 on each soc; the mesh self-peer is created in NSS on both.
+  wifili ext callback: ~9-12/s of CCMP-protected broadcast data frames from a neighbouring BSS
+    arriving as INVALID_PEER exceptions. They are the background behind the
+    REO nullq counts; the MIC-error branch (the one with the bogus ab) is not hit.
+  v2 instrumentation (loaded now): per-callback counters in
+    /sys/module/ath11k/parameters/rd03v2_rxdbg_counters (wifili ext split into mcast/ucast), dumps of
+    the first unicast frames, and rd03v2_mesh_link_rx=1 (default 0), which hands frames arriving on
+    the mesh link vdev's data callback to ath11k_nss_undecap() + ath11k_nss_deliver_rx() instead
+    of dropping them.
+
+GATEWAY 5 GHz WINDOW 3 (instrumentation v2), 00:42:16-00:47:40 GMT 27 Sep
+  Same rules; the peer router was unchanged before and after.
+  NSS created the gateway's peer on the QCN6122: "peer create 02:99:7f:3a:2c:01 vdev 1 peer_id 8
+    ast_idx 130 soc_if 215".
+  Burst 1, 20 unicast pings (HE-MCS 9, 2 streams, 80 MHz, DCM; RX BA session on TID 0): reaped +20.
+    All eight host RX callbacks stayed flat (link-vdev data/special, mesh obj data/ext, vdev
+    data/special, wifili ext ucast), and netdev rx stayed 0.
+  Burst 2, after re-sending ASSOC_LINK_VAP once the vdev was UP (debugfs assoc_link, ACK): same.
+  Burst 3, right after the bench tore down the RX BA session (DELBA; the gateway renegotiated at
+    once): same.
+  Burst 4, with the bench's radio1 set to legacy NOHT (gateway tx 6 Mbit/s, no BA): reaped +9/10, same.
+  => The NSS 12.5-MP firmware drops unicast 802.11s data received on the QCN6122 (external wifili
+     instance). The drop happens after the REO reap and before the mesh decap node, with no counter
+     and no host callback, whatever the PHY mode or aggregation. Every host-side config is ACKed and
+     NSS has the peer. The bench still ACKs the frames at the MAC, so to the peer the link looks
+     healthy: traffic is black-holed silently. The loss is inside the firmware, so no ath11k host
+     change can recover these frames.
+  Side effect cleared: the assoc_link debugfs write set ab->nss.debug_mode. ath11k was reloaded
+    afterwards (same v2 module) and the bench config restored (HE80, SAE benchmesh, no 10.99.0.2).
+  Correction: the mesh_link_special frame seen in this window came from syd on radio0
+    (an IPv6 multicast syd re-broadcast), not from the gateway.
+
+ROOT CAUSE FOUND, 27 Sep
+  Test 1, native-wifi AP (frame_mode=1): radio1 AND radio0 both fail the WPA 4-way handshake (reason 15),
+    with no data frame reaching the host. frame_mode=1 AP mode is broken on both socs in this stack. It
+    does not discriminate between radios; not pursued further.
+  Confound found: every radio1 test used an OPEN mesh (the gateway's iw-only mesh), while the working
+    radio0 tests used SAE (syd). Code: ath11k authorizes a peer in NSS (NSS_WIFILI_PEER_UPDATE_AUTH_FLAG)
+    only in ath11k_mac_op_set_key(), and ASSOC->AUTHORIZED sends nothing to NSS for AP or mesh peers.
+    A keyless peer is never authorized in NSS.
+  Test A, radio0 with an OPEN mesh to syd (no gateway): 0/20, no frame reaches the host, exactly like radio1.
+  Fix 999-991 (authorize mesh peers in NSS at AUTHORIZED) plus TEMP A/B switch and NSS per-peer stats
+    (nss_peer_stats_config=1):
+      fix on:  "keyless mesh peer 14:cc:.. authorize sent"; NSS peer recvd=21 ucast=21 unauth_drop=0;
+               host mesh_obj_data +21. After path warm-up syd->bench 20/20 and bench->syd 20/20.
+      fix off: "authorize SKIPPED"; 0/20; NSS peer recvd=0 unauth_drop=23.  MECHANISM PROVEN.
+  GATEWAY WINDOW 4 (01:24:38-01:28:17Z, radio1/QCN6122, open mesh, fix on): "keyless mesh peer
+    02:99:7f:3a:2c:01 id 8 authorize sent" on soc 215. Gateway->bench 20/20 with normal ARP; 1400-byte
+    20/20 at 3.2 ms avg; NSS mesh decap rx_packets and rx_fwd_success +43; NSS peer recvd=32 unauth_drop=0.
+    => 5 GHz NSS mesh offload WORKS on the QCN6122. The window-1..3 "firmware drop" was this auth bug.
+    (bench->gateway pings fail by design: the gateway's fw4 rejects input on the unzoned test netdev.)
+    Peer router unchanged before and after.
+  Second bug, recovery: after a hw-restart the peer is re-authorized and RX works, but TX to the peer dies.
+    The NSS mesh object comes back with an EMPTY path table, mac80211 sends only UPDATEs, and NSS answers
+    "not found" (wifi_mesh_not_found; "failed to update mpath entry"). Reproduced on radio0 with syd:
+    0/10 three times after the restart. Fix candidate 999-992 (mac80211: flush mesh paths on reconfig
+    when the hw offloads them) is being built.
+  Latent: ath11k is compiled without -DNSS_FIRMWARE_VERSION_12_5 while qca-nss-drv (and ECM) use it.
+    struct nss_wifili_rx_ctrl_stats has 12.5-only fields, so ath11k parses NSS peer-stats syncs with the
+    wrong layout. They are only used when nss_peer_stats_config=1, which is off by default.
+
+RECOVERY AND CHECKSUM FIXES, 27 Sep
+  999-992 (mac80211: flush mesh paths on reconfig when the hw has SUPPORTS_MESH_NSS_OFFLOAD):
+    radio0 open mesh + syd, hw-restart: 0 "failed to update mpath" (6 before), a fresh NSS add_success,
+      path ACTIVE again; syd pings 0,0,3,9/10, then 27/30. Before the fix: 0/10 x3, never recovering.
+    GATEWAY WINDOW 5 (01:36:24-01:37:52Z), radio1 open mesh, hw-restart on b00a040: gateway->bench
+      0/10 for ~10 s, then 10/10, 10/10; peer re-authorized, unauth_drop 0. Peer router unchanged.
+  SAE mesh after an in-place firmware restart (radio0 + syd): the plink stays ESTAB but traffic dies.
+    A re-peer (syd: wpa_cli mesh_peer_remove) does NOT help. A full re-join does: `wifi up radio0`, or
+    the lighter `ubus call wpa_supplicant.<mesh-if> reload`, which touches only the mesh interface and
+    left the AP up: 10/10 afterwards. Likely cause: patch 960's CCMP PN reset, applied to the node's own
+    group keys (MGTK/IGTK). Those are per node, so only a re-join regenerates them. 960 already says
+    mesh peers are not covered. OPEN: what should trigger the reload (watchdog rule vs kernel uevent +
+    hotplug), and whether the per-node group-key explanation is exactly right.
+  999-937 (Julius Bairaktaris, openwrt-nss-edma nss-edma-rework ed0ec226379d, authorship kept) imported
+    into the mesh group. The offloaded mesh netdevs now come up with tx-checksum off [fixed], and there
+    is no ethtool workaround any more. busybox udhcpc over the radio0 SAE mesh: "lease of 192.168.1.100
+    obtained from 192.168.1.1"; nslookup against the bench answers. Before, the bench's DHCP OFFERs
+    arrived with bad UDP checksums and were dropped.
+  RT3070 peer caveat: right after a (re)join, syd's HWMP path discovery to the bench can take 10-20 s
+    (broadcast PREQ/PREP over a saturated link, 4 retries then hold-off). Once resolved, 20-30 pings pass
+    at 70-100%. It says nothing about NSS.
+  Note: openwrt-nss-edma's own ath11k mesh patch (0002) has neither the mesh_vaps unlink-all loop nor
+    any keyless-peer authorize. Not reported upstream.
+
+CLEAN BUILD 2, END TO END (27 Sep, no instrumentation)
+  Same tree as build 1 plus the mesh group (999-937, 999-990, 999-991, 999-992); the TEMP patch was
+  removed and mac80211 rebuilt. Image hashes in mesh-nss/artifacts-build2.sha256 (.itb 15039284 bytes,
+  md5 00f90e746f7d628eb796ffa7f89a1f00). The rootfs ath11k.ko has no TEMP strings and does carry the
+  999-991 warning.
+  Pivot: read-back verified, booted in ~54 s. First real test of the fixed safe-boot kit: at boot,
+    ath11k/ath11k_ahb/meshmgr stay out and NSS+ECM+PPPoE load. `wifi-load --deadman 300` insmods
+    mac80211 -> meshmgr -> ath11k nss_offload=1 frame_mode=2 -> ath11k_ahb -> wifi up. PASS.
+  Both offloaded mesh netdevs come up with tx-checksum-ip-generic off [fixed].
+  radio0 SAE + syd: DHCP lease and DNS over the mesh OK; NSS decap 0 -> 42; pings 10/30 and 14/20
+    (RT3070 link right after boot).
+  radio0 OPEN + syd: 15/15, 12/15, 14/15; bench->syd 20/20; decap +24.   (Before 999-991: 0/20.)
+  radio0 OPEN hw-restart: 0 mpath update failures, no oops, path ACTIVE again; syd 27/30 after path
+    discovery.
+  GATEWAY WINDOW 6 (02:07:33-02:09:27Z), radio1 OPEN + gateway: 10/10, 10/10, 1400 B 10/10 at 5 ms.
+    hw-restart on b00a040: 0,0,0 then 10/10 (~30-40 s), no mpath errors, no oops.
+    Peer router unchanged before and after.
+  Lab restored: bench radio0/radio1 SAE benchmesh24/benchmesh, syd SAE peered, no 10.99 addresses.
+  Bench now: ubi_kernel = build-2 initramfs (RAM boot), NAND rootfs still v1.10, rollback kit unchanged.
+
+SAE RE-JOIN AFTER AN IN-PLACE RESTART: WATCHDOG RULE (27 Sep)
+  rd03v2-watchdog counts ath11k "pdev N successfully recovered" per device (baselined at arm time, like
+  the respawn-suppressed check). When a device's count goes up, it reloads that radio's encrypted mesh
+  supplicants (netifd config mode=mesh, encryption != none) via `ubus call wpa_supplicant.<if> reload`,
+  under a deadline. APs and open meshes are left alone.
+  Bench test on the clean build: the watchdog's code sourced on the bench, baseline taken, hw-restart
+    of c000000.wifi with the SAE mesh to syd up. recovered_devs -> [c000000.wifi]; mesh_rejoin logged
+    "c000000.wifi restarted in place: joined the encrypted mesh on phy0-mesh0 again"; the next sample
+    was quiet. syd re-peered, pings 0, 0, 6/10, 10/10. Without it, SAE stayed at 0 until a manual
+    reload.
+
+GATEWAY 5 GHz WINDOW 7: SAE (02:40:20-02:42:56Z)
+  The peer router ran a temporary standalone wpa_supplicant for the test mesh interface only (SAE,
+  5180 MHz HE80, no country= so the regulatory domain was untouched). The dead-man teardown killed it
+  too; nothing was left behind.
+  SAE plink ESTAB, -43 dBm. Peer->bench 10/10, 10/10, 1400 B 10/10 at 2.7 ms. radio1 NSS mesh decap
+    0 -> 32; peer authorized; HE-MCS 11, 2 streams, 80 MHz. => SAE mesh with NSS offload works on 5 GHz.
+  hw-restart of b00a040.wifi: SAE dead (0/10, 0/10), as on 2.4 GHz. The watchdog's re-join code
+    (sourced on the bench) found [b00a040.wifi] and reloaded phy1-mesh0. 10/10 x3 within ~10 s.
+    So the rule works with an mt76 peer, which does enforce replay protection.
+  Peer router after teardown: WAN/DNS fine, the uplink station unchanged. One phone had roamed from
+    the 2.4 GHz AP to the 5 GHz AP mid-window (client-initiated, 2 s, DHCP renewed); no client was lost.
+
+ISSUES #22-#24 FIXED AND VERIFIED LIVE (27 Sep, second night)
+  WIFI_NSS_MESH removed: every NSS Wi-Fi build (NSS=1 WIFI_NSS_DONOR=...) now includes mesh offload.
+    Scratch integration: identical to the old flag-on output except the #22 patch, the #23 define, the
+    Kconfig prompt and the json note (the .config is identical).
+  Verification build: the clean build.sh tree plus 999-995/999-997, the IREMAP define, and a TEMP patch
+    (per-peer stats capture, one-shot wrapper print), hot-swapped on the bench (build-2 RAM image).
+  #22: "ath11k rxdbg: wifili ext cb resolves ab to b00a040.wifi", driven by live invalid-peer traffic.
+  #23: NSS per-peer stats are ON by default with nss_offload=1 (core.c sets stats_enabled=1), so the
+    layout bug is live, not latent. Each entry is 16 bytes longer than ath11k's view (2 u32 in rx_ctrl,
+    2 in retry_ctrl), so every entry after the first is misread and its peer lookup fails.
+    Before (old ath11k, default config, 50 pings from a 5 GHz client): station inactive time 64170 ms,
+    AP netdev rx 0 (it never counted).
+    After: inactive time 140 ms; netdev rx +100 for 100 pings; per-peer recvd=100 ucast=100.
+    New finding: with the fixed layout, host-originated TX to a client is counted twice (+200 for
+    100 replies): mac80211 counts it, then NSS peer stats add it again. Pre-existing donor design,
+    only visible now; it only affects the netdev TX counter.
+  #24: with frame_mode=1 the client associates, then is deauthed (4-way reason 15). NSS per-peer
+    stats show nothing received from it (recvd 0, unauth_drop 0 on every attempt's peer). The AP's
+    EAPOL msg1 goes out; the replies die below NSS. Fix 999-995: warn and use frame_mode=2 when
+    nss_offload=1. Live: "frame_mode 1 does not work with nss_offload, using ethernet (2)", the
+    parameter reads 2, the client completes EAPOL-4WAY and 50/50 pings at 2.6 ms.
+  Incident, not code: the bench rebooted once mid-test. A stale dead-man from an earlier reload run
+    (each run deleted the shared ok-file) fired. The safe-boot kit brought it back in safe mode; the
+    reload script now keeps one dead-man at a time, with a per-run token.
+  syd was offline all night (unreachable from hal and the gateway), so no RT3070 peer.
+
+FINAL IMAGE (cb3bf85) AND REGRESSION A/B AGAINST v1.10 (27 Sep, second night)
+  Build: clean build.sh run of cb3bf85 (NSS=1 WIFI_NSS_DONOR=... KMODS=0 PROFILE=bench-safeboot),
+    no TEMP patch in the tree or the image (the only "TEMP" string in ath11k.ko is
+    WMI_PDEV_GET_TEMPERATURE). Checked in the prepared sources and objects: 999-997 wrapper uses the
+    registered pointer, -DNSS_FIRMWARE_VERSION_12_5 on the nss.o compile line, 999-995 and 999-991
+    strings in ath11k.ko, 999-937/999-992 hooks in mac80211. Image hashes: mesh-nss/artifacts-final.sha256
+    (.itb 15040368 bytes, md5 0a54170ff4c330ccc5912b79084e75ce). Modules (md5, 12 chars): ath11k
+    19bde5d3ba3b, ath11k_ahb e00af43375c1, mac80211 4f98923ac8fc, qca-nss-drv 4c2950249bdd,
+    qca-nss-wifi-meshmgr 4814dfed3623. nss_packages is 0d970db in this build and in the v1.10 tree.
+  Pivot: read-back verified. Safe mode came up as designed (NSS core, dp, ECM, PPPoE loaded; ath11k,
+    ath11k_ahb, meshmgr held back; watchdog idle). wifi-load --deadman 300: mac80211 -> meshmgr ->
+    ath11k nss_offload=1 frame_mode=2 -> ath11k_ahb, nss init soc 203 and 215. PASS.
+
+  Method: same bench, same clients, same scripts, v1.10 NSS Wi-Fi initramfs first, then this image,
+  both RAM-booted, watchdog idle on both. Clients on hal, each in its own netns: USB BCM43569 on the
+  5 GHz AP (ch36 HE80, -30 dBm), PCIe QCA9377 on the 2.4 GHz AP (ch1 HE20, -21..-24 dBm), both
+  WPA2-PSK. iperf3 server: hal's wired dongle on lan2, so every flow crosses the router. 15 s TCP
+  per direction, bench CPU from /proc/stat over the run, ECM sampled mid-transfer. Two passes each.
+
+                                     v1.10 (pass 1 / pass 2)      cb3bf85 (pass 1 / pass 2)
+  5 GHz  100 pings to the router     100/100 avg 1.71 / 1.62 ms   100/100 avg 2.00 / 2.29 ms (min 1.1 on all)
+         TCP up / down, Mbit/s       357.8/359.6, 357.1/360.3     359.8/359.5, 359.7/359.8
+         bench CPU busy up / down    7.7/7.1, 8.0/8.4 %           5.9/5.9, 6.3/5.7 %
+         station inactive time       290360 / 175180 ms           100 / 100 ms
+  2.4 GHz 100 pings                  100/100 avg 3.01 / 3.30 ms   100/100 avg 3.01 / 3.25 ms
+         TCP up / down, Mbit/s       31.9/54.9, 32.3/56.3         37.4/55.1, 34.3/54.5
+         bench CPU busy up / down    6.7/5.5, 5.8/5.8 %           2.7/2.7, 2.5/3.0 %
+         station inactive time       295480 / 203680 ms           80 / 160 ms
+  ECM mid-transfer                   2 accelerated (pass 2)        2 accelerated, every run
+  NSS ipv4 hash hits, up/down run    5 GHz +490k/+500k,           5 GHz +494k/+514k,
+                                     2.4 GHz +62k/+83k (pass 2)    2.4 GHz +67-73k/+84-86k
+  dmesg hard-fail lines              0 / 0                        0 / 0
+  SUnreclaim before -> after, kB     39960->39912, 40064->40452   39776->39688, 39648->40036
+
+  Routed + NAT: both APs moved to 192.168.51.0/24 in their own zone with masquerade, lan->rt
+  forwarding; hal (lan) runs the iperf3 client, the Wi-Fi clients serve. conntrack mid-run:
+  src=192.168.1.50 dst=192.168.51.6x, reply dst=192.168.51.1 (SNAT). ECM 2 accelerated on both images.
+                                     v1.10                        cb3bf85
+         5 GHz to / from Wi-Fi       359.8 / 358.9 Mbit/s         359.4 / 360.4 Mbit/s
+         2.4 GHz to / from Wi-Fi     56.2 / 32.1 Mbit/s           55.2 / 41.6 Mbit/s
+
+  AP counters across 100 pings (#23):
+         v1.10:   AP netdev rx +0, tx +102; station rx/tx packets +0/+0; inactive 106 s -> 112 s
+         cb3bf85: AP netdev rx +100, tx +200; station +100/+100; inactive 590 ms -> 140 ms (5 GHz),
+                  9260 ms -> 220 ms (2.4 GHz). tx +200 is the known double count of host TX.
+
+  Firmware restart (hw-restart) with the client connected, seconds until the client passes traffic:
+         5 GHz:   v1.10 7,7 + 7,7,7            cb3bf85 7,7 + 7,7,7
+         2.4 GHz: v1.10 5,7 + 7,17,7,7,7,17,17,15      cb3bf85 7,17 + 7,17,7,7,7,17
+  Every slow 2.4 GHz case is the same sequence on both images: patch 960 disconnects the station
+  after the restart ("excessive missing ACKs", reason 34), the QCA9377 reassociates within about a
+  second, that 4-way handshake times out (hostapd deauths after 8 s, reason 15), and the client
+  waits out a 10 s back-off. Fast cases reassociate about 2 s after the kick and complete at once.
+  v1.10 4/10 slow, cb3bf85 3/8: pre-existing, not introduced by this branch. The 5 GHz client
+  (BCM43569) never hit it.
+
+  Reading: no regression in throughput, acceleration, recovery or kernel memory. The bench CPU
+  numbers are lower on cb3bf85, but the two images' userland differs (release image vs bench
+  profile), so no claim. 5 GHz pings to the router averaged 0.3-0.7 ms higher on cb3bf85 in both
+  passes with the same minimum; 2.4 GHz was identical. Not chased: two samples each, and no change
+  in this branch touches the host path of an AP vdev.
+  New log line from the branch: every NSS init of the second radio and every in-place recovery
+  prints "debugfs: Directory 'dbg_infra' with parent 'ath11k' already present!". The donor mesh code
+  creates one global dbg_infra directory per radio (ath11k_debugfs_nss_soc_create); debugfs ignores
+  the failed parent. Cosmetic.
+
+  #24 on cb3bf85: reloaded ath11k with frame_mode=1 -> "frame_mode 1 does not work with nss_offload,
+    using ethernet (2)", parameter reads 2, EAPOL-4WAY-HS-COMPLETED on both radios, 50/50 pings each.
+  #22 on cb3bf85: no instrumentation in the image; checked in the prepared source (above). The live
+    check was the instrumented build of the same source.
+
+  rd03v2-watchdog, full loop on cb3bf85 (enabled for the test, idle again after): armed with both
+    radios. hw-restart of b00a040.wifi with the AP and an SAE mesh on it: "b00a040.wifi restarted in
+    place: joined the encrypted mesh on phy3-mesh0 again", MESH-GROUP-STARTED 2 s later. hw-restart
+    of c000000.wifi (AP only): no action. No later decision, no reboot.
+
+  GATEWAY WINDOW 8 (04:52:07-04:53:55Z), open mesh, 5 GHz, cb3bf85: plink ESTAB, peer->bench 10/10,
+    10/10, 1400 B 10/10; bench side: peer authorized, inactive time 40 ms, mesh netdev counters
+    moving. The window's restart step used a ping flag the peer's busybox rejects, so it measured
+    nothing; window 9 redid it.
+  GATEWAY WINDOW 9 (04:55:20-04:57:05Z), same setup: 10/10 x3, NSS mesh decap rx 31 packets.
+    hw-restart of b00a040.wifi: 0/5 until ~43 s, 5/5 at 49 s, then 10/10; decap rx 31 -> 51; no
+    mpath update failures, no oops. (Build 2, window 6: ~30-40 s.)
+  Peer router in both windows: WAN up, 1.1.1.1 ~7 ms, DNS fine, the same stations on the same APs
+    and channels before and after, nothing left behind.
+
+  Afterwards: bench back on v1.10 from NAND. sysupgrade from the v1.10 NSS Wi-Fi initramfs with the
+  config backup taken before the first pivot (sha256 checked on both ends, NSS core healthy,
+  sysupgrade -T first). Came up on ubifs overlay, benchtest on both radios, nss_offload=1,
+  frame_mode=2, watchdog running, no oops. hal's Wi-Fi adapters back on their own profiles.
+
+ISSUES #25 AND #26 INVESTIGATED (27 Sep, day)
+  #26 fixed: experimental/wifi-nss/mesh/patches/999-993 creates dbg_infra once. Its two files work on
+    module-wide state (mesh_vaps, mpp_mode), so one directory per module is right; the donor created it
+    on every radio's NSS init and after every restart. Test build (the cb3bf85 tree plus 999-993) on
+    the bench: dbg_infra present once, and no "already present" line at the second radio's init or
+    after five in-place restarts.
+  #25 root cause: after an in-place firmware restart of the IPQ5018 radio, NSS does not service that
+    radio's REO rings for about 3.6-4.5 s. The client transmits normally (its TX counters rise with 0
+    retries and 0 failures: the AP hardware ACKs every frame), but NSS wifili reo_reaped stays flat,
+    then 19-23 frames come out in one burst together with the REO exception ring (err_ring_pkts +5/+6),
+    and traffic is normal from then on. Pings sent during the hold come back at the same moment
+    (RTT 3.7 s down to 0.2 s). Nothing is logged at the release. The REO aging registers read the same
+    before, at and after the restart (GEN_ENABLE 0x03fff35d, 40 ms on all four ACs), so this is not the
+    host's REO setup.
+    Why only some restarts cost 17 s: a client that joins again within about a second of the recovery
+    (because of patch 960's kick, reason 34, or a reason-7 deauth it gets right after the restart) starts
+    its 4-way handshake inside the hold. hostapd's default 4 tries give up after about 3 s (reason 15),
+    the held msg 2 frames come out after the peer is gone ("Desc addr zero", dropped by NSS), and the
+    client waits out a 10 s back-off. A client that joins about 2 s later gets its msg 2 through when the
+    hold ends (the "7 s" cases); one that joins 5 s later sees no hold at all. Without a restart, ten
+    960-style kicks in a row reconnected in 1 s each.
+    Instrumented ath11k (TEMP, bench only): the new peer is mapped and its REO queues requested within the
+    same millisecond as always; nothing from it reaches the host (no NSS delivery, no null-queue path)
+    until the hold ends. The kick is not the cause: with hostapd's low-ACK disconnect off and no kick, a
+    reason-7 disconnect at +0.27 s led to the same 17 s.
+    Not fixable in ath11k host code: the hold is inside NSS, and nothing the host logs or programs marks
+    its end. Mitigation, verified: `wpa_pairwise_update_count=8` for the AP (UCI:
+    list hostapd_bss_options 'wpa_pairwise_update_count=8') lets hostapd keep resending msg 1 for about
+    7 s, so the held msg 2 is answered. With 960's kick active: 4/4 restarts back in 7 s, including a
+    reason-34 early rejoin (5 rounds of msg 1/2, then msg 3), the case that took 17 s in every earlier run.
+    Shipped later that day as a default in NSS Wi-Fi images, by the user's choice: a uci-defaults
+    script (experimental/wifi-nss/files) adds it once to every AP interface without an explicit
+    value and records that in /etc/config/rd03v2. Tested against a mock uci: no Wi-Fi config yet
+    (exits 1, runs again next boot); open and WPA APs get it, STA and an explicit user value are
+    left alone, other options are kept; after a user removes it, a rerun changes nothing.
+  Side finding, bench stability: hw-restarts repeated every 35-90 s crashed the Q6 root PD twice (after 9
+    and after 6 restarts on one boot; v1.10 on NAND and this branch alike). The port's respawn suppression
+    then left both radios' user PDs down until a reboot, as designed (the watchdog reboots in that state;
+    it was idle for the tests). Earlier runs today did 13-15 restarts on one boot without it.
+  Bench afterwards: v1.10 on NAND again (sysupgrade with the pre-work config backup), watchdog running.

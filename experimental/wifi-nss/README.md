@@ -20,3 +20,9 @@ default build; a real plain-NSS build is pending bench confirmation.
 doc).
 The complete pinned series is imported only when `WIFI_NSS_DONOR` is supplied
 with `NSS=1`; no donor binaries are reused.
+
+`files/` holds image files that only NSS Wi-Fi builds carry, laid out like the
+OpenWrt tree. Right now that is one uci-defaults script. It adds
+`wpa_pairwise_update_count=8` to the AP interfaces, because after a Wi-Fi
+firmware restart NSS holds received frames for about 4 s, and hostapd's
+default 4 tries give up on a client that rejoins inside that time (#25).

@@ -1,0 +1,40 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: nss: unlink only the freed vap from mesh_vaps
+
+ath11k_nss_mesh_vdev_free() should drop the vap it frees from the global
+mesh_vaps list, but it walks the list and unlinks every entry. With mesh
+on two radios, taking one down also drops the other radio's link vap,
+which is still in use. dbg_infra/links then lists only the re-created
+link, and nss_mesh/dbg_infra/assoc_link fails for the other one with
+"unable to find if_num".
+
+Seen on IPQ5018 + QCN6122 with a mesh interface on each radio: after
+`wifi up radio1`, links showed only radio1's new link id; radio0's link
+was gone while its mesh interface stayed up.
+
+mesh_vaps only backs that debug tooling, so the data path is unaffected.
+
+Unlink only this vap's own entry. list_del_init() keeps a second unlink
+harmless.
+---
+--- a/drivers/net/wireless/ath/ath11k/nss.c
++++ b/drivers/net/wireless/ath/ath11k/nss.c
+@@ -2597,7 +2597,7 @@
+ 	struct ath11k *ar = arvif->ar;
+ 	struct ath11k_nss_mpath_entry *mpath_entry, *mpath_tmp;
+ 	struct ath11k_nss_mpp_entry *mpp_entry, *mpp_tmp;
+-	struct arvif_nss *nss = &arvif->nss, *nss_entry, *nss_tmp;
++	struct arvif_nss *nss = &arvif->nss;
+ 	LIST_HEAD(mpath_local_entry);
+ 	LIST_HEAD(mpp_local_entry);
+ 	nss_tx_status_t status;
+@@ -2622,8 +2622,7 @@
+ 		kfree(mpp_entry);
+ 	}
+ 
+-	list_for_each_entry_safe(nss_entry, nss_tmp, &mesh_vaps, list)
+-		list_del(&nss_entry->list);
++	list_del_init(&nss->list);
+ 
+ 	status = nss_dynamic_interface_dealloc_node(
+ 						arvif->nss.if_num,

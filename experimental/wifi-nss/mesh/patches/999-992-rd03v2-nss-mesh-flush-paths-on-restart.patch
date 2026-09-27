@@ -1,0 +1,31 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: mac80211: flush offloaded mesh paths on restart
+
+With NSS mesh offload the driver keeps the mesh path table in NSS. A
+firmware restart recreates the NSS mesh object with an empty table, but
+mac80211 keeps its own paths. It only sends ADD when it creates a path,
+so everything after the restart is an UPDATE for an entry NSS no longer
+has ("failed to update mpath entry", wifi_mesh_not_found). The
+encapsulation path then has no route and the bench stops transmitting
+to its mesh peer: after a hw-restart, 0/10 pings three times in a row.
+
+When a mesh interface is reconfigured on a device that offloads mesh
+paths, flush its path tables. The paths are rediscovered and re-added.
+---
+--- a/net/mac80211/util.c
++++ b/net/mac80211/util.c
+@@ -2131,6 +2131,14 @@
+ 			}
+ 			fallthrough;
+ 		case NL80211_IFTYPE_MESH_POINT:
++			/* A driver that offloads the mesh path table rebuilds it
++			 * empty on restart, so later UPDATEs of our paths fail and
++			 * the peer becomes unreachable. Flush ours so the paths are
++			 * rediscovered and added to the driver again.
++			 */
++			if (sdata->vif.type == NL80211_IFTYPE_MESH_POINT &&
++			    ieee80211_hw_check(&local->hw, SUPPORTS_MESH_NSS_OFFLOAD))
++				mesh_path_flush_by_iface(sdata);
+ 			if (sdata->vif.bss_conf.enable_beacon) {
+ 				changed |= BSS_CHANGED_BEACON |
+ 					   BSS_CHANGED_BEACON_ENABLED;

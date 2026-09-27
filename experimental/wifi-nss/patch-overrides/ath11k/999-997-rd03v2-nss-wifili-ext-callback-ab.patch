@@ -1,0 +1,33 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: nss: pass the real ath11k_base to the wifili ext callback
+
+999-904 wrapped ath11k_nss_wifili_ext_callback_fn() to avoid a function
+pointer cast, but it gets ab back with netdev_priv(netdev). The "netdev"
+is not a net_device: ath11k_nss_init() registers the wifili interface
+with ab itself, and qca-nss-drv hands that pointer back unchanged
+(nss_core.c: ext_cb(ndev, ...), ndev being the registered pointer).
+netdev_priv() therefore points into the middle of ab, and the callback
+ran with a bogus ab.
+
+Only the TKIP MIC-error branch acts on it: ath11k_nss_process_mic_error()
+looks up peers and takes locks through ab. The other packet types reach
+an ath11k_dbg(), which reads ab only in ATH11K_DEBUG builds; on a busy
+channel that is about ten invalid-peer broadcasts a second.
+
+Use the pointer as registered. Issue #22.
+---
+--- a/drivers/net/wireless/ath/ath11k/nss.c
++++ b/drivers/net/wireless/ath/ath11k/nss.c
+@@ -525,10 +525,9 @@
+ 						   struct sk_buff *skb,
+ 						   struct napi_struct *napi)
+ {
+-	// Retrieve the ath11k_base from the net_device's private data
+-	struct ath11k_base *ab = (struct ath11k_base *)netdev_priv(netdev);
++	/* nss_register_wifili_if() was given ab itself as the "netdev" */
++	struct ath11k_base *ab = (struct ath11k_base *)netdev;
+ 
+-	// Call the original function with the retrieved ath11k_base
+ 	ath11k_nss_wifili_ext_callback_fn(ab, skb, napi);
+ }
+ 

@@ -1,0 +1,86 @@
+#!/bin/sh
+# Bench-only (issue #21 mesh experiment): load the Wi-Fi half that
+# /etc/modules.conf holds back.
+#
+# The safe boot blacklists ath11k_ahb, ath11k and qca-nss-wifi-meshmgr, so the
+# NSS core, ECM and PPPoE load exactly as in v1.10 (the proven wired path)
+# while the new mesh code stays out. modprobe refuses blacklisted modules and
+# insmod does not resolve dependencies, so this loads the chain in order:
+#
+#   mac80211 (modprobe: not blacklisted, pulls compat + cfg80211)
+#   -> qca-nss-wifi-meshmgr -> ath11k (+ its /etc/modules.d options)
+#   -> ath11k_ahb, all by insmod
+#
+#   wifi-load [--deadman SECONDS]
+#
+# --deadman N  Reboot after N seconds unless /tmp/wifi-load.ok exists by
+#              then. The Wi-Fi half is blacklisted, so that reboot comes up
+#              in safe mode. Touch the file once the box is confirmed healthy.
+#
+# Run after boot, it also does `wifi up`; the boot one-shot runs before
+# network (S20), which configures the radios itself.
+# Each step goes to /tmp/wifi-load.log and to syslog (tag wifi-load).
+
+LOG=/tmp/wifi-load.log
+log() {
+	echo "$(date +%T) $*" >> "$LOG"
+	logger -t wifi-load "$*"
+}
+
+usage() {
+	echo "usage: wifi-load [--deadman SECONDS]" >&2
+	exit 2
+}
+
+deadman=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--deadman)
+		# A typo must not turn into an unprotected load.
+		case "${2:-}" in ''|*[!0-9]*) usage ;; esac
+		[ "$2" -gt 0 ] || usage
+		deadman=$2; shift ;;
+	*) usage ;;
+	esac
+	shift
+done
+
+if [ "$deadman" -gt 0 ]; then
+	# One dead-man at a time. The ok-file is shared, so an earlier run's
+	# timer would otherwise fire on its own deadline once it is removed.
+	[ -f /tmp/wifi-load.deadman.pid ] && kill "$(cat /tmp/wifi-load.deadman.pid)" 2>/dev/null
+	rm -f /tmp/wifi-load.ok
+	setsid sh -c "echo \$\$ > /tmp/wifi-load.deadman.pid; sleep $deadman; [ -e /tmp/wifi-load.ok ] || { logger -t wifi-load 'dead-man: no /tmp/wifi-load.ok after ${deadman}s, rebooting into safe mode'; sync; reboot -f; }" \
+		</dev/null >/dev/null 2>&1 &
+	log "dead-man armed: ${deadman}s (touch /tmp/wifi-load.ok to keep this boot)"
+fi
+
+loaded() {
+	grep -q "^$(echo "$1" | tr - _) " /proc/modules
+}
+
+load() {  # load <module> [params...]
+	if loaded "$1"; then
+		log "$1 already loaded"
+	elif insmod "$@"; then
+		log "insmod $*: ok"
+	else
+		log "insmod $*: FAILED ($?)"
+		return 1
+	fi
+}
+
+modprobe mac80211 && log "modprobe mac80211: ok" || log "modprobe mac80211: FAILED"
+# ath11k's options live in its /etc/modules.d entry, e.g.
+# "ath11k nss_offload=1 frame_mode=2"; kmodloader would apply them, insmod won't.
+opts=$(sed -n 's/^ath11k //p' /etc/modules.d/ath11k* 2>/dev/null | head -1)
+load qca-nss-wifi-meshmgr &&
+	load ath11k $opts &&
+	load ath11k_ahb
+
+if pgrep -x netifd >/dev/null; then
+	log "network is up: wifi up"
+	wifi up
+fi
+
+log "done; loaded: $(grep -o -E '^(qca_nss_wifi_meshmgr|ath11k[a-z_]*|mac80211|cfg80211) ' /proc/modules | tr -d ' ' | tr '\n' ' ')"
