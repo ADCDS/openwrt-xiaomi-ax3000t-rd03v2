@@ -288,3 +288,15 @@ SAE RE-JOIN AFTER AN IN-PLACE RESTART: WATCHDOG RULE (27 Sep)
     "c000000.wifi restarted in place: joined the encrypted mesh on phy0-mesh0 again"; the next sample
     was quiet. syd re-peered, pings 0, 0, 6/10, 10/10. Without it, SAE stayed at 0 until a manual
     reload.
+
+GATEWAY 5 GHz WINDOW 7: SAE (02:40:20-02:42:56Z)
+  The peer router ran a temporary standalone wpa_supplicant for the test mesh interface only (SAE,
+  5180 MHz HE80, no country= so the regulatory domain was untouched). The dead-man teardown killed it
+  too; nothing was left behind.
+  SAE plink ESTAB, -43 dBm. Peer->bench 10/10, 10/10, 1400 B 10/10 at 2.7 ms. radio1 NSS mesh decap
+    0 -> 32; peer authorized; HE-MCS 11, 2 streams, 80 MHz. => SAE mesh with NSS offload works on 5 GHz.
+  hw-restart of b00a040.wifi: SAE dead (0/10, 0/10), as on 2.4 GHz. The watchdog's re-join code
+    (sourced on the bench) found [b00a040.wifi] and reloaded phy1-mesh0. 10/10 x3 within ~10 s.
+    So the rule works with an mt76 peer, which does enforce replay protection.
+  Peer router after teardown: WAN/DNS fine, the uplink station unchanged. One phone had roamed from
+    the 2.4 GHz AP to the 5 GHz AP mid-window (client-initiated, 2 s, DHCP renewed); no client was lost.
