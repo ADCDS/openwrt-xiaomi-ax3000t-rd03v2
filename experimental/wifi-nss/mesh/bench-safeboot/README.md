@@ -41,10 +41,13 @@ where the NSS core itself is the risk, revisit this.
 
 - **By hand, after boot:** `wifi-load --deadman 300`, then `touch /tmp/wifi-load.ok`
   once the box is healthy. Otherwise the dead-man reboots it back into safe
-  mode. It runs `wifi up` itself.
+  mode. It runs `wifi up` itself. The value must be a positive number of
+  seconds, or it refuses to load anything. A second run replaces the first
+  run's dead-man instead of leaving it to fire on its old deadline.
 - **For one boot:** `fw_setenv rd03v2_wifi_arm 1`, then reboot.
   `/etc/init.d/wifi-oneshot` (S11, where autoload would run) disarms and then
-  loads, with a 300 s dead-man. A crash lands the next boot in safe mode.
+  loads, with a 300 s dead-man. A crash lands the next boot in safe mode. If the
+  flag does not read back as cleared, it loads nothing.
 
 Steps are logged to `/tmp/wifi-load.log` and syslog (`wifi-load`,
 `wifi-oneshot`).
