@@ -11,7 +11,7 @@ would therefore loop before `rc.local` ever ran, until U-Boot stopped with
 Build with it:
 
 ```sh
-NSS=1 WIFI_NSS_MESH=1 WIFI_NSS_DONOR="$(realpath ../wifi-nss-donor)" KMODS=0 \
+NSS=1 WIFI_NSS_DONOR="$(realpath ../wifi-nss-donor)" KMODS=0 \
   PROFILE="$PWD/experimental/wifi-nss/mesh/bench-safeboot" bash build.sh
 ```
 
