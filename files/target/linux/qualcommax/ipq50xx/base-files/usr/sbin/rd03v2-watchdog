@@ -42,7 +42,10 @@
 # (patch 960) reports them as lost and hostapd disassociates them, so they
 # rejoin with fresh keys. That needs hostapd's disassoc_low_ack, which is on
 # by default; with it off they stay associated, and a client that enforces
-# replay protection stays deaf (docs/q6-firmware-crash.md).
+# replay protection stays deaf (docs/q6-firmware-crash.md). An encrypted 802.11s
+# mesh on such a radio is re-joined here instead (its wpa_supplicant interface
+# is reloaded): 960 does not cover mesh peers, and they keep the link up while
+# dropping what the radio sends.
 #
 # Reboot gaps use no wall clock - the box has no RTC and often no NTP. They are
 # counted in uptime and in reboots: no reboot in the first 10 min of uptime;
@@ -943,6 +946,57 @@ respawn_suppressed() {
 	[ -n "$rs_old" ] && [ "$rs_now" -gt "$rs_old" ]
 }
 
+# --- encrypted mesh after an in-place restart ---------------------------------
+
+# When ath11k restarts a radio's firmware in place (its own recovery, or step 1
+# above), mac80211 installs every key again, but the firmware counts CCMP packet
+# numbers from zero. The mesh peers stay established and drop what the radio
+# sends. A new peering is not enough; the mesh has to be joined again with new
+# group keys. Reloading the mesh's wpa_supplicant interface does that and
+# leaves the radio's APs alone.
+
+# In-place recoveries ath11k has logged, as "device count" lines.
+recoveries() {
+	dmesg 2>/dev/null | sed -n 's/.*ath11k \([^ :]*\): pdev [0-9]* successfully recovered.*/\1/p' \
+		| sort | uniq -c | awk '{ print $2, $1 }'
+}
+
+# Take the recovery counts as they are now, without acting on them.
+recoveries_baseline() {
+	recoveries > "$STATE_DIR/recoveries"
+}
+
+# Devices restarted in place since the last sample. A count that went down is
+# the kernel log wrapping: taken as the new baseline.
+recovered_devs() {
+	rd_now=$(recoveries)
+	echo "$rd_now" | while read -r rd_dev rd_n; do
+		[ -n "$rd_dev" ] || continue
+		rd_old=$(awk -v d="$rd_dev" '$1 == d { print $2 }' "$STATE_DIR/recoveries" 2>/dev/null)
+		[ "$rd_n" -gt "${rd_old:-0}" ] && echo "$rd_dev"
+	done
+	echo "$rd_now" > "$STATE_DIR/recoveries"
+}
+
+# iface_conf IFACE KEY: a key of the interface's configuration, as netifd has it.
+iface_conf() {
+	bounded 10 ubus call network.wireless status | \
+		jsonfilter -e "@[*].interfaces[@.ifname=\"$1\"].config.$2" 2>/dev/null
+}
+
+# Join the encrypted meshes on radio DEV again.
+mesh_rejoin() {
+	for mr_ifc in $(dev_ifaces "$1"); do
+		[ "$(iface_conf "$mr_ifc" mode)" = mesh ] || continue
+		case "$(iface_conf "$mr_ifc" encryption)" in ''|none) continue ;; esac
+		if bounded 10 ubus call "wpa_supplicant.$mr_ifc" reload > /dev/null; then
+			log "$1 restarted in place: joined the encrypted mesh on $mr_ifc again"
+		else
+			log "$1 restarted in place: could not reload the mesh on $mr_ifc"
+		fi
+	done
+}
+
 # --- main --------------------------------------------------------------------
 
 # count_sample FILE BAD : bump or clear a consecutive-sample counter; prints it.
@@ -989,6 +1043,7 @@ main() {
 	done
 	arm_expected
 	suppressions_baseline
+	recoveries_baseline
 	if [ -z "$(expected phys)" ]; then
 		log "no radio registered after boot and none configured; watching remoteproc state only"
 	elif [ -z "$(phy_devs)" ]; then
@@ -1017,6 +1072,10 @@ main() {
 			after_incident
 			continue
 		fi
+
+		for rd_dev in $(recovered_devs); do
+			mesh_rejoin "$rd_dev"
+		done
 
 		# A radio that turned up after arming is expected from now on.
 		# shellcheck disable=SC2046 # one device per word
