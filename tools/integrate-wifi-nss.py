@@ -85,6 +85,9 @@ DISABLED = (
 # message and the mesh manager's interface create on both radios. The fixes the
 # donor code needs are in experimental/wifi-nss/mesh/patches (see its README).
 MESH_PATCHES = REPO / "experimental/wifi-nss/mesh/patches"
+# Image files only NSS Wi-Fi builds carry, laid out like the OpenWrt tree:
+# the uci-defaults script that gives the WPA 4-way handshake 8 tries (#25).
+IMAGE_FILES = REPO / "experimental/wifi-nss/files"
 
 
 def replace_once(text, old, new):
@@ -239,6 +242,7 @@ endif
     shutil.copytree(REPO / "experimental/wifi-nss/patch-overrides", target, dirs_exist_ok=True)
     if "mesh" in groups:
         shutil.copytree(MESH_PATCHES, target / "mesh")
+    shutil.copytree(IMAGE_FILES, tree, dirs_exist_ok=True)
     (package / "Makefile").write_text(mk)
     (package / "ath.mk").write_text(ath)
     with (tree / ".config").open("a") as config:
@@ -247,8 +251,11 @@ endif
         config.writelines(f"# CONFIG_{key} is not set\n" for key in DISABLED)
     manifest = {str(p.relative_to(package)): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted(target.rglob("*.patch"))}
+    image_files = {str(p.relative_to(IMAGE_FILES)): hashlib.sha256(p.read_bytes()).hexdigest()
+                   for p in sorted(IMAGE_FILES.rglob("*")) if p.is_file()}
     (tree / "wifi-nss-integration.json").write_text(json.dumps({
         "donor_commit": DONOR_REV, "status": "experimental", "patches": manifest,
+        "image_files": image_files,
         "memory_profile": f"NSS {MEM_PROFILE}, ath11k SMALLBUFFERS, existing firmware memory mode",
         "validation_reference": "docs/nss-wifi-validation.md",
         "mesh_offload": "802.11s, fixes in experimental/wifi-nss/mesh/patches (issue #21)",

@@ -27,8 +27,10 @@ priorities 0/1 to the board's `wifi`/`wifi1` labels. It tracks memory-profile
 configuration changes in the NSS driver's package stamp. It also builds 802.11s
 mesh offload (`ATH11K_NSS_MESH_SUPPORT` and the NSS Wi-Fi mesh manager) and
 applies the fixes in `experimental/wifi-nss/mesh/patches` after every other
-patch; see [its README](../experimental/wifi-nss/mesh/README.md). Generic mac80211
-redirect remains disabled. ath11k is compiled with `-DNSS_FIRMWARE_VERSION_12_5`,
+patch; see [its README](../experimental/wifi-nss/mesh/README.md). NSS Wi-Fi
+images also carry `experimental/wifi-nss/files`: a uci-defaults script that
+gives the WPA 4-way handshake 8 tries (see "Regression check against v1.10").
+Generic mac80211 redirect remains disabled. ath11k is compiled with `-DNSS_FIRMWARE_VERSION_12_5`,
 like qca-nss-drv and ECM, so it reads NSS messages with the same struct layout
 (without it, per-peer stats were misparsed, see below). The existing firmware
 memory mode is retained.
@@ -424,8 +426,13 @@ restart, and nothing the host sees marks the end of the hold, so ath11k cannot
 fix it. hostapd's `wpa_pairwise_update_count=8`
 (`list hostapd_bss_options 'wpa_pairwise_update_count=8'` on the wifi-iface)
 keeps msg 1 going for about 7 s. With it, 4 of 4 restarts were back in 7 s,
-including the early-rejoin case that took 17 s every time before. It is not
-yet set by default.
+including the early-rejoin case that took 17 s every time before.
+
+NSS Wi-Fi images set it by default. A uci-defaults script
+(`experimental/wifi-nss/files/.../uci-defaults/99-rd03v2-nss-wifi-4way-retries`)
+adds it once to every AP interface that doesn't set it already. It then
+records that it ran in `/etc/config/rd03v2`, so removing the option later
+stays removed across upgrades. AP interfaces created later don't get it.
 
 Changes that are fixes:
 

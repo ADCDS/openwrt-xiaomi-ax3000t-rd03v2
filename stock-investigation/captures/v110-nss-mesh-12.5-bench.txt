@@ -448,7 +448,11 @@ ISSUES #25 AND #26 INVESTIGATED (27 Sep, day)
     list hostapd_bss_options 'wpa_pairwise_update_count=8') lets hostapd keep resending msg 1 for about
     7 s, so the held msg 2 is answered. With 960's kick active: 4/4 restarts back in 7 s, including a
     reason-34 early rejoin (5 rounds of msg 1/2, then msg 3), the case that took 17 s in every earlier run.
-    Not shipped as a default yet (the user's call).
+    Shipped later that day as a default in NSS Wi-Fi images, by the user's choice: a uci-defaults
+    script (experimental/wifi-nss/files) adds it once to every AP interface without an explicit
+    value and records that in /etc/config/rd03v2. Tested against a mock uci: no Wi-Fi config yet
+    (exits 1, runs again next boot); open and WPA APs get it, STA and an explicit user value are
+    left alone, other options are kept; after a user removes it, a rerun changes nothing.
   Side finding, bench stability: hw-restarts repeated every 35-90 s crashed the Q6 root PD twice (after 9
     and after 6 restarts on one boot; v1.10 on NAND and this branch alike). The port's respawn suppression
     then left both radios' user PDs down until a reboot, as designed (the watchdog reboots in that state;
