@@ -78,6 +78,19 @@ DISABLED = (
     "NSS_MEM_PROFILE_HIGH",
     "NSS_MEM_PROFILE_" + ("MEDIUM" if MEM_PROFILE == "LOW" else "LOW"),
 )
+# Bench experiment (issue #21): 802.11s mesh offload, WIFI_NSS_MESH=1, on the
+# 12.5 firmware. On this board 12.5 accepts ath11k's mesh capability message and
+# the mesh manager's interface create on both radios. The fixes the donor code
+# needs are in experimental/wifi-nss/mesh/patches (see its README). Unset,
+# nothing below changes: same config lists, same generated files, same patch set.
+MESH = os.environ.get("WIFI_NSS_MESH", "0") == "1"
+MESH_PATCHES = REPO / "experimental/wifi-nss/mesh/patches"
+if MESH:
+    ENABLED += (
+        "ATH11K_NSS_MESH_SUPPORT", "NSS_DRV_WIFI_MESH_ENABLE",
+        "PACKAGE_kmod-qca-nss-drv-wifi-meshmgr", "PACKAGE_MAC80211_MESH",
+    )
+    DISABLED = tuple(key for key in DISABLED if key != "ATH11K_NSS_MESH_SUPPORT")
 
 
 def replace_once(text, old, new):
@@ -125,6 +138,16 @@ def integrate(tree, donor):
 \t\tdefault n
 
 '''
+    if MESH:
+        # Unlike the donor's ath.mk, this does not `select` the 11.4 firmware
+        # (a choice member): on this board 12.5 serves mesh offload.
+        options += '''\tconfig ATH11K_NSS_MESH_SUPPORT
+\t\tbool "Experimental RD03v2 ath11k NSS 802.11s mesh offload"
+\t\tdepends on ATH11K_NSS_SUPPORT
+\t\tselect PACKAGE_MAC80211_MESH
+\t\tdefault n
+
+'''
     mk = replace_once(mk, "  if PACKAGE_kmod-mac80211\n", options + "  if PACKAGE_kmod-mac80211\n")
     mk = replace_once(mk, "MAKE_OPTS:= \\\n", """ifdef CONFIG_ATH11K_NSS_SUPPORT
 \tIREMAP_CFLAGS+=-I$(STAGING_DIR)/usr/include/qca-nss-drv -I$(STAGING_DIR)/usr/include/qca-nss-clients
@@ -157,13 +180,29 @@ MAKE_OPTS:= \\
         "PKG_NAME:=mac80211\nSCAN_DEPS = *.mk\n",
     )
     anchor = "\t$(if $(QUILT),touch $(PKG_BUILD_DIR)/.quilt_used)"
+    groups = ("subsys", "ath10k", "ath11k")
+    # Mesh-only fixes go last, so they may patch mac80211 and ath11k alike.
+    if MESH and any(MESH_PATCHES.glob("*.patch")):
+        groups += ("mesh",)
     series = "ifdef CONFIG_ATH11K_NSS_SUPPORT\n" + "".join(
         f"\t$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/nss/{group},nss/{group}/)\n"
-        for group in ("subsys", "ath10k", "ath11k")) + "endif\n"
+        for group in groups) + "endif\n"
     mk = replace_once(mk, anchor, series + anchor)
-    ath = replace_once(ath, "\tCONFIG_ATH_USER_REGD\n", "\tCONFIG_ATH_USER_REGD \\\n\tCONFIG_ATH11K_NSS_SUPPORT\n")
-    ath = replace_once(ath, "config-$(CONFIG_ATH11K_THERMAL) += ATH11K_THERMAL\n", "config-$(CONFIG_ATH11K_THERMAL) += ATH11K_THERMAL\nconfig-$(CONFIG_ATH11K_NSS_SUPPORT) += ATH11K_NSS_SUPPORT\n")
-    ath = replace_once(ath, "+ATH11K_THERMAL:kmod-thermal +kmod-qcom-qmi-helpers\n", "+ATH11K_THERMAL:kmod-thermal +kmod-qcom-qmi-helpers \\\n  +ATH11K_NSS_SUPPORT:kmod-qca-nss-drv \\\n  +@(ATH11K_NSS_SUPPORT):NSS_DRV_WIFIOFFLOAD_ENABLE \\\n  +@(ATH11K_NSS_SUPPORT):NSS_DRV_WIFI_EXT_VDEV_ENABLE\n")
+    config_deps = "\tCONFIG_ATH_USER_REGD \\\n\tCONFIG_ATH11K_NSS_SUPPORT\n"
+    config_lines = "config-$(CONFIG_ATH11K_NSS_SUPPORT) += ATH11K_NSS_SUPPORT\n"
+    nss_deps = ("  +ATH11K_NSS_SUPPORT:kmod-qca-nss-drv \\\n"
+                "  +@(ATH11K_NSS_SUPPORT):NSS_DRV_WIFIOFFLOAD_ENABLE \\\n"
+                "  +@(ATH11K_NSS_SUPPORT):NSS_DRV_WIFI_EXT_VDEV_ENABLE\n")
+    if MESH:
+        # ath11k calls the mesh manager's exported API directly, so it is a
+        # hard dependency; it also stages <nss_wifi_meshmgr.h> before ath11k
+        # compiles (the include path is already in IREMAP_CFLAGS above).
+        config_deps = config_deps[:-1] + " \\\n\tCONFIG_ATH11K_NSS_MESH_SUPPORT\n"
+        config_lines += "config-$(CONFIG_ATH11K_NSS_MESH_SUPPORT) += ATH11K_NSS_MESH_SUPPORT\n"
+        nss_deps = nss_deps[:-1] + " \\\n  +ATH11K_NSS_MESH_SUPPORT:kmod-qca-nss-drv-wifi-meshmgr\n"
+    ath = replace_once(ath, "\tCONFIG_ATH_USER_REGD\n", config_deps)
+    ath = replace_once(ath, "config-$(CONFIG_ATH11K_THERMAL) += ATH11K_THERMAL\n", "config-$(CONFIG_ATH11K_THERMAL) += ATH11K_THERMAL\n" + config_lines)
+    ath = replace_once(ath, "+ATH11K_THERMAL:kmod-thermal +kmod-qcom-qmi-helpers\n", "+ATH11K_THERMAL:kmod-thermal +kmod-qcom-qmi-helpers \\\n" + nss_deps)
     ath = replace_once(ath, "  PROVIDES:=kmod-ath11k\n", """ifdef CONFIG_ATH11K_NSS_SUPPORT
   AUTOLOAD:=$(call AutoProbe,ath11k)
   MODPARAMS.ath11k:=nss_offload=1 frame_mode=2
@@ -205,6 +244,8 @@ endif
     # The firmware memory mode still comes from the device tree.
     shutil.copytree(donor / "package/kernel/mac80211/patches/nss", target)
     shutil.copytree(REPO / "experimental/wifi-nss/patch-overrides", target, dirs_exist_ok=True)
+    if "mesh" in groups:
+        shutil.copytree(MESH_PATCHES, target / "mesh")
     (package / "Makefile").write_text(mk)
     (package / "ath.mk").write_text(ath)
     with (tree / ".config").open("a") as config:
@@ -217,8 +258,10 @@ endif
         "donor_commit": DONOR_REV, "status": "experimental", "patches": manifest,
         "memory_profile": f"NSS {MEM_PROFILE}, ath11k SMALLBUFFERS, existing firmware memory mode",
         "validation_reference": "docs/nss-wifi-validation.md",
+        **({"mesh_offload": "experimental, bench only (issue #21)"} if MESH else {}),
     }, indent=2) + "\n")
-    print(f"Integrated experimental NSS Wi-Fi with existing SMALLBUFFERS and NSS {MEM_PROFILE}.")
+    print(f"Integrated experimental NSS Wi-Fi with existing SMALLBUFFERS and NSS {MEM_PROFILE}"
+          + (", plus experimental 802.11s mesh offload." if MESH else "."))
 
 
 if __name__ == "__main__":
