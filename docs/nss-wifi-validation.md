@@ -24,8 +24,14 @@ connections at 512 per IP family — note stock RD03v2 runs exactly that 512, so
 the cap alone is not the argument for MEDIUM; see the rationale in
 `tools/integrate-wifi-nss.py`), and assigns radio
 priorities 0/1 to the board's `wifi`/`wifi1` labels. It tracks memory-profile
-configuration changes in the NSS driver's package stamp. Mesh and generic
-mac80211 redirect remain disabled. The existing firmware memory mode is retained.
+configuration changes in the NSS driver's package stamp. It also builds 802.11s
+mesh offload (`ATH11K_NSS_MESH_SUPPORT` and the NSS Wi-Fi mesh manager) and
+applies the fixes in `experimental/wifi-nss/mesh/patches` after every other
+patch; see [its README](../experimental/wifi-nss/mesh/README.md). Generic mac80211
+redirect remains disabled. ath11k is compiled with `-DNSS_FIRMWARE_VERSION_12_5`,
+like qca-nss-drv and ECM, so it reads NSS messages with the same struct layout
+(without it, per-peer stats were misparsed, see below). The existing firmware
+memory mode is retained.
 
 Four donor patch overrides preserve the device's small-buffer definitions and
 rebase surrounding contexts; original patch authorship is retained. Two RD03v2
@@ -33,7 +39,11 @@ patches follow the series: `999-998` moves the NSS teardown in firmware-crash
 recovery after the interrupt quiesce added by `953` (the donor hunk lands before
 it) and clears freed tx-descriptor addresses so a failed re-setup cannot free
 them twice; `999-999` is the QCN6122 register fix below. `999-996` keeps
-`sta_state` from returning with `conf_mutex` held, and the other
+`sta_state` from returning with `conf_mutex` held. `999-995` makes NSS offload
+use Ethernet frame mode: with `frame_mode=1` no client got past the WPA 4-way
+handshake. `999-997` hands the wifili exception callback the real
+`ath11k_base` (the donor wrapper passed a pointer into the middle of it). The
+other
 `999-999-rd03v2-*` patches are described under "Crash recovery with offload on"
 and "ECM VLAN tags for Wi-Fi over a VLAN-aware bridge". The donor
 series itself is fetched from the pinned source, not re-attributed here.
@@ -54,6 +64,30 @@ the [RAM-initramfs pivot](no-uart-reflash.md); this feature does not change the
 board's flash procedure. Do not mix kernel modules from different builds.
 
 ## Fixes and evidence
+
+### NSS peer stats layout, wifili exception pointer, frame mode (issues #22-#24)
+
+- **Peer stats layout (#23).** qca-nss-drv and ECM are built with
+  `-DNSS_FIRMWARE_VERSION_12_5`, and ath11k was not. `struct
+  nss_wifili_rx_ctrl_stats` and the retry stats carry fields that exist only
+  under that define, so every per-peer entry the firmware sends is 16 bytes
+  longer than ath11k's view. Every entry after the first was misread: its
+  `peer_id` did not match, and its stats were dropped. Those stats are on by
+  default with `nss_offload=1`, and they are the only source of a client's RX
+  counters and of mac80211's `last_rx`.
+  - Bench, before: after 50 pings, the station's inactive time read 64 s and
+    the AP netdev counted 0 RX packets.
+  - After: inactive time 140 ms, and exactly one RX packet per ping.
+- **Wifili exception pointer (#22).** The donor wrapper recovered `ab` with
+  `netdev_priv()` from a pointer that is `ab` itself. On the bench, the
+  callback now resolves `ab` to the right device (`b00a040.wifi`), from live
+  invalid-peer traffic. Only the TKIP MIC-error branch dereferenced the bad
+  pointer.
+- **Frame mode (#24).** With `frame_mode=1`, both radios' clients associated
+  but never finished WPA (reason 15). NSS counted nothing received from them,
+  not even as unauthorized drops. With NSS offload, ath11k now warns and uses
+  `frame_mode=2`: the same client then completed the handshake and answered
+  50/50 pings.
 
 ### QCN6122 register addressing
 
@@ -386,6 +420,6 @@ functional check, not a throughput benchmark - the three clients span
 8.5 to 201 Mbit/s on the same path (85.2 up / 86.9 down, 8.5 / 9.4, and
 70.6 / 201 Mbit/s), a 24x range that measures the clients, not a NAT ceiling), runtime IPv6 acceleration,
 long-duration or many-client
-load, guest isolation, mesh and recovery under NSS Wi-Fi load (VLAN-aware
+load, guest isolation, recovery under NSS Wi-Fi load (VLAN-aware
 bridges: see patch 0029 above). The original stock/NSS-without-Wi-Fi whole-router hang is not proven to
 have the same cause as the QCN6122 NSS peer-join crash diagnosed here.

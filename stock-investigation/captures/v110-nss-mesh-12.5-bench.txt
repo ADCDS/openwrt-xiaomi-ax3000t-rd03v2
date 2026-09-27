@@ -300,3 +300,29 @@ GATEWAY 5 GHz WINDOW 7: SAE (02:40:20-02:42:56Z)
     So the rule works with an mt76 peer, which does enforce replay protection.
   Peer router after teardown: WAN/DNS fine, the uplink station unchanged. One phone had roamed from
     the 2.4 GHz AP to the 5 GHz AP mid-window (client-initiated, 2 s, DHCP renewed); no client was lost.
+
+ISSUES #22-#24 FIXED AND VERIFIED LIVE (27 Sep, second night)
+  WIFI_NSS_MESH removed: every NSS Wi-Fi build (NSS=1 WIFI_NSS_DONOR=...) now includes mesh offload.
+    Scratch integration: identical to the old flag-on output except the #22 patch, the #23 define, the
+    Kconfig prompt and the json note (the .config is identical).
+  Verification build: the clean build.sh tree plus 999-995/999-997, the IREMAP define, and a TEMP patch
+    (per-peer stats capture, one-shot wrapper print), hot-swapped on the bench (build-2 RAM image).
+  #22: "ath11k rxdbg: wifili ext cb resolves ab to b00a040.wifi", driven by live invalid-peer traffic.
+  #23: NSS per-peer stats are ON by default with nss_offload=1 (core.c sets stats_enabled=1), so the
+    layout bug is live, not latent. Each entry is 16 bytes longer than ath11k's view (2 u32 in rx_ctrl,
+    2 in retry_ctrl), so every entry after the first is misread and its peer lookup fails.
+    Before (old ath11k, default config, 50 pings from a 5 GHz client): station inactive time 64170 ms,
+    AP netdev rx 0 (it never counted).
+    After: inactive time 140 ms; netdev rx +100 for 100 pings; per-peer recvd=100 ucast=100.
+    New finding: with the fixed layout, host-originated TX to a client is counted twice (+200 for
+    100 replies): mac80211 counts it, then NSS peer stats add it again. Pre-existing donor design,
+    only visible now; it only affects the netdev TX counter.
+  #24: with frame_mode=1 the client associates, then is deauthed (4-way reason 15). NSS per-peer
+    stats show nothing received from it (recvd 0, unauth_drop 0 on every attempt's peer). The AP's
+    EAPOL msg1 goes out; the replies die below NSS. Fix 999-995: warn and use frame_mode=2 when
+    nss_offload=1. Live: "frame_mode 1 does not work with nss_offload, using ethernet (2)", the
+    parameter reads 2, the client completes EAPOL-4WAY and 50/50 pings at 2.6 ms.
+  Incident, not code: the bench rebooted once mid-test. A stale dead-man from an earlier reload run
+    (each run deleted the shared ok-file) fired. The safe-boot kit brought it back in safe mode; the
+    reload script now keeps one dead-man at a time, with a per-run token.
+  syd was offline all night (unreachable from hal and the gateway), so no RT3070 peer.
