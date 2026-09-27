@@ -1,0 +1,116 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: nss: cap the Tx queue per radio below the payload pool
+
+NSS gives every radio 8192 Tx descriptors, plus a 1024-packet queue for
+packets waiting for one. Each packet held there pins an NSS payload
+buffer until its Tx completion, and the same pool refills every Rx ring.
+NSS may hold at most 8704 of them on the RD03v2 (4096 on v1.9 and
+v1.10), with ~2300 in the Rx rings at idle, so one radio's Tx side could
+take more buffers than NSS may have in total.
+
+When a client receives slower than another sends to it, TCP fills the
+AP's queue to that client. On the bench, a VHT80 station sending to an
+HT20 station on the same 5 GHz AP (iperf3, 2 streams, 30 s):
+
+  - The queue to the slow client grew to ~2600 packets.
+  - Free payloads went to 0 (+630k to +750k allocation failures).
+  - The 5 GHz Rx ring drained to ~170 of 1023.
+  - The radio's datapath froze for ~3.5 s at a time: 3-7 s of 0 bit/s
+    per run, the stalls reported in issue #18.
+
+A slow 2.4 GHz client drains the same shared pool and starves 5 GHz Rx.
+Raising the pool to 8704 only moves the threshold: with 8 streams the
+queue reached 6410 and the stalls came back.
+
+Cap the descriptors at 1024 per radio by default, and the waiting queue
+at a quarter of that (256). A full queue then drops at enqueue, which
+TCP handles as ordinary loss, and the Rx rings keep their buffers.
+Same image and bench, same test, old values vs new:
+
+  - 0 bit/s:          3-6 s        -> none
+  - retransmits:      700-3300     -> 120-200
+  - free payloads:    min 0        -> min 560
+  - alloc failures:   +630k/+750k  -> 0
+  - throughput:       34 Mbit/s    -> 48 Mbit/s
+
+8 streams, cross-band, and both radios feeding slow clients at once had
+no stalls either. Throughput to fast clients is unchanged (172-360
+Mbit/s, as on v1.10), and firmware-crash recovery still works on both
+radios. The descriptor memory drops from ~2.2 MB to ~0.4 MB per radio:
+idle MemAvailable +3.6 MB.
+
+The nss_tx_desc module parameter (256-8192) sets another size; 8192
+restores the old descriptor count and queue.
+---
+--- a/drivers/net/wireless/ath/ath11k/nss.c
++++ b/drivers/net/wireless/ath/ath11k/nss.c
+@@ -4267,6 +4267,23 @@
+ 	return 0;
+ }
+ 
++/* How many packets NSS may hold in one radio's Tx path. Each one pins an
++ * NSS payload buffer until its Tx completion, and the same buffers refill
++ * every Rx ring. The donor's 8192 per radio is about all NSS may hold on the
++ * RD03v2 (n2h_high_water_core0: 8704, and 4096 on v1.9-v1.10), with ~2300 of
++ * them in the Rx rings, so the queue to one slow client could take every
++ * free buffer: Rx refill then fails, the radio's datapath freezes for
++ * seconds, and TCP falls into retransmission timeouts (issue #18). With the
++ * cap, a full queue drops at enqueue instead, which TCP treats as ordinary
++ * loss.
++ */
++#define ATH11K_NSS_TX_DESC_MIN		256
++#define ATH11K_NSS_TX_DESC_DEFAULT	1024
++
++static unsigned int ath11k_nss_tx_desc = ATH11K_NSS_TX_DESC_DEFAULT;
++module_param_named(nss_tx_desc, ath11k_nss_tx_desc, uint, 0444);
++MODULE_PARM_DESC(nss_tx_desc, "NSS Tx descriptors per radio, 256-8192 (default 1024)");
++
+ static int ath11k_nss_fill_tx_desc_info(struct ath11k_base *ab,
+ 					struct nss_wifili_init_msg *wim)
+ {
+@@ -4277,10 +4294,21 @@
+ 	u32 tx_desc_limit_1 = 0;
+ 	u32 tx_desc_limit_2 = 0;
+ 	u32 dam_page_idx = 0;
++	u32 num_tx_desc;
+ 	int page_idx = 0;
+ 	int i;
+ 
+-	wim->tx_sw_internode_queue_size = ATH11K_WIFIILI_MAX_TX_PROCESSQ;
++	num_tx_desc = clamp_t(u32, ath11k_nss_tx_desc, ATH11K_NSS_TX_DESC_MIN,
++			      ATH11K_WIFILI_DBDC_NUM_TX_DESC);
++	if (num_tx_desc != ath11k_nss_tx_desc)
++		ath11k_warn(ab, "nss_tx_desc %u out of range, using %u\n",
++			    ath11k_nss_tx_desc, num_tx_desc);
++
++	/* Packets waiting for a free descriptor also pin payload buffers;
++	 * scale that queue down with the descriptors (8192 keeps 1024).
++	 */
++	wim->tx_sw_internode_queue_size = min_t(u32, ATH11K_WIFIILI_MAX_TX_PROCESSQ,
++						num_tx_desc / 4);
+ 
+ 	dim = &wim->wtdim;
+ 	dam = &wim->wtdam;
+@@ -4291,16 +4319,16 @@
+ 	//TODO Revisit below calc based on platform/mem cfg
+ 	switch (dim->num_pool) {
+ 	case 1:
+-		tx_desc_limit_0 = ATH11K_WIFILI_DBDC_NUM_TX_DESC;
++		tx_desc_limit_0 = num_tx_desc;
+ 		break;
+ 	case 2:
+-		tx_desc_limit_0 = ATH11K_WIFILI_DBDC_NUM_TX_DESC;
+-		tx_desc_limit_1 = ATH11K_WIFILI_DBDC_NUM_TX_DESC;
++		tx_desc_limit_0 = num_tx_desc;
++		tx_desc_limit_1 = num_tx_desc;
+ 		break;
+ 	case 3:
+-		tx_desc_limit_0 = ATH11K_WIFILI_DBTC_NUM_TX_DESC;
+-		tx_desc_limit_1 = ATH11K_WIFILI_DBTC_NUM_TX_DESC;
+-		tx_desc_limit_2 = ATH11K_WIFILI_DBTC_NUM_TX_DESC;
++		tx_desc_limit_0 = num_tx_desc;
++		tx_desc_limit_1 = num_tx_desc;
++		tx_desc_limit_2 = num_tx_desc;
+ 		break;
+ 	default:
+ 		ath11k_warn(ab, "unexpected num radios during tx desc alloc\n");

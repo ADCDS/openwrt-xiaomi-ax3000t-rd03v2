@@ -1,6 +1,6 @@
 #!/bin/sh /etc/rc.common
 # Host-side NSS buffer pool: take stock RD03v2's 4096 instead of the profile
-# default of 8704.
+# default of 8704, and keep the high water mark at 8704.
 #
 # Those buffers are empty skbs the host hands to the NSS. They sit in Linux slab
 # permanently as SUnreclaim, so halving the count is a straight return of
@@ -9,6 +9,19 @@
 # 38,204 / 38,144 kB with it over two boots - about 6.3 MB back, with
 # MemAvailable 37,088 -> ~42,800 kB. (Idle SUnreclaim drifts ~1 MB once clients
 # associate, so compare at idle.)
+#
+# THE HIGH WATER MARK
+# The pool size is not the limit on how many buffers NSS may hold. That is the
+# high water mark, and NSS keeps "low water" buffers free at idle. Writing the
+# pool also resets both marks, to pool and pool/2. v1.9 and v1.10 wrote only
+# the pool, so 4096 became a hard cap. Stock sets its high water separately
+# (16336, with pool 4096 and low 2048), and was holding 10,557 buffers when
+# captured. NSS Wi-Fi offload, new in the same release, needs more than 4096
+# under load: the Rx rings of both radios, the Ethernet Rx ring and the Wi-Fi
+# Tx queues all draw from it. When it ran dry, a radio froze for seconds
+# (issue #18). So the high water goes back to 8704 after the pool write. The
+# idle saving comes from the pool and low water, which stay at 4096 and 2048.
+# NSS only takes more buffers when it needs them.
 #
 # WHAT THIS DELIBERATELY DOES NOT DO
 # Stock also sets extra_pbuf_core0=802816, which would grow the NSS descriptor
@@ -50,12 +63,35 @@
 # preserved rc.local still carries the old v1.9-era pool writes.
 START=96
 
-N2H=/proc/sys/dev/nss/n2hcfg
+# Overridable only so tools/verify-release.sh can run start() against a fake
+# tree; nothing sets it on the box.
+N2H=${N2H:-/proc/sys/dev/nss/n2hcfg}
 POOL=$N2H/n2h_empty_pool_buf_core0
+HIGH_WATER=$N2H/n2h_high_water_core0
 WANT=4096
+WANT_HIGH=8704
 
 boot() {
 	start "$@"
+}
+
+# set_knob <file> <value> <name>: write one n2hcfg value and log what THIS call
+# did, not just a read-back: a read-back looks identical whether we applied the
+# value or someone else already had.
+set_knob() {
+	local file=$1 want=$2 name=$3 before after
+	before=$(cat "$file" 2>/dev/null)
+	if [ "$before" = "$want" ]; then
+		logger -t nss-bufpool "$name already $want"
+		return 0
+	fi
+	echo "$want" > "$file" 2>/dev/null
+	after=$(cat "$file" 2>/dev/null)
+	if [ "$after" = "$want" ]; then
+		logger -t nss-bufpool "$name $before -> $after"
+	else
+		logger -t nss-bufpool "FAILED to set $name: wanted $want, still $after"
+	fi
 }
 
 start() {
@@ -63,24 +99,9 @@ start() {
 	# not registered its sysctls yet: do nothing rather than half-configure.
 	[ -r "$POOL" ] || return 0
 
-	local before after
-	before=$(cat "$POOL" 2>/dev/null)
-
-	if [ "$before" = "$WANT" ]; then
-		logger -t nss-bufpool "pool already $WANT, nothing to do"
-		return 0
-	fi
-
-	echo "$WANT" > "$POOL" 2>/dev/null
-	after=$(cat "$POOL" 2>/dev/null)
-
-	# Report what THIS invocation did, not just a read-back: a read-back looks
-	# identical whether we applied the value or someone else already had.
-	if [ "$after" = "$WANT" ]; then
-		logger -t nss-bufpool "pool $before -> $after"
-	else
-		logger -t nss-bufpool "FAILED to set pool: wanted $WANT, still $after"
-	fi
+	set_knob "$POOL" "$WANT" pool
+	# The pool write reset the high water to the pool size; raise it again.
+	set_knob "$HIGH_WATER" "$WANT_HIGH" "high water"
 
 	# Loud if a preserved rc.local from an older build set extra_pbuf_core0:
 	# that write is unguarded and carries the BUG_ON exposure described above.
@@ -96,6 +117,7 @@ start() {
 
 stop() {
 	[ -r "$POOL" ] || return 0
+	# Also resets the water marks, to 8704 and 4352.
 	echo 8704 > "$POOL" 2>/dev/null
 	logger -t nss-bufpool "pool restored to $(cat "$POOL" 2>/dev/null)"
 }
