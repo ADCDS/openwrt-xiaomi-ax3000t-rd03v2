@@ -63,7 +63,9 @@
 # preserved rc.local still carries the old v1.9-era pool writes.
 START=96
 
-N2H=/proc/sys/dev/nss/n2hcfg
+# Overridable only so tools/verify-release.sh can run start() against a fake
+# tree; nothing sets it on the box.
+N2H=${N2H:-/proc/sys/dev/nss/n2hcfg}
 POOL=$N2H/n2h_empty_pool_buf_core0
 HIGH_WATER=$N2H/n2h_high_water_core0
 WANT=4096
@@ -73,40 +75,33 @@ boot() {
 	start "$@"
 }
 
+# set_knob <file> <value> <name>: write one n2hcfg value and log what THIS call
+# did, not just a read-back: a read-back looks identical whether we applied the
+# value or someone else already had.
+set_knob() {
+	local file=$1 want=$2 name=$3 before after
+	before=$(cat "$file" 2>/dev/null)
+	if [ "$before" = "$want" ]; then
+		logger -t nss-bufpool "$name already $want"
+		return 0
+	fi
+	echo "$want" > "$file" 2>/dev/null
+	after=$(cat "$file" 2>/dev/null)
+	if [ "$after" = "$want" ]; then
+		logger -t nss-bufpool "$name $before -> $after"
+	else
+		logger -t nss-bufpool "FAILED to set $name: wanted $want, still $after"
+	fi
+}
+
 start() {
 	# Absent on a plain (non-NSS) build, and also if qca-nss-drv somehow has
 	# not registered its sysctls yet: do nothing rather than half-configure.
 	[ -r "$POOL" ] || return 0
 
-	local before after
-	before=$(cat "$POOL" 2>/dev/null)
-
-	if [ "$before" = "$WANT" ]; then
-		logger -t nss-bufpool "pool already $WANT"
-	else
-		echo "$WANT" > "$POOL" 2>/dev/null
-		after=$(cat "$POOL" 2>/dev/null)
-
-		# Report what THIS invocation did, not just a read-back: a read-back
-		# looks identical whether we applied the value or someone else had.
-		if [ "$after" = "$WANT" ]; then
-			logger -t nss-bufpool "pool $before -> $after"
-		else
-			logger -t nss-bufpool "FAILED to set pool: wanted $WANT, still $after"
-		fi
-	fi
-
+	set_knob "$POOL" "$WANT" pool
 	# The pool write reset the high water to the pool size; raise it again.
-	before=$(cat "$HIGH_WATER" 2>/dev/null)
-	if [ "$before" != "$WANT_HIGH" ]; then
-		echo "$WANT_HIGH" > "$HIGH_WATER" 2>/dev/null
-		after=$(cat "$HIGH_WATER" 2>/dev/null)
-		if [ "$after" = "$WANT_HIGH" ]; then
-			logger -t nss-bufpool "high water $before -> $after"
-		else
-			logger -t nss-bufpool "FAILED to set high water: wanted $WANT_HIGH, still $after"
-		fi
-	fi
+	set_knob "$HIGH_WATER" "$WANT_HIGH" "high water"
 
 	# Loud if a preserved rc.local from an older build set extra_pbuf_core0:
 	# that write is unguarded and carries the BUG_ON exposure described above.
