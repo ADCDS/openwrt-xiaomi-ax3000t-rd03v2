@@ -44,7 +44,9 @@ them twice; `999-999` is the QCN6122 register fix below. `999-996` keeps
 `sta_state` from returning with `conf_mutex` held. `999-995` makes NSS offload
 use Ethernet frame mode: with `frame_mode=1` no client got past the WPA 4-way
 handshake. `999-997` hands the wifili exception callback the real
-`ath11k_base` (the donor wrapper passed a pointer into the middle of it). The
+`ath11k_base` (the donor wrapper passed a pointer into the middle of it).
+`999-994` caps each radio's NSS Tx queue below the payload pool, see
+"Wi-Fi Tx queue vs the NSS payload pool". The
 other
 `999-999-rd03v2-*` patches are described under "Crash recovery with offload on"
 and "ECM VLAN tags for Wi-Fi over a VLAN-aware bridge". The donor
@@ -90,6 +92,61 @@ board's flash procedure. Do not mix kernel modules from different builds.
   not even as unauthorized drops. With NSS offload, ath11k now warns and uses
   `frame_mode=2`: the same client then completed the handshake and answered
   50/50 pings.
+
+### Wi-Fi Tx queue vs the NSS payload pool (issue #18)
+
+Symptom: Wi-Fi to Wi-Fi on one radio stalls at 0 bit/s for several seconds at
+a time, then ramps back up. The report was a laptop and a phone on 5 GHz.
+
+Cause: every packet NSS holds for transmit pins a payload buffer until its Tx
+completion, and the same pool refills every Rx ring.
+- NSS gave each radio 8192 Tx descriptors, plus a 1024-packet queue for packets
+  waiting for one.
+- The pool is capped at 4096 by `nss-bufpool` (v1.9), and ~2300 of those sit in
+  the Rx rings at idle.
+
+When a client receives slower than another sends to it, TCP fills the AP's queue
+to that client. The pool then runs dry, Rx refill fails, and the radio's datapath
+freezes for ~3.5 s, the same length as the hold behind #25. `999-994` caps the
+descriptors at 1024 per radio and the waiting queue at a quarter of that. A full
+queue then drops at enqueue instead, which TCP treats as ordinary loss.
+`ath11k.nss_tx_desc` (256-8192) sets another size; 8192 restores the old one.
+
+Bench: two stations in their own netns on hal. The sender is a VHT80 2x2 USB
+card. The receiver is a QCA9377 joined HT20-only, so the AP's link to it is
+72 Mbit/s. iperf3, 2 streams, 30 s, on one RAM image, switching only
+`nss_tx_desc`:
+
+| `nss_tx_desc` | 0 bit/s | Retransmits | Free payloads (min) | Alloc failures | 5 GHz Rx ring (min) | Received |
+|---|---|---|---|---|---|---|
+| 8192 (old) | 6 s, 3 s | 3286, 700 | 0 | +627k, +746k | 195, 171 | 34 Mbit/s |
+| 1024 (default) | none | 117, 199 | 590, 560 | 0 | 1023 | 48 Mbit/s |
+
+Other results at the default:
+- **8 streams:** no stalls (free payloads ≥ 528). Before the fix, raising the
+  pool to 8704 did not help here: the queue reached 6410 and the stalls came
+  back.
+- **Cross-band (5 GHz to a 2.4 GHz client):** v1.10 left the 5 GHz Rx ring at
+  13 of 1023. With the cap it stays full.
+- **Fast clients:** throughput unchanged. A to B 172 Mbit/s (v1.10 174); wired
+  to 5 GHz and back ~360 Mbit/s, the USB 2.0 dongle's limit.
+- **Recovery:** firmware-crash recovery works on both radios, and the cap still
+  applies after it.
+- **Memory:** idle `MemAvailable` +3.6 MB. The descriptor pools shrink from
+  ~2.2 MB to ~0.4 MB per radio.
+
+Limits:
+- **The pool is still tight once the wired side has seen traffic.** After the
+  first fast wired flow, ~1000 more buffers stayed in use at idle (most likely
+  the Ethernet Rx ring filling up), and only ~750 were free. The same
+  slow-client flood still drove the pool to 0 then. Both radios queuing at once
+  did too. There was no stall in either case: the Rx rings stayed at ≥ 730 and
+  1023, and no second fell to 0 bit/s. A 6144 pool removed that too (free
+  payloads ≥ 1841), at +5.4 MB `SUnreclaim`. That trade-off belongs to
+  `nss-bufpool` and is not taken here.
+- **Not measured with Wi-Fi 6/7 clients or 160 MHz.** Their larger aggregates
+  need more packets in flight. If peak throughput to such a client drops, raise
+  `nss_tx_desc`.
 
 ### QCN6122 register addressing
 

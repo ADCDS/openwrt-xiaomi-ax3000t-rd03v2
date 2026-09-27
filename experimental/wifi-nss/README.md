@@ -12,6 +12,9 @@ with offload on.
 `999-999-rd03v2-nss-vlan-eapol-to-pae-group` delivers EAPOL on VLAN-aware
 bridges, and `999-999-rd03v2-reo-update-queue-noncoherent-free` fixes the
 donor's REO update-queue free.
+`999-994` caps each radio's NSS Tx queue at 1024 descriptors (module parameter
+`nss_tx_desc`), below the NSS payload pool, so a slow client can no longer drain
+it and freeze the radio (issue #18).
 The switch-conduit RX-pause nss-dp patch is not part of this integration: it
 lives in `files/package/kernel/qca-nss-dp/patches/` and applies to every build.
 It was measured on the NSS Wi-Fi image with NSS Wi-Fi offload on and on the
