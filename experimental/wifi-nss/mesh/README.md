@@ -36,8 +36,8 @@ not needed here.
 IPQ5018 radio (2.4 GHz) with an RT3070 peer; QCN6122 radio (5 GHz) with an
 mt76 (MT7981) peer. Evidence: `stock-investigation/captures/v110-nss-mesh-12.5-bench.txt`.
 
-- Open mesh on both radios and SAE mesh on the 2.4 GHz radio, with the AP on
-  the same radio still beaconing. Data runs through NSS: the mesh decap/encap
+- Open and SAE mesh on both radios, with the AP on the same radio still
+  beaconing. Data runs through NSS: the mesh decap/encap
   counters move, and ECM accelerated a TCP flow on the 2.4 GHz radio.
 - The router's own DHCP and DNS over the mesh work with no ethtool
   workaround.
@@ -49,9 +49,8 @@ mt76 (MT7981) peer. Evidence: `stock-investigation/captures/v110-nss-mesh-12.5-b
 - SAE mesh after an in-place firmware restart: the peer link stays up but
   traffic stops until the mesh is joined again. `rd03v2-watchdog` now does
   that: when ath11k logs an in-place recovery of a radio, it reloads that
-  radio's encrypted mesh supplicants. The re-join logic was tested on the
-  bench by sourcing the watchdog (traffic came back 10/10); a full watchdog
-  run still isn't covered, because the bench profile disables it.
-- SAE on the 5 GHz radio with a real peer was not run. The keyed path is the
-  same one that works on the 2.4 GHz radio.
+  radio's encrypted mesh supplicants. The re-join logic was tested on both
+  radios by sourcing the watchdog on the bench (RT3070 and mt76 peers;
+  traffic back 10/10). A full watchdog run still isn't covered, because the
+  bench profile disables it.
 - `bench-safeboot/` is a test-only `PROFILE=` overlay; see its README.
