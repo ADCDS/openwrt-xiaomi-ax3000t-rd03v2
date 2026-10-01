@@ -159,7 +159,7 @@ Buttons
 
 target/linux/qualcommax/
 ------------------------
-  17784  target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
+  18643  target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
          Device tree: SoC, NAND partitions, AN8855 switch, QCN6122,
          LEDs, buttons, MACs/caldata wiring. Both CPU ports are wired:
          port@5 -> dp2/eth1 (2.5G, the default user-port conduit) and
@@ -170,6 +170,9 @@ target/linux/qualcommax/
          upstream's q6_region (wcss@4b000000), resized by
          ipq5018-qcn6122.dtsi. A local duplicate used to trip
          "OF: reserved mem: OVERLAP DETECTED!" at every boot.
+         Enables blsp1_i2c3 (gpio25/26, 100 kHz) for the NFC tag at
+         0x57, with the BAM pipes in stock's order (tx 8, rx 9):
+         ipq5018.dtsi has them swapped. See docs/nfc.md.
    7938  target/linux/qualcommax/image/ipq50xx.mk
          Image recipe Device/xiaomi_mi-router-ax3000t-v2
          (DTS config@mp03.3, KERNEL_IN_UBI, wifi fw + board-data pkgs).
