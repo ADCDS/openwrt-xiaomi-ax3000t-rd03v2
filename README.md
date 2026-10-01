@@ -12,13 +12,12 @@ Treat it as beta.
 
 ## Installation
 
-**Recommended: [ADCDS's xmir-patcher fork — `connect8-connect9`](https://github.com/ADCDS/xmir-patcher/tree/connect8-connect9).**
-This method installs OpenWrt **without opening the case or connecting UART**.
-Follow the fork's [RD03v2 installation guide](https://github.com/ADCDS/xmir-patcher/blob/connect8-connect9/RD03v2-INSTALL.md)
-and download this port's images from [Releases](https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/releases).
-
-Use that branch while [upstream PR #181](https://github.com/openwrt-xiaomi/xmir-patcher/pull/181)
-is pending; the new method is not yet merged into upstream xmir-patcher.
+**Recommended: [xiaomi-ota-install](https://github.com/ADCDS/xiaomi-ota-install).**
+Its `rd03v2` profile installs OpenWrt **without opening the case or connecting
+UART**. It integrates the hardware-tested V1 → V2 stock-root chain, validates
+the board and NAND, downloads and verifies this port's release images, pivots
+through the RAM initramfs, and runs the supported NAND installation. Follow
+the installer's README and select `--device rd03v2`.
 
 The [UART + TFTP guide](docs/installation-and-usage.md#uart-installation-guide)
 remains available as an alternative, including board wiring and stock recovery images.
