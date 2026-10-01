@@ -353,6 +353,9 @@ CONFIG_PACKAGE_kmod-nft-tproxy=y
 # switched with `ethtool -A eth1 rx on|off`. NSS builds already get it via
 # qca-nss-ecm; this makes that no-rebuild opt-out work on the default build.
 CONFIG_PACKAGE_ethtool=y
+# i2c-tools: /usr/sbin/nfc (base-files) talks to the NFC tag with i2ctransfer,
+# as the stock firmware does. Asked for in #18; see docs/nfc.md.
+CONFIG_PACKAGE_i2c-tools=y
 EOF
 
 # NSS firmware MUST match the driver ABI. The nss feed branch (NSS-12.5-K6.x)

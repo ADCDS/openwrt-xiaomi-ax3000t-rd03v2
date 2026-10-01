@@ -1,0 +1,17 @@
+#!/bin/sh /etc/rc.common
+# NFC tag: apply /etc/config/nfc at boot and whenever the wireless or nfc
+# config changes (LuCI apply, reload_config). See /usr/sbin/nfc.
+START=99
+USE_PROCD=1
+
+start_service() {
+	/usr/sbin/nfc update
+}
+
+reload_service() {
+	/usr/sbin/nfc update
+}
+
+service_triggers() {
+	procd_add_reload_trigger wireless nfc
+}
