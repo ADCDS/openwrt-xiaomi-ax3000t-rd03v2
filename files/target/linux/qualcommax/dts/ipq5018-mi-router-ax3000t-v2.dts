@@ -135,6 +135,28 @@
 	pinctrl-names = "default";
 };
 
+/*
+ * The NFC tag: a dual-interface NFC Forum Type 2 tag (Fudan FM11NT08x
+ * class) at 0x57, the only device on this bus. There is no kernel driver for
+ * it; /usr/sbin/nfc programs it through i2c-dev, as the stock firmware does.
+ * Bus settings are the stock ones (100 kHz, external pull-ups).
+ */
+&blsp1_i2c3 {
+	status = "okay";
+
+	pinctrl-0 = <&i2c_nfc_pins>;
+	pinctrl-names = "default";
+	clock-frequency = <100000>;
+	/*
+	 * ipq5018.dtsi names BAM pipe 9 tx and 8 rx for this QUP. Stock names
+	 * them the other way round, which is also the even-tx/odd-rx order of
+	 * blsp1_spi1 (pipes 4/5). The driver uses DMA for transfers larger than
+	 * its FIFO.
+	 */
+	dmas = <&blsp_dma 8>, <&blsp_dma 9>;
+	dma-names = "tx", "rx";
+};
+
 &crypto {
 	status = "okay";
 };
@@ -700,6 +722,13 @@
 		function = "gpio";
 		drive-strength = <8>;
 		bias-pull-up;
+	};
+
+	i2c_nfc_pins: i2c-nfc-state {
+		pins = "gpio25", "gpio26";
+		function = "blsp2_i2c1";
+		drive-strength = <8>;
+		bias-disable;
 	};
 
 	leds_pins: leds-state {
