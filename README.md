@@ -12,12 +12,13 @@ Treat it as beta.
 
 ## Installation
 
-**Recommended: [xiaomi-ota-install](https://github.com/ADCDS/xiaomi-ota-install).**
-Its `rd03v2` profile installs OpenWrt **without opening the case or connecting
-UART**. It integrates the hardware-tested V1 → V2 stock-root chain, validates
-the board and NAND, downloads and verifies this port's release images, pivots
+**Recommended: [xiaomi-router-install](https://github.com/ADCDS/xiaomi-router-install).**
+Its `rd03v2` profile installs OpenWrt over Ethernet or Wi-Fi **without opening
+the case or connecting UART**. It integrates the hardware-tested V1 → V2
+stock-root chain, validates the board and NAND, downloads and verifies this
+port's release images, pivots
 through the RAM initramfs, and runs the supported NAND installation. Follow
-the installer's README and select `--device rd03v2`.
+the installer's README and run `python3 install.py standard`.
 
 The [UART + TFTP guide](docs/installation-and-usage.md#uart-installation-guide)
 remains available as an alternative, including board wiring and stock recovery images.
