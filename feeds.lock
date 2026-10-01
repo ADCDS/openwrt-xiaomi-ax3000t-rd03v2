@@ -1,0 +1,19 @@
+# Package feed revisions that build.sh pins every feed to: one line per feed
+# in OpenWrt's feeds.conf.default and nss/feeds.conf.append, "<name> <commit>".
+#
+# OpenWrt itself is pinned in build.sh (25ee126), but its feeds follow branch
+# heads, so two builds of one commit could pull different packages. On
+# 2026-10-01 the heads also grew Kconfig dependency cycles (qt5, gstreamer,
+# sdl, ...), which the NSS Wi-Fi build refuses. These are the revisions v1.11
+# was built with. For luci, that is the one its -nss image used; its plain
+# image was a few commits behind.
+#
+# nss_packages has no line: build.sh pins it for NSS Wi-Fi builds, and plain
+# NSS builds follow its NSS-12.5-K6.x branch. Bump a revision deliberately,
+# and check that both flavours still build.
+packages        4a69a0b76759dcd6e2164c81d7260b5280d833c1
+luci            05dc750ddb5e5c4aacf4ae0635bbf8b14a494909
+routing         4b9891b9136259f93294a424507ed24c5e8c1cbd
+telephony       5d68d53c160a325ea9d03fce393e051573bcc736
+video           605d768782e13fc8b8fa16e719d4a2742dafbd45
+sqm_scripts_nss 4b4ed8639229be5e70cf94b73cdf7dbc09e66d5d
