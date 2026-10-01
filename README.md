@@ -50,6 +50,9 @@ for the optional `-wifi` installers, NAND support and NSS upgrade notes.
   See [installing modules](docs/installation-and-usage.md#installing-kernel-modules).
 - For recovery, see [returning to stock](docs/installation-and-usage.md#recovering--going-back-to-stock).
   Stock recovery images must be at least as new as the last stock firmware the router ran.
+- The first boot clears the NFC tag, which still holds the Wi-Fi name and
+  password stock last wrote to it. To share a network by tapping a phone, see
+  [NFC tag](docs/installation-and-usage.md#nfc-tag-tap-to-join).
 
 ## Building and documentation
 
@@ -65,6 +68,7 @@ for details, measurements and known limitations.
 
 - [Troubleshooting](docs/installation-and-usage.md#quick-troubleshooting)
 - [LED configuration](docs/installation-and-usage.md#controlling-the-leds)
+- [NFC tag](docs/nfc.md)
 - [File and patch manifest](MANIFEST.txt)
 
 ## Credits and contributing

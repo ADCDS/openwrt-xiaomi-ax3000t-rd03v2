@@ -80,6 +80,21 @@ check_tree() {
 	# finding #3 — the duplicate reserved-memory node must be gone
 	chk "$label q6_mem_regions in DTB source" "0" "0"
 
+	# NFC tag (docs/nfc.md) — both flavours: the tool, its service, the
+	# i2ctransfer it drives, the clear-by-default config, and the I2C
+	# controller it needs actually enabled in the DTB that went into the image
+	[ -x "$d/x/usr/sbin/nfc" ] && ok "$label nfc tool" || bad "$label /usr/sbin/nfc MISSING"
+	[ -L "$d/x/etc/rc.d/S99nfc" ] && ok "$label S99nfc symlink" || bad "$label S99nfc symlink MISSING"
+	[ -x "$d/x/usr/sbin/i2ctransfer" ] && ok "$label i2ctransfer" || bad "$label i2ctransfer MISSING"
+	chk "$label nfc default mode" "$(grep -hE "^[[:space:]]*option mode" "$d/x/etc/config/nfc" 2>/dev/null)" "	option mode 'clear'"
+	local dtb
+	dtb=$(ls "$tree"/build_dir/target-*/linux-*/image-ipq5018-mi-router-ax3000t-v2.dtb 2>/dev/null | head -1)
+	if [ -n "$dtb" ]; then
+		chk "$label DTB i2c@78b7000 (NFC) status" "$(fdtget -t s "$dtb" /soc@0/i2c@78b7000 status 2>&1)" "okay"
+	else
+		bad "$label DTB not found in the tree"
+	fi
+
 	if [ "$want_offload" = yes ]; then
 		chk "$label ath11k nss_offload modparam" \
 			"$(grep -rh 'nss_offload' "$d/x/etc/modules.d/" 2>/dev/null | head -1)" \
