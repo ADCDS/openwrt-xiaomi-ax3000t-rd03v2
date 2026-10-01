@@ -1,0 +1,543 @@
+#!/bin/sh
+# nfc: the NFC tag of the AX3000T v2 - share a Wi-Fi network by tapping a
+# phone on the router.
+#
+# The router has a dual-interface NFC Forum Type 2 tag (Fudan FM11NT08x
+# class) on the SoC's I2C bus at 0x57. Phones read it over RF; the router
+# writes it over I2C, whatever the RF lock bits say: stock MiWiFi rewrites it
+# on every boot and Wi-Fi change. The static lock bytes lock blocks 3-15
+# (0x00c-0x03f) against RF writes; whether the rest is RF-writable is
+# untested. OpenWrt never wrote the tag, so a flashed box keeps whatever
+# stock wrote last - often the old SSID and password - and any phone can read
+# it, even with the router off. See docs/nfc.md.
+#
+# `nfc update` (started in the background by /etc/init.d/nfc at boot and
+# when the wireless or nfc config changes) keeps the tag in the state
+# /etc/config/nfc asks for:
+#   off    leave the tag alone; update does no I2C access at all (also what a
+#          missing config means)
+#   clear  keep the tag empty - the default, which wipes what stock left
+#   wifi   a Wi-Fi credential for one AP interface: `option iface` names its
+#          wifi-iface section, else the first enabled, broadcast AP on 5 GHz,
+#          else on 2.4 GHz is shared. If there is none, or its encryption
+#          cannot be shared, the tag is cleared rather than left advertising
+#          an old network.
+#
+# The record has the layout stock writes: an NDEF MIME record of type
+# application/vnd.wfa.wsc with one WSC Credential (SSID, authentication and
+# encryption type, network key), which Android joins when tapped. WSC has no
+# WPA3 type, so sae/psk3 and their -mixed forms are announced as
+# WPA2-Personal, as stock does; OWE, WEP and enterprise networks are not
+# shared. The encryption type follows the configured cipher (stock always
+# writes AES).
+#
+# The I2C side is EEPROM-like: a 2-byte address, then data, written one 4-byte
+# block per transfer, and the chip NACKs while it programs a block. Only the
+# NDEF data area 0x0010-0x0377 (872 bytes, per the capability container) is
+# ever written, and only the blocks that differ. Below it are the UID, the
+# lock bytes and the capability container, above it chip-specific data; lock
+# bits are one-time programmable, so a stray write there could lock the tag
+# for good. The whole data area is managed, not just the record: stock never
+# cleared what followed a shorter record, which leaves the tails of old
+# passwords readable.
+
+. /lib/functions.sh
+
+ADDR=0x57
+AREA_START=16		# 0x0010
+AREA_END=888		# 0x0378, exclusive
+WSC_TYPE=application/vnd.wfa.wsc
+EMPTY="0x03 0x00 0xfe 0x00"	# an empty NDEF message, then the terminator
+
+die() {
+	echo "nfc: $*" >&2
+	logger -t nfc -p daemon.err "$*"
+	exit 1
+}
+
+log() {
+	logger -t nfc "$*"
+	if [ -t 1 ]; then
+		echo "nfc: $*"
+	fi
+}
+
+# The i2c-dev adapter of the QUP the tag is wired to (blsp1_i2c3).
+find_bus() {
+	local d
+
+	for d in /sys/bus/i2c/devices/i2c-*; do
+		case "$(readlink -f "$d")" in
+		*/78b7000.i2c/i2c-*)
+			BUS=${d##*/i2c-}
+			return 0
+			;;
+		esac
+	done
+	return 1
+}
+
+# i2ctransfer, retried only while the chip NACKs, as it does while it
+# programs a block. Anything else fails at once: a transfer that times out
+# costs i2c-qup ~15 s at 100 kHz, and it cannot be interrupted.
+xfer() {
+	local try=0 out
+
+	while :; do
+		out=$(i2ctransfer -y "$BUS" "$@" 2>&1) && break
+		case "$out" in
+		*"No such device or address"*)
+			try=$((try + 1))
+			[ $try -lt 20 ] && continue
+			;;
+		esac
+		echo "nfc: i2ctransfer $*: $out" >&2
+		logger -t nfc -p daemon.err "i2ctransfer $*: $out"
+		return 1
+	done
+	[ -z "$out" ] || echo "$out"
+}
+
+# read_mem <offset> <length>: the bytes, as 0x.. words on one line. Reads go
+# 16 bytes at a time, which keeps the QUP in FIFO mode.
+read_mem() {
+	local a=$1 end=$(($1 + $2)) n out=
+
+	while [ $a -lt $end ]; do
+		n=$((end - a))
+		[ $n -gt 16 ] && n=16
+		out="$out $(xfer w2@$ADDR $((a >> 8)) $((a & 255)) r$n)" || return 1
+		a=$((a + n))
+	done
+	echo $out
+}
+
+write_block() {	# <offset> <4 bytes>
+	local off=$1
+
+	shift
+	[ $# = 4 ] && [ $((off % 4)) = 0 ] && [ $off -ge $AREA_START ] &&
+		[ $((off + 4)) -le $AREA_END ] ||
+		die "refusing to write '$*' at offset $off"
+	xfer w6@$ADDR $((off >> 8)) $((off & 255)) "$@"
+}
+
+# Find the tag and check that it is the chip this script knows: UID0 0x1d is
+# the ISO/IEC 7816-6 manufacturer code of Shanghai Fudan Microelectronics,
+# and E1 10 6D an NDEF capability container with the 872-byte data area.
+open_tag() {
+	[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = xiaomi,mi-router-ax3000t-v2 ] ||
+		die "this is not a Xiaomi AX3000T v2"
+	command -v i2ctransfer >/dev/null || die "i2ctransfer (i2c-tools) is missing"
+	find_bus || die "no I2C adapter for the tag (blsp1_i2c3 is not enabled)"
+	HDR=$(read_mem 0 16) || die "no answer from the tag at $ADDR on i2c-$BUS"
+	set -- $HDR
+	[ "$1 ${13} ${14} ${15}" = "0x1d 0xe1 0x10 0x6d" ] ||
+		die "unexpected tag header ($HDR), not touching it"
+}
+
+hex() {	# <string>: its bytes as 0x.. words
+	printf '%s' "$1" | hexdump -v -e '/1 "0x%02x "'
+}
+
+count() {
+	echo $#
+}
+
+word() {
+	printf '0x%02x 0x%02x' $(($1 >> 8)) $(($1 & 255))
+}
+
+attr() {	# <WSC attribute id> <value bytes...>
+	local id=$1
+
+	shift
+	echo "$(word $id) $(word $#) $*"
+}
+
+# wsc_tlv <ssid> <auth type> <encryption type> [<key>]: an NDEF message TLV
+# holding one WSC Credential record, then the terminator TLV - the layout
+# stock writes.
+wsc_tlv() {
+	local cred rec
+
+	cred="$(attr 0x1026 0x01)"					# Network Index
+	cred="$cred $(attr 0x1045 $(hex "$1"))"				# SSID
+	cred="$cred $(attr 0x1003 $(word $2))"				# Authentication Type
+	cred="$cred $(attr 0x100f $(word $3))"				# Encryption Type
+	[ -n "$4" ] && cred="$cred $(attr 0x1027 $(hex "$4"))"		# Network Key
+	cred="$cred $(attr 0x1020 0xff 0xff 0xff 0xff 0xff 0xff)"	# MAC Address
+	cred=$(attr 0x100e $cred)					# Credential
+	# MB|ME|SR and TNF 2 (MIME media type), type length, payload length, type
+	rec="0xd2 $(printf '0x%02x 0x%02x' 23 $(count $cred)) $(hex $WSC_TYPE) $cred"
+	echo "0x03 $(printf '0x%02x' $(count $rec)) $rec 0xfe"
+}
+
+# wsc_security <encryption>: "<auth type> <encryption type>" for an OpenWrt
+# encryption value, or fail if it cannot be shared. The patterns follow
+# netifd-wireless.sh.
+wsc_security() {
+	local auth enc
+
+	case "$1" in
+	none) echo 0x0001 0x0001; return 0 ;;	# Open, None
+	psk2*|psk3*|sae*) auth=0x0020 ;;	# WPA2-Personal (WSC has no WPA3)
+	psk-mixed*) auth=0x0022 ;;		# WPA-Personal | WPA2-Personal
+	psk*) auth=0x0002 ;;			# WPA-Personal
+	*) return 1 ;;				# owe, wep, dpp, wpa* (enterprise)
+	esac
+	case "$1" in
+	*tkip+aes|*tkip+ccmp|*aes+tkip|*ccmp+tkip) enc=0x000c ;;	# AES | TKIP
+	*tkip) enc=0x0004 ;;					# TKIP
+	*) enc=0x0008 ;;					# AES (CCMP, GCMP)
+	esac
+	echo $auth $enc
+}
+
+# radio_band <wifi-device>: its band, from `band` or the legacy `hwmode`
+radio_band() {
+	local band hwmode
+
+	config_get band "$1" band
+	if [ -z "$band" ]; then
+		config_get hwmode "$1" hwmode
+		case "$hwmode" in
+		11a) band=5g ;;
+		11b|11g) band=2g ;;
+		esac
+	fi
+	echo "$band"
+}
+
+# usable_ap <wifi-iface> [<band>]: an enabled AP with at least one enabled
+# radio (of that band, if given). `device` may list several radios.
+usable_ap() {
+	local mode disabled dev d
+
+	config_get mode "$1" mode
+	config_get_bool disabled "$1" disabled 0
+	[ "$mode" = ap ] && [ "$disabled" = 0 ] || return 1
+	config_get dev "$1" device
+	for d in $dev; do
+		config_get_bool disabled "$d" disabled 0
+		[ "$disabled" = 0 ] || continue
+		[ -z "$2" ] || [ "$(radio_band "$d")" = "$2" ] || continue
+		return 0
+	done
+	return 1
+}
+
+# config_foreach callback: <wifi-iface> [<band>]. Hidden networks are not
+# picked automatically: the credential cannot say the SSID is hidden, so a
+# phone may not find it.
+first_ap() {
+	local hidden
+
+	[ -z "$SHARE" ] || return 0
+	config_get_bool hidden "$1" hidden 0
+	[ "$hidden" = 0 ] && usable_ap "$1" "$2" && SHARE=$1
+}
+
+# wifi_tlv: the record for the interface wifi mode shares
+wifi_tlv() {
+	local ssid enc key sec len
+
+	SHARE=
+	config_load wireless
+	if [ -n "$IFACE" ]; then
+		usable_ap "$IFACE" && SHARE=$IFACE
+	else
+		config_foreach first_ap wifi-iface 5g
+		[ -n "$SHARE" ] || config_foreach first_ap wifi-iface 2g
+		[ -n "$SHARE" ] || config_foreach first_ap wifi-iface
+	fi
+	[ -n "$SHARE" ] || {
+		echo "no enabled AP interface${IFACE:+ '$IFACE'} to share"
+		return 1
+	}
+	config_get ssid "$SHARE" ssid
+	config_get enc "$SHARE" encryption none
+	config_get key "$SHARE" key
+	sec=$(wsc_security "$enc") || {
+		echo "$SHARE: encryption '$enc' cannot be shared over NFC"
+		return 1
+	}
+	set -- $sec
+	len=$(printf '%s' "$ssid" | wc -c)
+	[ $len -ge 1 ] && [ $len -le 32 ] || {
+		echo "$SHARE: SSID must be 1-32 bytes"
+		return 1
+	}
+	if [ $1 = 0x0001 ]; then
+		key=
+	else
+		len=$(printf '%s' "$key" | wc -c)
+		[ $len -ge 8 ] && [ $len -le 64 ] || {
+			echo "$SHARE: no usable key (option key, 8-64 characters)"
+			return 1
+		}
+	fi
+	wsc_tlv "$ssid" $1 $2 "$key"
+}
+
+read_area() {
+	read_mem $AREA_START $((AREA_END - AREA_START)) || die "cannot read the tag"
+}
+
+# diff_blocks <want> <have>: "<offset> <4 bytes>" for every block of the data
+# area whose content <have> differs from <want> followed by zeros
+diff_blocks() {
+	printf '%s\n%s\n' "$1" "$2" | awk -v base=$AREA_START '
+		NR == 1 { nw = split($0, w) }
+		NR == 2 { nh = split($0, h) }
+		END {
+			for (i = 1; i <= nh; i += 4) {
+				line = ""; diff = 0
+				for (j = i; j < i + 4; j++) {
+					v = j <= nw ? w[j] : "0x00"
+					if (v != h[j])
+						diff = 1
+					line = line " " v
+				}
+				if (diff)
+					print base + i - 1 line
+			}
+		}'
+}
+
+# program <bytes...>: make the data area hold these bytes, then zeros. Only
+# the blocks that differ are written, and everything is read back. While the
+# rest changes, the first block (the TLV length) holds an empty message, and
+# gets its new value last: a phone reading mid-update, or a run that fails
+# half-way, sees an empty tag rather than a mix of two records.
+program() {
+	local want="$*" have blocks body head cur pass=0 n=0
+
+	[ $# -le $((AREA_END - AREA_START)) ] || die "record too large"
+	set -- $want 0x00 0x00 0x00
+	head="$1 $2 $3 $4"
+	while :; do
+		have=$(read_area) || exit 1
+		blocks=$(diff_blocks "$want" "$have")
+		[ -z "$blocks" ] && break
+		[ $pass -lt 3 ] || die "the tag does not keep what is written to it"
+		pass=$((pass + 1))
+		set -- $have
+		cur="$1 $2 $3 $4"
+		body=$(echo "$blocks" | grep -v "^$AREA_START ")
+		if [ -n "$body" ]; then
+			if [ "$cur" != "$EMPTY" ]; then
+				write_block $AREA_START $EMPTY || die "write failed"
+				cur=$EMPTY
+				n=$((n + 1))
+			fi
+			echo "$body" | while read -r off bytes; do
+				write_block $off $bytes || exit 1
+			done || die "write failed"
+			n=$((n + $(echo "$body" | wc -l)))
+		fi
+		if [ "$cur" != "$head" ]; then
+			write_block $AREA_START $head || die "write failed"
+			n=$((n + 1))
+		fi
+	done
+	[ $n = 0 ] || log "wrote $n blocks"
+}
+
+update() {
+	local want
+
+	case "$MODE" in
+	clear)
+		want="0x03 0x00 0xfe"
+		;;
+	wifi)
+		want=$(wifi_tlv) || {
+			log "$want; clearing the tag"
+			want="0x03 0x00 0xfe"
+		}
+		;;
+	*)
+		die "unknown mode '$MODE' in /etc/config/nfc"
+		;;
+	esac
+	program $want
+}
+
+status() {
+	local area want
+
+	area=$(read_area) || exit 1
+	set -- $HDR
+	echo "tag:      UID $(echo $1$2$3$5$6$7$8 | sed 's/0x//g') at $ADDR on i2c-$BUS"
+	echo "mode:     $MODE"
+	echo "$area" | awk '
+		function val(t) {
+			if (t !~ /^0x[0-9a-f][0-9a-f]$/)
+				return -1
+			return (index(H, substr(t, 3, 1)) - 1) * 16 + index(H, substr(t, 4, 1)) - 1
+		}
+		function str(a, len,   s, k) {
+			s = ""
+			for (k = a; k < a + len; k++)
+				s = s sprintf("%c", val(b[k]))
+			return s
+		}
+		function leftover(a,   k, c) {
+			c = 0
+			for (k = a; k <= n; k++)
+				if (b[k] != "0x00")
+					c++
+			if (c)
+				print "leftover: " c " non-zero bytes after the message (old data; nfc update clears them)"
+		}
+		function malformed() {
+			print "content:  malformed NDEF data"
+			exit
+		}
+		function name(v, t) {
+			return (v in t) ? t[v] : sprintf("0x%04x", v)
+		}
+		BEGIN {
+			H = "0123456789abcdef"
+			auth[1] = "open"; auth[2] = "WPA-Personal"
+			auth[32] = "WPA2-Personal"; auth[34] = "WPA/WPA2-Personal"
+			enc[1] = "none"; enc[2] = "WEP"; enc[4] = "TKIP"
+			enc[8] = "AES"; enc[12] = "AES/TKIP"
+		}
+		{
+			n = split($0, b)
+			i = 1
+			while (i <= n && b[i] == "0x00")	# NULL TLVs
+				i++
+			if (i > n || b[i] == "0xfe") {
+				print "content:  empty"
+				leftover(i + 1)
+				exit
+			}
+			if (b[i] != "0x03" || b[i + 1] == "0xff") {
+				print "content:  no NDEF message"
+				exit
+			}
+			len = val(b[i + 1])
+			end = i + 2 + len	# the terminator TLV
+			if (len < 0 || end > n)
+				malformed()
+			if (len == 0) {
+				print "content:  empty"
+				leftover(end + 1)
+				exit
+			}
+			r = i + 2
+			hdr = val(b[r])
+			tl = val(b[r + 1])
+			if (hdr < 0 || tl < 0)
+				malformed()
+			if (int(hdr / 16) % 2) {	# SR: 1-byte payload length
+				pl = val(b[r + 2])
+				p = r + 3 + tl
+			} else {
+				pl = ((val(b[r + 2]) * 256 + val(b[r + 3])) * 256 + val(b[r + 4])) * 256 + val(b[r + 5])
+				p = r + 6 + tl
+			}
+			if (pl < 0 || p + pl > end)
+				malformed()
+			type = str(p - tl, tl)
+			if (type != "application/vnd.wfa.wsc") {
+				print "content:  NDEF record of type " type
+				leftover(end + 1)
+				exit
+			}
+			pend = p + pl
+			while (p + 4 <= pend) {
+				id = val(b[p]) * 256 + val(b[p + 1])
+				l = val(b[p + 2]) * 256 + val(b[p + 3])
+				v = p + 4
+				if (id < 0 || l < 0 || v + l > pend)
+					malformed()
+				if (id == 4110) {	# Credential: descend
+					p = v
+					pend = v + l
+					continue
+				}
+				if (id == 4165)
+					ssid = str(v, l)
+				else if (id == 4099)
+					a = val(b[v]) * 256 + val(b[v + 1])
+				else if (id == 4111)
+					e = val(b[v]) * 256 + val(b[v + 1])
+				else if (id == 4135)
+					keylen = l
+				p = v + l
+			}
+			print "content:  Wi-Fi network \"" ssid "\""
+			print "security: " name(a, auth) ", " name(e, enc)
+			print "password: " (keylen ? keylen " characters" : "none")
+			leftover(end + 1)
+		}'
+	case "$MODE" in
+	clear|wifi)
+		want="0x03 0x00 0xfe"
+		[ "$MODE" = clear ] || want=$(wifi_tlv) || want="0x03 0x00 0xfe"
+		if [ -z "$(diff_blocks "$want" "$area")" ]; then
+			echo "in sync:  yes"
+		else
+			echo "in sync:  no (nfc update fixes it)"
+		fi
+		;;
+	esac
+}
+
+dump() {
+	local a=0 row
+
+	while [ $a -lt 1024 ]; do
+		row=$(read_mem $a 16) || die "cannot read the tag"
+		printf '%04x: %s\n' $a "$(echo $row | sed 's/0x//g')"
+		a=$((a + 16))
+	done
+}
+
+usage() {
+	cat <<EOF
+usage: nfc <command>
+  status   show what the tag holds and whether it matches /etc/config/nfc
+  update   apply /etc/config/nfc (mode off, clear or wifi)
+  clear    empty the tag now, whatever the mode
+  dump     hex dump of the tag memory, 0x000-0x3ff
+EOF
+	exit 1
+}
+
+case "$1" in
+status|update|clear|dump) ;;
+*) usage ;;
+esac
+
+# One run at a time. busybox flock has no timeout, so poll: a run stuck on
+# the bus fails within ~15 s per transfer, and nothing waits on this one.
+exec 9>/var/lock/nfc.lock
+try=0
+until flock -n 9; do
+	try=$((try + 1))
+	[ $try -lt 120 ] || die "another nfc run has held the lock for 2 minutes"
+	sleep 1
+done
+
+# Read the config under the lock, so a run that waited applies the newest.
+MODE=off
+if [ -e "${UCI_CONFIG_DIR:-/etc/config}/nfc" ]; then
+	config_load nfc
+	config_get MODE main mode off
+	config_get IFACE main iface
+fi
+[ "$1" = update ] && [ "$MODE" = off ] && exit 0
+
+open_tag
+
+case "$1" in
+status) status ;;
+update) update ;;
+clear) program 0x03 0x00 0xfe ;;
+dump) dump ;;
+esac
