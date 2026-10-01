@@ -1,8 +1,9 @@
 # Release images, UART installation and usage
 
 For the recommended installation without opening the case or using UART, see
-[ADCDS/xiaomi-ota-install](https://github.com/ADCDS/xiaomi-ota-install) and use
-its hardware-tested `rd03v2` profile. It handles stock root, image validation,
+[ADCDS/xiaomi-router-install](https://github.com/ADCDS/xiaomi-router-install) and run
+`python3 install.py standard`. Its hardware-tested `rd03v2` profile handles
+stock root, image validation,
 the RAM-initramfs pivot, and the permanent NAND installation.
 The procedure below is the alternative UART + TFTP method, followed by usage and recovery notes.
 
@@ -203,7 +204,7 @@ sets those two variables replaces it. Options, best first:
    a dead end: the router's own `check_rom_update` returns nothing once the unit is
    already on the newest release, but the image is on Xiaomi's CDN regardless.
 2. **Use the software installation method.** See
-   [xiaomi-ota-install](https://github.com/ADCDS/xiaomi-ota-install), which
+   [xiaomi-router-install](https://github.com/ADCDS/xiaomi-router-install), which
    supports the RD03v2 installation without UART.
 3. **External SPI-NAND programmer** on the flash chip (ESMT F50D1G41LB or
    Winbond W25N01KW) — version- and
