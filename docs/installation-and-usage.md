@@ -361,7 +361,8 @@ nfc status                            # what the tag holds now
 ```
 
 The tag follows Wi-Fi changes made through LuCI. Anyone who can tap the
-router can read a shared password. See [`nfc.md`](nfc.md).
+router can read a shared password, even with the router off. See
+[`nfc.md`](nfc.md).
 
 ### Recovering / going back to stock
 Repeat the **TFTP recovery** (step 2) with the stock `recovery.bin` — it reflashes stock over everything. The same version rule applies here: the image must be no older than the last stock version the unit ran. Links and hashes are in [Getting a stock `recovery.bin`](#getting-a-stock-recoverybin); keeping a local copy alongside your OpenWrt images is still the sensible habit.

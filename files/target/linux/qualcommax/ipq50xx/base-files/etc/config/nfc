@@ -1,11 +1,11 @@
 
 config nfc 'main'
 	# What /usr/sbin/nfc keeps on the router's NFC tag (see docs/nfc.md):
-	#   off    never touch the tag
+	#   off    leave the tag alone (no access at all)
 	#   clear  keep it empty - wipes the old SSID and password stock left
 	#   wifi   share a Wi-Fi network: tap an Android phone to join
 	# Anyone who can tap the router can read a shared password.
 	option mode 'clear'
 	# wifi-iface section to share in wifi mode, e.g. a guest network.
-	# Default: the first enabled AP on 5 GHz, else on 2.4 GHz.
+	# Default: the first enabled, broadcast AP on 5 GHz, else on 2.4 GHz.
 	#option iface 'default_radio1'
