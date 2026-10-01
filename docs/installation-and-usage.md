@@ -345,5 +345,24 @@ config led
 Boot/failsafe/upgrade indications keep working as before (blue =
 boot/running, amber = failsafe/upgrade, via the `led-*` DTS aliases).
 
+### NFC tag (tap to join)
+
+The router's NFC tag can share a Wi-Fi network: tap an Android phone on the
+router and it offers to join. Stock MiWiFi kept the active SSID and password
+on the tag, and **a flashed router still holds whatever stock wrote last**,
+readable by any phone even with the router off. So by default the image
+**clears** the tag at first boot and keeps it empty. Sharing is opt-in:
+
+```sh
+uci set nfc.main.mode=wifi            # off | clear | wifi
+uci set nfc.main.iface=default_radio1 # optional: which wifi-iface (e.g. a guest network)
+uci commit nfc && nfc update
+nfc status                            # what the tag holds now
+```
+
+The tag follows Wi-Fi changes made through LuCI. Anyone who can tap the
+router can read a shared password, even with the router off. See
+[`nfc.md`](nfc.md).
+
 ### Recovering / going back to stock
 Repeat the **TFTP recovery** (step 2) with the stock `recovery.bin` — it reflashes stock over everything. The same version rule applies here: the image must be no older than the last stock version the unit ran. Links and hashes are in [Getting a stock `recovery.bin`](#getting-a-stock-recoverybin); keeping a local copy alongside your OpenWrt images is still the sensible habit.

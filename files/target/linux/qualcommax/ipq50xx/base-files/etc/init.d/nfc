@@ -1,0 +1,28 @@
+#!/bin/sh /etc/rc.common
+# NFC tag: apply /etc/config/nfc at boot and whenever the wireless or nfc
+# config changes (LuCI apply, reload_config). See /usr/sbin/nfc.
+#
+# nfc runs in the background: a wedged I2C transfer costs i2c-qup ~15 s, and
+# neither the boot sequence nor procd's trigger queue (one task at a time,
+# shared by every service) should wait for it. nfc serialises its own runs
+# and logs to syslog.
+START=99
+USE_PROCD=1
+
+nfc_update() {
+	[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = xiaomi,mi-router-ax3000t-v2 ] ||
+		return 0
+	/usr/sbin/nfc update </dev/null >/dev/null 2>&1 &
+}
+
+start_service() {
+	nfc_update
+}
+
+reload_service() {
+	nfc_update
+}
+
+service_triggers() {
+	procd_add_reload_trigger wireless nfc
+}

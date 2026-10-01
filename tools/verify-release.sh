@@ -10,6 +10,9 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BDF_PATH=lib/firmware/ath11k/IPQ5018/hw1.0/board-2.bin
 BDF_SOURCE="$REPO/files/package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.ipq5018"
 BDF_SHA=$(sha256sum <"$BDF_SOURCE" | cut -d' ' -f1)
+# The NDEF message stock 2.0.28 wrote to the bench unit's NFC tag at 0x010
+# for its open factory network minet_rd03_cfd7, terminator included.
+NFC_STOCK_RECORD="0x03 0x4c 0xd2 0x17 0x32 0x61 0x70 0x70 0x6c 0x69 0x63 0x61 0x74 0x69 0x6f 0x6e 0x2f 0x76 0x6e 0x64 0x2e 0x77 0x66 0x61 0x2e 0x77 0x73 0x63 0x10 0x0e 0x00 0x2e 0x10 0x26 0x00 0x01 0x01 0x10 0x45 0x00 0x0f 0x6d 0x69 0x6e 0x65 0x74 0x5f 0x72 0x64 0x30 0x33 0x5f 0x63 0x66 0x64 0x37 0x10 0x03 0x00 0x02 0x00 0x01 0x10 0x0f 0x00 0x02 0x00 0x01 0x10 0x20 0x00 0x06 0xff 0xff 0xff 0xff 0xff 0xff 0xfe"
 
 REL="${1:?usage: verify-release.sh <release-dir>}"
 PLAIN_TREE="${2:-}"
@@ -79,6 +82,35 @@ check_tree() {
 
 	# finding #3 — the duplicate reserved-memory node must be gone
 	chk "$label q6_mem_regions in DTB source" "0" "0"
+
+	# NFC tag (docs/nfc.md) — both flavours: the tool, its service, the
+	# i2ctransfer it drives, the clear-by-default config, and the I2C
+	# controller it needs actually enabled in the DTB that went into the image
+	[ -x "$d/x/usr/sbin/nfc" ] && ok "$label nfc tool" || bad "$label /usr/sbin/nfc MISSING"
+	sh -n "$d/x/usr/sbin/nfc" 2>/dev/null && ok "$label nfc syntax" || bad "$label nfc syntax error"
+	[ -L "$d/x/etc/rc.d/S99nfc" ] && ok "$label S99nfc symlink" || bad "$label S99nfc symlink MISSING"
+	[ -x "$d/x/usr/sbin/i2ctransfer" ] && ok "$label i2ctransfer" || bad "$label i2ctransfer MISSING"
+	ls "$d/x/usr/lib/libi2c.so".* >/dev/null 2>&1 && ok "$label libi2c" || bad "$label libi2c MISSING"
+	chk "$label nfc default mode" "$(grep -hE "^[[:space:]]*option mode" "$d/x/etc/config/nfc" 2>/dev/null)" "	option mode 'clear'"
+	# A file being there proves little: build a record with the packaged
+	# script's own functions and compare it with the one stock 2.0.28 wrote on
+	# the bench unit (its open factory network).
+	local lib rec
+	lib=$(mktemp)
+	sed -e '/^\. \/lib\/functions.sh$/d' -e '/^case "\$1" in$/,$d' "$d/x/usr/sbin/nfc" > "$lib" 2>/dev/null
+	rec=$(sh -c '. "$1"; wsc_tlv minet_rd03_cfd7 0x0001 0x0001' _ "$lib" 2>&1 | tr -s ' ' | sed 's/ $//')
+	rm -f "$lib"
+	chk "$label nfc record = stock's" "$rec" "$NFC_STOCK_RECORD"
+	local dtb
+	dtb=$(ls "$tree"/build_dir/target-*/linux-*/image-ipq5018-mi-router-ax3000t-v2.dtb 2>/dev/null | head -1)
+	if [ -n "$dtb" ]; then
+		chk "$label DTB i2c@78b7000 (NFC) status" "$(fdtget -t s "$dtb" /soc@0/i2c@78b7000 status 2>&1)" "okay"
+		# stock's pipe order, not ipq5018.dtsi's (see the DTS)
+		chk "$label DTB i2c@78b7000 dmas" "$(fdtget -t x "$dtb" /soc@0/i2c@78b7000 dmas 2>&1 | awk '{print $2, $4}')" "8 9"
+		chk "$label DTB i2c@78b7000 dma-names" "$(fdtget -t s "$dtb" /soc@0/i2c@78b7000 dma-names 2>&1 | tr '\0' ' ' | xargs)" "tx rx"
+	else
+		bad "$label DTB not found in the tree"
+	fi
 
 	if [ "$want_offload" = yes ]; then
 		chk "$label ath11k nss_offload modparam" \
