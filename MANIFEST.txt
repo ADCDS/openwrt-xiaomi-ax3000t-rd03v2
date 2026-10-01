@@ -2,6 +2,7 @@ Xiaomi Mi Router AX3000T v2 (RD03v2) OpenWrt port — overlay manifest
 =====================================================================
 Base:   openwrt/openwrt @ 25ee12629edcc38feffbd06255dd47840cd7af7e
         ("uboot-tools: update to v2026.07")
+Feeds:  pinned to the revisions in feeds.lock (applied by build.sh)
 Device: IPQ5018 SoC (2.4 GHz radio) + QCN6122 (5 GHz) + Airoha AN8855 4-port switch
 Usage:  ./build.sh  (clones OpenWrt, checks out 25ee126, overlays files/, builds)
 

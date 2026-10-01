@@ -15,7 +15,7 @@ KMODS=1 ./build.sh    # ...plus every kernel module as an installable package (s
 release `kmods.tar.gz`. It leaves the image's package set alone but **does change the kernel
 vermagic**, so modules only install on an image from the same run — release images are therefore
 built with it too. Expect a multi-hour build; without it you get a normal image in normal time.
-Or manually: check out OpenWrt at `25ee126`, copy `files/*` over it, `./scripts/feeds update -a && ./scripts/feeds install -a`, seed `.config` with the device + `CONFIG_TARGET_ROOTFS_INITRAMFS=y`, then `make defconfig && make -j$(nproc)`. Images land in `bin/targets/qualcommax/ipq50xx/`.
+Or manually: check out OpenWrt at `25ee126`, copy `files/*` over it, pin each feed in `feeds.conf.default` to its revision in [`feeds.lock`](../feeds.lock) (`src-git <name> <url>^<commit>`), `./scripts/feeds update -a && ./scripts/feeds install -a`, seed `.config` with the device + `CONFIG_TARGET_ROOTFS_INITRAMFS=y`, then `make defconfig && make -j$(nproc)`. Images land in `bin/targets/qualcommax/ipq50xx/`.
 
 **NSS hardware offload** (`NSS=1`, opt-in) boots the IPQ5018's NSS network
 processor to offload NAT routing at line rate. Measured LAN→WAN NAT over a

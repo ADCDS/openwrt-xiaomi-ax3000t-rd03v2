@@ -3,7 +3,8 @@
 #   IPQ5018 SoC + Airoha AN8855 switch + QCN6122 5 GHz radio.
 #
 # Reproduces the port by overlaying ./files/ onto a pristine
-# openwrt/openwrt checkout at commit 25ee126.
+# openwrt/openwrt checkout at commit 25ee126, with the package feeds pinned to
+# the revisions in ./feeds.lock.
 #
 # Optional QCA NSS hardware offload (experimental, ~900 Mbps NAT routing):
 #   NSS=1 ./build.sh
@@ -188,6 +189,28 @@ if [ -n "$PROFILE" ]; then
 	grep -rlIZ '^#!' files 2>/dev/null | xargs -0 -r chmod 755
 	[ -f files/etc/dropbear/authorized_keys ] && chmod 600 files/etc/dropbear/authorized_keys
 fi
+
+# Pin the package feeds to ../feeds.lock. OpenWrt's feed list follows branch
+# heads, so without this two builds of one commit can pull different packages,
+# and a moving feed can break the build outright: the Kconfig cycles that
+# blocked the first v1.12 NSS build came from there. A lock line for a feed
+# this build does not use (sqm_scripts_nss on a plain build) is skipped. A
+# feed left unpinned is an error, so a new one cannot float in unnoticed.
+# nss_packages is the exception: it is pinned above for NSS Wi-Fi builds, and
+# plain NSS builds follow its NSS-12.5-K6.x branch, as before.
+[ -f ../feeds.lock ] || { echo "ERROR: ../feeds.lock is missing" >&2; exit 1; }
+while read -r feed rev; do
+	case "$feed" in ''|'#'*) continue ;; esac
+	grep -q "^src-git $feed " feeds.conf.default || continue
+	sed -i "s#^src-git $feed \([^;^ ]*\).*#src-git $feed \1^$rev#" feeds.conf.default
+	grep -q "^src-git $feed [^ ]*\^$rev\$" feeds.conf.default ||
+		{ echo "ERROR: could not pin feed $feed to $rev" >&2; exit 1; }
+done < ../feeds.lock
+unpinned=$(grep -E '^src-' feeds.conf.default | grep -v -E '\^[0-9a-f]{40}$' |
+	grep -v -E '^src-git nss_packages [^ ]*;NSS-12\.5-K6\.x$' || true)
+[ -z "$unpinned" ] || { echo "ERROR: feeds not pinned by feeds.lock:" >&2; echo "$unpinned" >&2; exit 1; }
+echo ">>> feeds pinned:"
+grep -E '^src-' feeds.conf.default | sed 's/^/    /'
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
