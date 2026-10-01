@@ -22,18 +22,21 @@ I2C:
 
 The I2C side works like an EEPROM: a 2-byte memory address, then data.
 Writes go one 4-byte block per transfer, and the chip NACKs while it programs
-a block. Its memory map is the Type 2 tag layout:
+a block. Its memory map follows the Type 2 tag layout:
 
 | Address | Content |
 |---|---|
 | `0x000-0x00f` | UID, static lock bytes (`ff ff`), capability container `e1 10 6d 00` |
 | `0x010-0x377` | NDEF data area, 872 bytes (`0x6d` × 8, per the capability container) |
-| `0x378-0x3ff` | chip configuration |
+| `0x378-0x3ff` | chip-specific data, outside the NDEF area; never written |
 
-The static lock bytes are set, so a **phone cannot rewrite the tag**. The
-router can: stock rewrites the data area over I2C on every boot. That is where
-the idea that the tag is read-only comes from; it is read-only only from the
-RF side.
+The tag is not read-only: the router writes it over I2C, and stock rewrites
+the data area on every boot. The static lock bytes do lock blocks 3-15
+(`0x00c-0x03f`, which hold the capability container and the first 48 bytes of
+the data area) against RF writes, so a phone cannot rewrite the start of a
+record. Whether the rest of the data area can be written over RF depends on
+chip-specific lock bits that have not been examined, and no RF write has been
+tried.
 
 `ipq5018.dtsi` names this QUP's BAM pipes the wrong way round (9 = tx,
 8 = rx). Stock and the neighbouring `blsp1_spi1` (4 = tx, 5 = rx) use the
@@ -42,16 +45,17 @@ transfers larger than the QUP FIFO; `nfc` itself reads 16 bytes at a time.
 
 ## What stock does
 
-`misc.nfc.nfc_support=1` turns the feature on for this board. Every
-`/sbin/wifi` up or reload and every boot (`/etc/init.d/nfc`, S43) runs
-`/usr/sbin/nfc.lua`. That calls `XQNfcUtil.nfc_update()`, which builds the
-record and hands it to `/sbin/nfc update`, which writes it with `i2ctransfer`.
+`misc.nfc.nfc_support=1` turns the feature on for this board. Every boot
+(`/etc/init.d/nfc`, S43) and every `wifi update` or `wifi reload`
+(`/sbin/wifi`) runs `/usr/sbin/nfc.lua`. That calls
+`XQNfcUtil.nfc_update()`, which builds the record and hands it to
+`/sbin/nfc update`, which writes it with `i2ctransfer`.
 
 - Before the setup wizard has run, the tag holds a hidden `<ssid>_nfc` PSK2
   network created for it.
 - After setup it holds the active network: 5 GHz if it is up, else 2.4 GHz.
 - WPA3 is announced as WPA2-Personal: the WSC authentication table maps
-  "SAE" to `0x0020`.
+  "SAE" to `0x0020`. The encryption type is always AES.
 - Stock writes only the new record. It never clears what follows it, so the
   tails of longer, older records stay readable past the terminator.
 
@@ -62,10 +66,13 @@ password, readable by any phone, even with the router switched off.
 ## What this port does
 
 `/usr/sbin/nfc` (base-files) needs `i2c-tools`, which is in the image.
-`/etc/init.d/nfc` runs `nfc update` at boot and whenever the `wireless` or
-`nfc` config changes, through procd reload triggers (LuCI *Save & Apply*,
-`reload_config`). After a `uci commit wireless` from the shell, run
-`nfc update` or `reload_config`.
+`/etc/init.d/nfc` starts `nfc update` in the background at boot and whenever
+the `wireless` or `nfc` config changes, through procd reload triggers (LuCI
+*Save & Apply*, `reload_config`). After a `uci commit wireless` from the
+shell, run `nfc update` or `reload_config`. A transfer on a wedged bus costs
+i2c-qup about 15 s, so neither the boot sequence nor procd's trigger queue,
+which runs one task at a time for every service, waits for `nfc`. It logs
+what it writes and any failure to syslog (`logread -e nfc`).
 
 `/etc/config/nfc`:
 
@@ -77,27 +84,37 @@ config nfc 'main'
 
 | mode | the tag holds |
 |---|---|
-| `off` | whatever is on it; never written. A missing config means `off`. |
+| `off` | whatever is on it: `nfc update` does nothing, not even an I2C access. A missing config means `off`. |
 | `clear` (default) | an empty NDEF message. This is what wipes the stock leftovers. |
-| `wifi` | a Wi-Fi credential for `iface`. Without `iface`: the first enabled AP on 5 GHz, else on 2.4 GHz. |
+| `wifi` | a Wi-Fi credential for `iface`. Without `iface`: the first enabled, broadcast AP on 5 GHz, else on 2.4 GHz. |
 
-In `wifi` mode the record is the one stock writes, byte for byte: an NDEF
-MIME record of type `application/vnd.wfa.wsc` with one WSC Credential (SSID,
-authentication type, encryption type, network key). Tapping an Android phone
-offers to join the network.
+The RAM installer images run the same code with the default config, so just
+booting an installer already clears the tag.
+
+In `wifi` mode the record has the layout stock writes: an NDEF MIME record of
+type `application/vnd.wfa.wsc` with one WSC Credential (SSID, authentication
+type, encryption type, network key). For an open or WPA2/AES network it is
+byte-identical to stock's. The encryption type follows the configured cipher,
+where stock always writes AES. Tapping an Android phone offers to join the
+network.
 
 | `encryption` | announced as |
 |---|---|
 | `none` | open |
-| `psk2*`, `sae`, `sae-mixed` | WPA2-Personal (WSC has no WPA3 type; stock does the same) |
+| `psk2*`, `sae*`, `psk3*` (with their `-mixed` forms) | WPA2-Personal (WSC has no WPA3 type; stock does the same) |
 | `psk-mixed*` | WPA/WPA2-Personal |
 | `psk*` | WPA-Personal |
-| `owe`, `wep*`, `wpa*` (enterprise) | cannot be shared; the tag is cleared instead |
+| `owe`, `wep*`, `dpp`, `wpa*` (enterprise) | not shared; the tag is cleared instead |
 
-`sae-mixed` works with any phone. With pure `sae`, the phone has to upgrade
-the WPA2 credential to WPA3 by itself; recent Android versions do. If the
-selected interface is missing or disabled, or its encryption cannot be
-shared, the tag is cleared rather than left advertising an old network.
+Only WPA2 (`psk2`) has been tried with a phone. A `sae-mixed` network also
+takes WPA2, so it should work the same way. With pure `sae`, the phone has to
+upgrade the WPA2 credential to WPA3 by itself; that is untested.
+
+A hidden AP is never picked automatically: the credential cannot say that the
+SSID is hidden, so a phone may not find it. An `iface` that names a hidden AP
+is shared anyway. If the selected interface is missing or disabled, or its
+encryption cannot be shared, the tag is cleared rather than left advertising
+an old network.
 
 ```
 nfc status   # what the tag holds, and whether it matches /etc/config/nfc
@@ -107,7 +124,9 @@ nfc dump     # hex dump of 0x000-0x3ff (a backup before experiments)
 ```
 
 **Anyone who can tap the router can read a shared password**, so `wifi` is
-opt-in. A guest network is a good candidate for `iface`.
+opt-in. The password stays on the tag with the router off, and after a
+reflash, until something clears it. A guest network is a good candidate for
+`iface`.
 
 ## Safety rules in `nfc`
 
@@ -115,13 +134,21 @@ opt-in. A guest network is a good candidate for `iface`.
   with UID byte 0 = `0x1d` and capability container `e1 10 6d`. Anything else
   is refused untouched.
 - It writes only 4-byte blocks inside `0x010-0x377`. The UID, lock and
-  capability-container bytes below that area, and the configuration above
-  it, are never written. Lock bits are one-time programmable, so a stray
-  write there could lock the tag for good.
+  capability-container bytes below that area, and the chip data above it,
+  are never written. Lock bits are one-time programmable, so a stray write
+  there could lock the tag for good.
 - It manages the whole data area: the record, then zeros. It reads the area,
   writes only the blocks that differ, and reads it back. Re-running is free,
   and the EEPROM is not rewritten on every boot.
-- It serialises on `/var/lock/nfc.lock`.
+- While the rest changes, the first block (which holds the message length)
+  is set to an empty message, and it gets its new value last. A phone that
+  reads mid-update, or a run that fails half-way, finds an empty tag or the
+  old record, never a mix of the two.
+- A NACK (the chip busy programming a block) is retried up to 20 times. Any
+  other I2C error fails the run at once.
+- Runs are serialised on `/var/lock/nfc.lock`, waiting at most 2 minutes. The
+  config is read once the lock is held, so a run that waited applies the
+  newest one.
 
 ## Verified on the bench (2026-10-01)
 
@@ -131,8 +158,8 @@ to NAND with a kept config:
 - `/dev/i2c-0` is the QUP at `78b7000`, with gpio25/26 muxed to `blsp2_i2c1`
   and no pull. A read-mode scan finds only `0x57`.
 - On the first boot `nfc update` (mode `clear`) wiped the stock record and its
-  leftovers: 30 blocks. The UID, lock bytes, capability container and
-  configuration area read back identical to a dump taken before the change.
+  leftovers: 30 blocks. The UID, lock bytes, capability container and chip
+  data above the area read back identical to a dump taken before the change.
 - A full Wi-Fi record takes 23 block writes and 1.4 s, including two full
   reads of the data area. No write needed a retry. A re-run writes nothing
   and takes 0.6 s.
@@ -140,10 +167,17 @@ to NAND with a kept config:
   FIFO mode. 64- and 255-byte reads go through DMA and return the same data.
 - Changing `nfc.main.mode` or the `wireless` config and running
   `reload_config` rewrites the tag through the procd triggers.
-- Tapping an Android phone on the router offered to join the shared network.
+- Tapping an Android phone on the router offered to join the shared network
+  (`psk2`).
 
-Not verified: the NSS build (same DTS node and files), and iOS, which does not
-act on WSC records.
+A review then changed the script: background runs, the write order above,
+NACK-only retries, `off` without I2C access, hidden and multi-radio
+interfaces, and the `psk3` and cipher-order mapping. Those changes were
+tested under the image's own busybox (qemu) against a mock tag, not yet on
+the hardware.
+
+Not verified: the NSS build (same DTS node and files), RF writes to the tag,
+and iOS, which does not act on WSC records.
 
 ## xinfc
 

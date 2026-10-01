@@ -240,19 +240,21 @@ target/linux/qualcommax/ipq50xx/base-files/
          See docs/q6-firmware-crash.md.
    243  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog
          procd service for the above (START=99, respawns).
-  12621  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc
+  15372  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc
          The NFC tag (#18): keeps it empty (mode clear, the default,
          which wipes the SSID/password stock left on it) or holds a WSC
-         Wi-Fi credential for one AP (mode wifi), byte for byte the
-         record stock writes. Talks to the tag with i2ctransfer. Writes
-         only 4-byte blocks inside the NDEF data area 0x010-0x377, and
-         only the blocks that differ, then reads them back. Refuses any
-         other board or tag. Commands: status, update, clear, dump.
-         See docs/nfc.md.
-    335  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nfc
-         procd service for the above (START=99): runs nfc update at boot
-         and on wireless/nfc config changes (reload triggers).
-    498  target/linux/qualcommax/ipq50xx/base-files/etc/config/nfc
+         Wi-Fi credential for one AP (mode wifi), in the record layout
+         stock writes. Talks to the tag with i2ctransfer. Writes only
+         4-byte blocks inside the NDEF data area 0x010-0x377, and only
+         the blocks that differ, with the length block last, then reads
+         them back. Retries NACKs only; mode off does no I2C access.
+         Refuses any other board or tag. Commands: status, update,
+         clear, dump. See docs/nfc.md.
+    729  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nfc
+         procd service for the above (START=99): starts nfc update in
+         the background at boot and on wireless/nfc config changes
+         (reload triggers), so neither waits on the I2C bus.
+    528  target/linux/qualcommax/ipq50xx/base-files/etc/config/nfc
          Default config: mode 'clear'. Kept across sysupgrade like any
          /etc/config file.
    6823  target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
