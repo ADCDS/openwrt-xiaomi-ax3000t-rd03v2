@@ -12,7 +12,7 @@ Treat it as beta.
 
 ## Installation
 
-**Recommended: [xiaomi-router-install](https://github.com/ADCDS/xiaomi-router-install).**
+**Recommended: [xiaomi-openwrt-install](https://github.com/ADCDS/xiaomi-openwrt-install).**
 Its `rd03v2` profile installs OpenWrt over Ethernet or Wi-Fi **without opening
 the case or connecting UART**. It integrates the hardware-tested V1 → V2
 stock-root chain, validates the board and NAND, downloads and verifies this
