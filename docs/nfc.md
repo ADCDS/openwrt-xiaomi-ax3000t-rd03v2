@@ -41,7 +41,27 @@ tried.
 `ipq5018.dtsi` names this QUP's BAM pipes the wrong way round (9 = tx,
 8 = rx). Stock and the neighbouring `blsp1_spi1` (4 = tx, 5 = rx) use the
 even-tx order, so the board DTS overrides it. The driver uses DMA only for
-transfers larger than the QUP FIFO; `nfc` itself reads 16 bytes at a time.
+transfers larger than the QUP FIFO.
+
+Reads have a catch. A read is an address write followed by the read itself.
+When the read comes late, the chip drops the address and answers from address
+0, and the transfer still succeeds. At idle even a separate address write and
+read, run as two `i2ctransfer` calls, work. This is inferred from what the
+reads return; the bus itself was not captured. In FIFO mode, i2c-qup sends
+the two parts as separate steps, so under CPU load the read can come much
+later.
+
+On the bench, with two busy loops at `nice -15`:
+- 16-byte reads came back with the header row in bursts: 245 of the 630
+  reads away from address 0 in one run, 100 of 100 in another.
+- A separate address write and read failed the same way.
+- DMA queues both parts at once. Interleaved with the 100 failing reads, 100
+  of 100 whole-area reads were right.
+
+The same fault happened at boot on the NSS image, where the first `nfc update`
+then rewrote blocks that were already right. So `nfc` reads each range in one
+transfer: 16 bytes for the header, the whole data area, or all 1 KB for
+`dump`.
 
 ## What stock does
 
@@ -146,6 +166,9 @@ reflash, until something clears it. A guest network is a good candidate for
   old record, never a mix of the two.
 - A NACK (the chip busy programming a block) is retried up to 20 times. Any
   other I2C error fails the run at once.
+- Each read is one transfer (see above). A read away from address 0 that
+  contains the header row is retried after a 1 s pause, 10 reads in all; then
+  the run fails and logs it.
 - Runs are serialised on `/var/lock/nfc.lock`, waiting at most 2 minutes. The
   config is read once the lock is held, so a run that waited applies the
   newest one.
@@ -172,12 +195,30 @@ to NAND with a kept config:
 
 A review then changed the script: background runs, the write order above,
 NACK-only retries, `off` without I2C access, hidden and multi-radio
-interfaces, and the `psk3` and cipher-order mapping. Those changes were
-tested under the image's own busybox (qemu) against a mock tag, not yet on
-the hardware.
+interfaces, and the `psk3` and cipher-order mapping.
 
-Not verified: the NSS build (same DTS node and files), RF writes to the tag,
-and iOS, which does not act on WSC records.
+## Verified on the bench (2026-10-02)
+
+The v1.12 release images, both flavours, installed to NAND with a kept
+config:
+- The boot-time update runs in the background, after procd's "init complete".
+- `off` makes no I2C transfer, whether from a trigger or a manual run.
+- `reload_config` returns at once, and the tag then follows a `wireless`
+  change.
+- 40 updates killed with `kill -9` during their writes each left an empty tag
+  or a complete record, never a mix.
+- A missing `option iface` clears the tag and logs a notice.
+- The NSS core stays healthy, with offload on.
+
+The read fault above was found on the NSS image, where it showed up at boot.
+With one transfer per read:
+- 4 boots in a row wrote nothing;
+- under load, 10 of 10 `status` and `dump` runs were right, and updates wrote
+  nothing;
+- a full Wi-Fi record takes 28 transfers instead of 190.
+
+Not verified: RF writes to the tag, and iOS, which does not act on WSC
+records.
 
 ## xinfc
 
