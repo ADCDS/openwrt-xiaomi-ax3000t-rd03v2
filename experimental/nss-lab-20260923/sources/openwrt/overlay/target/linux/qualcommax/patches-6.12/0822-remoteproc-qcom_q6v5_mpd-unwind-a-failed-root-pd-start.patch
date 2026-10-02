@@ -1,0 +1,58 @@
+From: Adriel Santos <adriel.turox@gmail.com>
+Subject: [PATCH] remoteproc: qcom_q6v5_mpd: unwind a failed root PD start
+
+q6_wcss_start() leaves everything it set up behind when it fails. On the
+authenticate-and-reset error path it returns without unpreparing, and on
+the start timeout it returns having neither shut the peripheral back down
+nor unprepared. The peripheral is then left authenticated-and-reset in
+TZ with no matching qcom_scm_pas_shutdown(), and the qcom_q6v5 context
+still reads as prepared - running == true and the handover IRQ still
+enabled, which is where the "Unbalanced enable for IRQ" warning on the
+next attempt comes from.
+
+Every later start therefore begins from the state the previous failure
+left, so a restart that fails once fails identically forever, and the
+repetition says nothing about the hardware.
+
+qcom_q6v5_wcss_sec.c, the driver that replaced this one upstream, routes
+every error path in wcss_sec_start() through a single unprepare label.
+Do the same here, and shut the peripheral down again on the timeout so
+the next authenticate starts from a clean slate.
+
+While here, take the start timeout from 5 to 10 seconds, matching the
+vendor driver.
+
+Signed-off-by: Adriel Santos <adriel.turox@gmail.com>
+---
+--- a/drivers/remoteproc/qcom_q6v5_mpd.c
++++ b/drivers/remoteproc/qcom_q6v5_mpd.c
+@@ -134,13 +134,25 @@
+ 	ret = qcom_scm_pas_auth_and_reset(desc->pasid);
+ 	if (ret) {
+ 		dev_err(wcss->dev, "wcss_reset failed\n");
+-		return ret;
++		goto unprepare;
+ 	}
+ 
+-	ret = qcom_q6v5_wait_for_start(&wcss->q6, 5 * HZ);
+-	if (ret == -ETIMEDOUT)
+-		dev_err(wcss->dev, "start timed out\n");
++	ret = qcom_q6v5_wait_for_start(&wcss->q6, 10 * HZ);
++	if (ret) {
++		if (ret == -ETIMEDOUT)
++			dev_err(wcss->dev, "start timed out\n");
++		/*
++		 * Undo the authenticate-and-reset, or the peripheral stays
++		 * held in TZ and every later attempt inherits this failure.
++		 */
++		qcom_scm_pas_shutdown(desc->pasid);
++		goto unprepare;
++	}
++
++	return 0;
+ 
++unprepare:
++	qcom_q6v5_unprepare(&wcss->q6);
+ 	return ret;
+ }
+ 

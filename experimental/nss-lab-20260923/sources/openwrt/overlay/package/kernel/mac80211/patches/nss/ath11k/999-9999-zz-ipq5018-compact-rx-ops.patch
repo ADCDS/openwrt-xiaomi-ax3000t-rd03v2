@@ -1,0 +1,37 @@
+Subject: [PATCH] ath11k: complete IPQ5018 compact RX callbacks and reject missing ops
+
+--- a/drivers/net/wireless/ath/ath11k/hw.c
++++ b/drivers/net/wireless/ath/ath11k/hw.c
+@@ -1483,6 +1483,13 @@
+ 	.rx_desc_mpdu_start_addr2 = ath11k_hw_ipq9074_rx_desc_mpdu_start_addr2,
+ 	.get_ring_selector = ath11k_hw_ipq8074_get_tcl_ring_selector,
+ 	.rx_desc_get_hal_mpdu_len = ath11k_hw_qcn9074_rx_desc_get_hal_mpdu_len,
++#if defined(CPTCFG_ATH11K_MEM_PROFILE_512M) || defined(CPTCFG_ATH11K_MEM_PROFILE_256M)
++	.rx_desc_get_offset = ath11k_hw_qcn9074_rx_desc_get_offset,
++#endif
++	.rx_desc_get_mpdu_frame_ctl = ath11k_hw_qcn9074_rx_desc_get_mpdu_frame_ctl,
++	.rx_desc_dot11_hdr_fields_valid = ath11k_hw_qcn9074_rx_desc_dot11_hdr_fields_valid,
++	.rx_desc_get_dot11_hdr = ath11k_hw_qcn9074_rx_desc_get_dot11_hdr,
++	.rx_desc_get_crypto_header = ath11k_hw_qcn9074_rx_desc_get_crypto_hdr,
+ };
+ 
+ #define ATH11K_TX_RING_MASK_0 BIT(0)
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c
+@@ -5466,6 +5466,16 @@
+ 	tlv_filter.rx_packet_offset = hal_rx_desc_sz;
+ 	tlv_filter.rx_header_offset = 0;
+ 
++	/* Reject incomplete compact-RX ops before an indirect NULL call. */
++	if (!ar->ab->hw_params.hw_ops->rx_desc_get_offset ||
++	    !ar->ab->hw_params.hw_ops->rx_desc_get_mpdu_frame_ctl ||
++	    !ar->ab->hw_params.hw_ops->rx_desc_dot11_hdr_fields_valid ||
++	    !ar->ab->hw_params.hw_ops->rx_desc_get_dot11_hdr ||
++	    !ar->ab->hw_params.hw_ops->rx_desc_get_crypto_header) {
++		ath11k_err(ar->ab, "incomplete compact RX descriptor operations\n");
++		return -EINVAL;
++	}
++
+ 	ath11k_dp_get_rx_header_offset(ar->ab, &tlv_filter);
+ 
+ 	if (!ar->ab->nss.enabled)

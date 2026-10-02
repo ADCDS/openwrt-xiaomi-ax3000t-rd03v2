@@ -1,0 +1,63 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] nss: an8855: tag_8021q port_bridge_leave (layered after 999-2757)
+
+The NSS tag_8021q bridge fix wires .port_bridge_join to
+dsa_tag_8021q_bridge_join() directly in the an8855.c files overlay. The
+matching .port_bridge_leave cannot be expressed there: 999-2757 (add
+an8855 v2p0p1 + netlink) already rewrites an8855_port_bridge_leave() on
+top of the overlay to add regmap error handling, so editing the
+overlay's copy makes that patch's hunk fail. Apply the tag_8021q leave
+logic here instead, after 999-2757:
+
+ - dsa_tag_8021q_bridge_leave() restores the port's standalone VID
+   (SECURITY mode + PVID via .tag_8021q_vlan_add), reversing the
+   cross-VLAN membership .port_bridge_join installed.
+ - drop the forced MATRIX (VLAN-unaware) restore: a standalone tag_8021q
+   port must keep classifying untagged ingress into its standalone VID
+   so its CPU egress stays tagged for the conduit tagger to demux the
+   source port.
+
+NSS-only (ships in the nss/ overlay); the base MTK-tag build keeps
+999-2757's plain error-handled leave.
+
+Link: https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/issues/1
+--- a/drivers/net/dsa/an8855.c
++++ b/drivers/net/dsa/an8855.c
+@@ -523,22 +523,27 @@
+ 	struct an8855_priv *priv = ds->priv;
+ 	int ret;
+ 
++	/* tag_8021q: drop the shared bridge VID and restore this port's
++	 * standalone VID (its .tag_8021q_vlan_add PVID branch reprograms
++	 * SECURITY mode + standalone PVID), reversing the cross-VLAN
++	 * membership set up in .port_bridge_join so the port returns to
++	 * CPU-only isolation. Do NOT force MATRIX (VLAN-unaware) mode: a
++	 * standalone tag_8021q port must keep classifying untagged ingress
++	 * into its standalone VID so its CPU egress stays tagged for the
++	 * conduit tagger to demux the source port.
++	 */
++	dsa_tag_8021q_bridge_leave(ds, port, bridge);
++
+ 	ret = an8855_update_port_member(ds, port, bridge.dev, false);
+ 	if (ret) {
+ 		dev_err(priv->dev, "failed to update port member: %d\n", ret);
+ 		return;
+ 	}
+ 
+-	/* When a port is removed from the bridge, the port would be set up
+-	 * back to the default as is at initial boot which is a VLAN-unaware
+-	 * port.
+-	 */
+-	ret = regmap_update_bits(priv->regmap, AN8855_PCR_P(port),
+-			   AN8855_PORT_VLAN,
+-			   FIELD_PREP(AN8855_PORT_VLAN,
+-				      AN8855_PORT_MATRIX_MODE));
+-	if (ret)
+-		dev_err(priv->dev, "failed to update PCR reg: %d\n", ret);
++	/* DEBUG: show the shrunk bridge-VID membership on the console */
++	mutex_lock(&priv->reg_mutex);
++	an8855_tag_8021q_dump_vid(priv, dsa_tag_8021q_bridge_vid(bridge.num));
++	mutex_unlock(&priv->reg_mutex);
+ }
+ 
+ static int an8855_port_fdb_add(struct dsa_switch *ds, int port,

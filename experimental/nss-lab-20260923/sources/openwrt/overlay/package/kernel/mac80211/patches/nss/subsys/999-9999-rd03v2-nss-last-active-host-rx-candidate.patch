@@ -1,0 +1,41 @@
+--- a/net/mac80211/sta_info.c
++++ b/net/mac80211/sta_info.c
+@@ -3260,6 +3260,8 @@
+ {
+ 	struct ieee80211_sta_rx_stats *stats;
+ 	struct link_sta_info *link_sta_info;
++	unsigned long last_rx;
++	int cpu;
+ 
+ 	stats = sta_get_last_rx_stats(sta, link_id, false);
+ 
+@@ -3269,9 +3271,27 @@
+ 		link_sta_info = wiphy_dereference(sta->local->hw.wiphy,
+ 						  sta->link[link_id]);
+ 
++	/* NSS statistics may lag host-delivered exceptions. Include genuine
++	 * per-CPU RX activity without changing packet/rate accounting.
++	 * This cannot recover traffic observed ONLY by NSS firmware.
++	 */
++	last_rx = READ_ONCE(stats->last_rx);
++	if (ieee80211_hw_check(&sta->local->hw, SUPPORTS_NSS_OFFLOAD) &&
++	    link_sta_info->pcpu_rx_stats) {
++		for_each_possible_cpu(cpu) {
++			struct ieee80211_sta_rx_stats *cpustats;
++			unsigned long cpu_last_rx;
++
++			cpustats = per_cpu_ptr(link_sta_info->pcpu_rx_stats, cpu);
++			cpu_last_rx = READ_ONCE(cpustats->last_rx);
++			if (cpu_last_rx && time_after(cpu_last_rx, last_rx))
++				last_rx = cpu_last_rx;
++		}
++	}
++
+ 	if (!link_sta_info->status_stats.last_ack ||
+-	    time_after(stats->last_rx, link_sta_info->status_stats.last_ack))
+-		return stats->last_rx;
++	    time_after(last_rx, link_sta_info->status_stats.last_ack))
++		return last_rx;
+ 
+ 	return link_sta_info->status_stats.last_ack;
+ }

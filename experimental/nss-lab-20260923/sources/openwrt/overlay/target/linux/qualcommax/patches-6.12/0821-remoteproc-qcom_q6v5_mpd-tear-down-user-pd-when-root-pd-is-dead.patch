@@ -1,0 +1,49 @@
+From: Adriel Santos <adriel.turox@gmail.com>
+Subject: [PATCH] remoteproc: qcom_q6v5_mpd: tear down user PD when root PD is dead
+
+A fatal error in the root PD leaves the Q6 firmware gone while the user
+PDs still read RPROC_RUNNING. wcss_pd_stop() then still issues the SMP2P
+stop request, whose ack can only come from the firmware that just died,
+so it times out and the error return aborts the teardown before the MSA
+unlock and before rproc_shutdown() drops the root PD's power refcount.
+
+The root PD is consequently pinned forever: its recovery rproc_start()
+fails with -ETIMEDOUT, both radios stay dead, and only a reboot brings
+them back. Reproduced on IPQ5018 (2.4 GHz internal + QCN6122 5 GHz) with
+"echo assert > .../simulate_fw_crash": the stop write returns -ETIMEDOUT
+after 5 s and the user PD state stays "running".
+
+Skip the handshake when the root PD is crashed or offline and tear the
+user PD down locally; the user PD's firmware is dead in that case
+anyway. Behaviour is unchanged whenever the root PD is alive, which is
+every normal stop: with several user PDs booted the root PD only leaves
+RPROC_RUNNING once the last of them has already been torn down.
+
+Signed-off-by: Adriel Santos <adriel.turox@gmail.com>
+---
+--- a/drivers/remoteproc/qcom_q6v5_mpd.c
++++ b/drivers/remoteproc/qcom_q6v5_mpd.c
+@@ -242,9 +242,22 @@
+ 	struct rproc *rpd_rproc = dev_get_drvdata(upd->dev->parent);
+ 	struct q6_wcss *wcss = rpd_rproc->priv;
+ 	u32 pasid = (upd->pd_asid << 8) | UPD_SWID;
++	bool rootpd_dead = rpd_rproc->state == RPROC_CRASHED ||
++			   rpd_rproc->state == RPROC_OFFLINE;
+ 	int ret;
+ 
+-	if (rproc->state != RPROC_CRASHED && upd->q6.stop_bit) {
++	/*
++	 * Stopping a user PD is an SMP2P handshake answered by the Q6 firmware.
++	 * If the *root* PD has taken a fatal error the firmware is already gone,
++	 * so the stop-ack can never arrive: qcom_q6v5_request_stop() only burns
++	 * its timeout and the error return below aborts the teardown before the
++	 * MSA unlock and the rproc_shutdown() that drops the root PD's power
++	 * refcount. The root PD can then never be restarted -- rproc_start()
++	 * fails with -ETIMEDOUT for as long as the box is up -- and the only way
++	 * to get the radios back is a reboot. The user PD's firmware is dead
++	 * either way, so skip the handshake and tear it down locally.
++	 */
++	if (rproc->state != RPROC_CRASHED && !rootpd_dead && upd->q6.stop_bit) {
+ 		ret = qcom_q6v5_request_stop(&upd->q6, NULL);
+ 		if (ret) {
+ 			dev_err(upd->dev, "pd not stopped\n");

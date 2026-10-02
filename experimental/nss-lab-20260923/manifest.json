@@ -1,0 +1,1234 @@
+{
+  "scope": "Exact source inputs of local MEMCG=n f6855e4b image; guard-off is a later runtime change, not baked in this image.",
+  "image_sha256": "f6855e4b7d4b798aad583b3afbda8d22dc1766fb5c4584df9d663afb11c2eba6",
+  "repositories": {
+    "openwrt": {
+      "url": "https://github.com/openwrt/openwrt.git",
+      "commit": "25ee12629edcc38feffbd06255dd47840cd7af7e",
+      "patch_sha256": "3510f992fe9977a283240e8a29ec817e89e2543bc846d1606ef8bed2b435b8f9",
+      "overlay": [
+        {
+          "path": "package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.ipq5018",
+          "mode": "0o644",
+          "sha256": "8c2c5fd824de56dd2e096aac405d7784e17488c16c0526cfe7ec9b5084c59efa",
+          "size": 131240
+        },
+        {
+          "path": "package/firmware/ipq-wifi/files/board-xiaomi_mi-router-ax3000t-v2.qcn6122",
+          "mode": "0o644",
+          "sha256": "8eef5b9922a7daab374a6ff65adee7f6d9dd371c2dcfeac303a9f3f69c8ec161",
+          "size": 131240
+        },
+        {
+          "path": "package/kernel/gpio-button-hotplug/patches/100-fix-devicetree-irq-signedness.patch",
+          "mode": "0o644",
+          "sha256": "727198c89742cda03013b6f3323244e854ab6069747a1469c1dda4738ac06e2a",
+          "size": 3509
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/950-wifi-ath11k-implement-CE-interrupt-enable-disable-for-AHB.patch",
+          "mode": "0o644",
+          "sha256": "69efc5e6008065ed275a6b905991e61747da06afdafdec56c2d3881b1ca541f1",
+          "size": 2162
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/951-wifi-ath11k-introduct-CONFIG_ATH11K_SMALLBUFFERS.patch",
+          "mode": "0o644",
+          "sha256": "0a2c0eaa81abed65b7ac751535c83c0fa97b0a1ebb645f0637a6ba420b702231",
+          "size": 1791
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/952-wifi-ath11k-fix-rx-signal-reporting-on-IPQ5018-QCN6122.patch",
+          "mode": "0o644",
+          "sha256": "5429d003dde53421ab6a03cb0815c1ae9a385652c428d402b3f2388e49ea2f80",
+          "size": 12752
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/953-wifi-ath11k-disable-interrupts-during-firmware-crash-recovery.patch",
+          "mode": "0o644",
+          "sha256": "a3547d9b0991268943baad3ed3b47bda3394d4eafdbb2bd8f8e37520fa3d2a73",
+          "size": 2786
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/954-wifi-ath11k-only-spare-the-wake-CE-on-chips-that-can-suspend.patch",
+          "mode": "0o644",
+          "sha256": "91d0343497e21e8463308310be7cf81f4cc2690d9b8cfa23c53a33f911816654",
+          "size": 2391
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/955-wifi-ath11k-never-fail-a-sta_state-down-transition.patch",
+          "mode": "0o644",
+          "sha256": "934c8a8cc6f6370b0cb4786dd1f65d038374f8cb789029f90723421a6dc3f590",
+          "size": 1973
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/956-wifi-ath11k-quiet-regulatory-skip-during-recovery.patch",
+          "mode": "0o644",
+          "sha256": "014aae6e4a423665f15a18b64358bb5aefc3f16b9051517e6f50b800c2ce3af5",
+          "size": 1415
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/957-wifi-ath11k-ahb-dont-boot-on-top-of-a-kept-power-reference.patch",
+          "mode": "0o644",
+          "sha256": "29de0ddce3fe874189b5c1a417b7a78e5e81c7e43f710c2aad0f283a7091b1b5",
+          "size": 6808
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/958-wifi-ath11k-free-the-rx-monitor-dst-and-desc-rings.patch",
+          "mode": "0o644",
+          "sha256": "b24cff4084833f3eb86fe1d175a02eb4c73c08af06482828a952c1b956443093",
+          "size": 1243
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/959-wifi-ath11k-dont-free-a-registered-hw-when-restart-fails.patch",
+          "mode": "0o644",
+          "sha256": "23d442ab3aeb4f9605c0a64b05072ce9543213856a4a2e7e7f31942532761ef9",
+          "size": 2068
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/960-wifi-ath11k-disconnect-stations-after-a-firmware-restart.patch",
+          "mode": "0o644",
+          "sha256": "554182fa341b76df0ba81fdc6b47d5b27b1707d71e50f41fd8f64148160815d4",
+          "size": 5439
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/961-wifi-ath11k-keep-the-hal-when-crash-recovery-fails.patch",
+          "mode": "0o644",
+          "sha256": "90ac3c300cef0090945047d7287f9d3d1078ab71bbb0c7411b5704ddc47632b6",
+          "size": 3162
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/962-wifi-ath11k-dont-nest-the-irq-disable-of-a-failed-recovery.patch",
+          "mode": "0o644",
+          "sha256": "126f49013fd3617eed634d0fe5d583f397225258ec1167e28242603bbdb12e97",
+          "size": 4585
+        },
+        {
+          "path": "package/kernel/mac80211/patches/ath11k/963-wifi-ath11k-keep-sends-blocked-until-recovery-sets-the-rings-up.patch",
+          "mode": "0o644",
+          "sha256": "1b4dc0a183f131ad83a06b656cc96b66a1e5660c2aef9dfaf192272518fe73ba",
+          "size": 3221
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath10k/100-ath10k-move-peer-unmap-warning-to-debug.patch",
+          "mode": "0o664",
+          "sha256": "c7bc15504e2d9c7d8838dc59644251604c432406b05a1fd8be13bd6beb49e837",
+          "size": 730
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath10k/999-800-ath10k-Add-threaded-napi.patch",
+          "mode": "0o664",
+          "sha256": "5ae8eb02454884a2f701064e63ba6eccbd03e1bdad2f3d9facb3829bf2183f7e",
+          "size": 1403
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/033-ath11k-fix-for-peer-memory-corruption.patch",
+          "mode": "0o664",
+          "sha256": "678e59ab575c87cda6f36ad947469f913e7f4d70652317b49803b85a053451f0",
+          "size": 1301
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/068-ath11k-add-rx-histogram-stats.patch",
+          "mode": "0o664",
+          "sha256": "65ccbb3000b2b9ce252469156c393e27ef70c12eec701a99444b4f7a1898e42e",
+          "size": 23944
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/069-ath11k-add-HE-stats-in-peer-stats.patch",
+          "mode": "0o664",
+          "sha256": "1be522e2af89efcc06696ae7b39088adcc558a18c9613dab96adb99e186a9d63",
+          "size": 25570
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/080-ath11k-ethernet-rx-decap-offload.patch",
+          "mode": "0o664",
+          "sha256": "17de6065d048057d5d071e807803eb6108b735fca455fb85ad0e9c40006d8b12",
+          "size": 743
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/084-ath11k-fix-ul-ofdma-counter-always-zero-in-peer-stat.patch",
+          "mode": "0o664",
+          "sha256": "61386aad1365816121d06cb22e66c0ed9340642d7137fbd914d02a9453c4c568",
+          "size": 3058
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/087-ath11k-fix-ul-ofdma-counter-increamenting-improperly.patch",
+          "mode": "0o664",
+          "sha256": "31b2db755fac7bd0460adb17809e880abc3044c2d184b9e491487b78330f3529",
+          "size": 1835
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/108-ath11k-enable-ul-ofdma-ru-allocation-in-peer-stats.patch",
+          "mode": "0o664",
+          "sha256": "41bc7f8a9253a850d6529cc4d36e1c214970118329b1a3d583ce2ac625488903",
+          "size": 16142
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/113-ath11k-add-8023-undecap-support.patch",
+          "mode": "0o664",
+          "sha256": "5c6a646288a96994ca6109161a464e726308672ef64a879b6b2579abd5039837",
+          "size": 1664
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/142-ath11k-adding-support-for-mgmt-frame-stats.patch",
+          "mode": "0o664",
+          "sha256": "5e2d65a40a5ecbdcc24194211c730d909771ce024f91029b490de8e570def0b1",
+          "size": 10007
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/181-ath11k-remove-error-on-soc-debugfs-fail.patch",
+          "mode": "0o664",
+          "sha256": "0b34990944fca6cc2c970805e9547488e62df3f039cc35a218bab082cd6fdf40",
+          "size": 4214
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/191-ath11k-add-mgmt-and-data-ack-rssi.patch",
+          "mode": "0o664",
+          "sha256": "47a31e5858ee79cd32e761268fa1ce466810c8ed6ab9be8126b4fba06559eda7",
+          "size": 1004
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/199-002-ath11k_nss-add-nss-driver-interface.patch",
+          "mode": "0o664",
+          "sha256": "eb276340c7f2bc61e4da0b1b5dde5944b7dd2dd44314d6682a196c15f53e2558",
+          "size": 85835
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/199-003-ath11k-add-nss-support.patch",
+          "mode": "0o664",
+          "sha256": "a3883e76f2e819ee9057e060febcbd991e858aaaff1a9e71683627c5f783b0ee",
+          "size": 37596
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/203-mac80211-ath11k-fw-dynamic-muedca.patch",
+          "mode": "0o664",
+          "sha256": "2950f44d8b105cb23a9de5cf281b72a1255eae62fe1dae83e3ee4cd7d2dbcce0",
+          "size": 5524
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/207-ath11k-Add-support-for-dynamic-vlan.patch",
+          "mode": "0o664",
+          "sha256": "4701f4a4b99ccdce746f446ce366d0b2688982d9fc263d2a82895ce07a44b48a",
+          "size": 11372
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/207-ath11k-Enable-256_512MB-profiles.patch",
+          "mode": "0o664",
+          "sha256": "3f7988a8d9f05f194c5fee4a133716642fde5a99569d9f2fc455c3aa6f163577",
+          "size": 12206
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/211-001-ath11k-add-WDS-offload-changes-to-NSS-driver-interface.patch",
+          "mode": "0o664",
+          "sha256": "6df22379752ccc00bab2a1885b51726a613e339cc20fb27827d0fe38c641c93c",
+          "size": 21483
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/211-002-ath11k-add-WDS-offload-support-on-NSS-offload-for-STA-mode.patch",
+          "mode": "0o664",
+          "sha256": "d1497a03f1ef180db39c3f6a2d1d06931bb284465aa485fe3e92f07d6f02363a",
+          "size": 30019
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/214-ath11k-qos-null-frame-tx-over-wmi.patch",
+          "mode": "0o664",
+          "sha256": "314d7bdc646e0cc9b76f9aeb3303501253e89c38484ae5c8741a610c735e5368",
+          "size": 13257
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/235-002-ath11k-add-support-for-ext-vdev-in-NSS-for-AP_VLAN-vif-handling.patch",
+          "mode": "0o664",
+          "sha256": "d078827b100d519e79fa63bcaff28e37fbe791079b14682221cb423620a91cfd",
+          "size": 23153
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/235-003-ath11k-add-AP_VLAN-vif-support-for-WDS-offload-in-NSS-offload.patch",
+          "mode": "0o664",
+          "sha256": "62414ab925684f686a8a4f54e63ebd554bf6cea05d91c53c5fc5a02c5d002235",
+          "size": 18554
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/236-002-ath11k-extend-ext-vdev-in-NSS-for-dynamic-VLAN-handling.patch",
+          "mode": "0o664",
+          "sha256": "6198ff4d8a428e0c88cc467d7b7983942998956baacb4b375d88a4d73a1fb270",
+          "size": 6691
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/236-003-ath11k-add-dynamic-VLAN-support-in-NSS-offload.patch",
+          "mode": "0o664",
+          "sha256": "6a7cae76e6e7e185b1af8ddc54596a817e23ee0f074d49c87a201e58886f06ba",
+          "size": 17511
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/237-003-ath11k-allocate-dst-ring-descriptors-from-cacheable-.patch",
+          "mode": "0o664",
+          "sha256": "25622f1281849188e314e95ba91b6873f7891454c753ada092d5d02dd359c2ae",
+          "size": 5039
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/237-006-ath11k-Allow-fast-rx-by-bypassing-stats-update.patch",
+          "mode": "0o664",
+          "sha256": "24c7e611cc73d7af9b56cc63f3086931e30c76b5ac9a9ac82f4e958886380882",
+          "size": 16164
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/244-ath11k-dp-tx-perf.patch",
+          "mode": "0o664",
+          "sha256": "81c7b59d469e9c87eab3a070a00ad6f52d385cc5064b918c27438185c421f3e0",
+          "size": 21611
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/300-ath11k-nss-mesh-offload-support.patch",
+          "mode": "0o664",
+          "sha256": "0e5686770d9a4cb62dbcdce3f733c954990c2f5ce2a02bb659ad15da074225a2",
+          "size": 98149
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/301-ath11k-nss-mcbc-exception.patch",
+          "mode": "0o664",
+          "sha256": "fa03316746f0c4a461fdec29c4874a9e07cf12e1cb9b876a9b7e3a2fee8c7fba",
+          "size": 6697
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/314-ath11k-Fix-peer-lookup-failure-in-mgmt-tx-completion.patch",
+          "mode": "0o664",
+          "sha256": "3b92b594fbe6ffe03fbf0d8ebac0cff784f6c6d443f6293316f15d0f274b2fa7",
+          "size": 4134
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/318-ath11k-avoid-stack-corrupt-in-nwifi-undecap.patch",
+          "mode": "0o664",
+          "sha256": "9752e25f07c551e41d64114e89a6c707b2888fdd7bb170ca8b7a7aebd3edc8ea",
+          "size": 300
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/319-ath11k-fix-double-free-of-peer-rx_tid-during-reo-cmd.patch",
+          "mode": "0o664",
+          "sha256": "0ede2f3ed80665fc8bcb817e03a1a29d70756419a39db30fb559c9ee531a3dfd",
+          "size": 1602
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/330-ath11k-sync-wds_ast_entry-updates.patch",
+          "mode": "0o664",
+          "sha256": "2c8e5afc7522e16c1ad5772b02560947dc81b1693d16119faf39658ccfa90802",
+          "size": 18285
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/335-0001-ath11k-optimize-tx-completions.patch",
+          "mode": "0o664",
+          "sha256": "98447c93f51e0b3b156a6dea85b33c124d4a33db746316010c605b1f91f8ddd6",
+          "size": 9076
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/335-0002-ath11k-use-DECLARE_BITMAP-for-idr-operations.patch",
+          "mode": "0o664",
+          "sha256": "802d0d47b361f767c3965e6763334c1aa3ffe2bb124a4c2ba387870ea8f3655d",
+          "size": 8837
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/335-0003-ath11k-skip-HAL_TCL_DATA_CMD_INFO2_TID_OVERWRITE-con.patch",
+          "mode": "0o664",
+          "sha256": "f424bc2394d5efbb7bf8dbe5f9797e61c9e4bbf5bb9166e8402f5b12844ff83e",
+          "size": 2531
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/336-ath11k-Fix-updating-rx-stats-with-monitor-vif-enable.patch",
+          "mode": "0o664",
+          "sha256": "e2d694f3c4e6132e7b6d6eb4526d107dd07f5d37a6887d9aca632454b7a0c3a2",
+          "size": 2942
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/341-ath11k-fix-support-for-ext-vdev-in-NSS-for-AP_VLAN-v.patch",
+          "mode": "0o664",
+          "sha256": "69b2d9cea62cf92ebb26332736dc31cec6c380c99eaf30d690a93c371f608919",
+          "size": 2890
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/342-ath11k-provide-access-of-the-dma-buffer-back-to-dma-.patch",
+          "mode": "0o664",
+          "sha256": "a92a8cb0ac71a2c38f93bb9243a555dfbce052d379b5a8fa088b61274b2cbd89",
+          "size": 1117
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/357-ath11k-fix-clear-peer-keys-during-disassoc.patch",
+          "mode": "0o664",
+          "sha256": "d624d859909e2aacf3b5fb29ac1939e4bd4a9080d7cc0557d9b6010cdac116be",
+          "size": 1825
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/362-ath11k-fix-incorrect-ast-index-assignment-for-wds-peer.patch",
+          "mode": "0o664",
+          "sha256": "46bcdb87a9f703cfa492295b93d62e681233c4a3f7298a086a34094d4aec5df3",
+          "size": 3343
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/371-ath11k-Fix-ppdu_id-from-firmware-PPDU-stats.patch",
+          "mode": "0o664",
+          "sha256": "8c00c7712ca1253723087d2bdd3054ca0766bf29f791bb5b4453b646e2943e88",
+          "size": 2016
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/373-ath11k-Add-retry-mechanism-for-update_rx_qu.patch",
+          "mode": "0o664",
+          "sha256": "ffa8aeabae2e0e7a8c5fd1ca481df7dbf4da78cd0533c8643bb8480c6a3b4c93",
+          "size": 12377
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/376-ath11k-Add-nss-event-handler-support-for-link-desc.patch",
+          "mode": "0o664",
+          "sha256": "a8c7dc54cc213768674dc8cc2179eca34b01bf4a5cbaf3cb60001d174d9e1cfb",
+          "size": 2547
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/401-ath11k-Fix-mutex-dead-lock-and-q6-dump-crash.patch",
+          "mode": "0o664",
+          "sha256": "4e9839433d41185095ebb0c4aba9ad8b5835e51e9878520afb6daa328ac6fdfb",
+          "size": 2052
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/453-ath11k-flush-management-frames-to-firmware-before-wa.patch",
+          "mode": "0o664",
+          "sha256": "ee75a30ae9e10f8925939871a0225100529ad9cad895de4991965394ce7e0ca3",
+          "size": 1359
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/456-wifi-ath11k-Advertise-TX_QUEUE-mac-hw-flag.patch",
+          "mode": "0o664",
+          "sha256": "19482f95c28c127ea7c10eaaeabc93e94f529b5395db453cb5090d6651801fa2",
+          "size": 949
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/457-wifi-ath11k-Avoid-memset-of-ppdu-info-for-next-skb.patch",
+          "mode": "0o664",
+          "sha256": "6e57b7d09351a5b9331570344954a9daf9632902ece0d128602893d55d170276",
+          "size": 3192
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/458-wifi-ath11k-Add-support-to-send-the-QoS-Null-Data-fr.patch",
+          "mode": "0o664",
+          "sha256": "44faaa0470a4e65e32e09aef361b4793844b07b2c4d3a73b4400aa5914580e3f",
+          "size": 1219
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/669-ath11k-change-dma_map_single-to-virt_to_phys-in-rx-r.patch",
+          "mode": "0o664",
+          "sha256": "faf41b9fb6247cf868f4c3929d6c12afabb0cc3b81f8485b9ba7f5aa04a46c15",
+          "size": 2783
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/908-ath11k-make-debugfs-sta-htt-stats-modular.patch",
+          "mode": "0o664",
+          "sha256": "b1960940eff00d6e863f79c9a0cedbcf65508e76d46d29dae68fdfb6d347221b",
+          "size": 6488
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/909-wifi-ath11k-fix-invalid-access-to-memory.patch",
+          "mode": "0o664",
+          "sha256": "6e58e31998c84c54967ed64ac227057df662b76429da6cd5564e7ec6afa30975",
+          "size": 1719
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/910-wifi-ath11k-Add-lock-when-accessing-idr_pool-of-tx_r.patch",
+          "mode": "0o664",
+          "sha256": "2fd97436f8bf9418ef3dd64c10ca09ceec04faf72b3464103a4360fc07d66ffa",
+          "size": 2426
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/910-wifi-ath11k-correctly-free-skb-using-ieee80211_free_txskb.patch",
+          "mode": "0o664",
+          "sha256": "b5217f88aa72aba23961ce722473f39ab9c84fbfbd58aabd5f8b6643cb266035",
+          "size": 1365
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/910-wifi-ath11k-remove-call-trace-while-rebooting-AP.patch",
+          "mode": "0o664",
+          "sha256": "e5b4c831e9f696cc1714bf14c17ef97e9b7b104c75678a631ce44d4365e27841",
+          "size": 1736
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-233-ath11k-Disable-rx_header-tlv-for-2K-SKB.patch",
+          "mode": "0o664",
+          "sha256": "2e793f42d2df1fe89925f9cb7f697b07f8b741bf1cd38df53364346529da6437",
+          "size": 38509
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-311-ath11k-configure-nss-thread-priority-during-pdev_ini.patch",
+          "mode": "0o664",
+          "sha256": "5dec1726a8fecad98d0cf4d7fd90f452cd18d7295036933103bc21a4e87368ba",
+          "size": 4540
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-312-ath11k-add-fw-11-4-check.patch",
+          "mode": "0o664",
+          "sha256": "454bc5b1b0dedf6d7040e47a9d3d674ec8bbab6fc77165af0dbc98c0e75bf4fb",
+          "size": 1083
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-336-0001-ath11k-idr-optimization.patch",
+          "mode": "0o664",
+          "sha256": "b72560e2e79e31eed011455227325b736ae949aebc143a899ae40af86a8b076b",
+          "size": 4161
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-336-0002-ath11k-Use-idr_replace.patch",
+          "mode": "0o664",
+          "sha256": "d6a24d88bc9a9129012bff035414835e4a22415488f92b4f8dad30d082d0c668",
+          "size": 8845
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-374-ath11k-Check-skb_headroom-before-using-skb_push.patch",
+          "mode": "0o664",
+          "sha256": "49971a8452a9af6a8792bc247f4dba316db1ba75a6c6a51094300e18e4f6a3ef",
+          "size": 9444
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-800-ath11k-Add-threaded-napi.patch",
+          "mode": "0o664",
+          "sha256": "c25d1096fdaf0441ab72c28d6f0dae5bc682ace96e4d4ac7afabf70c0aa3990f",
+          "size": 2235
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-802-ath11k-fixup-thermal-throttle.patch",
+          "mode": "0o664",
+          "sha256": "ef50efbcbb74976c1d2d23dfc636dee87ba23075b7d6a9ff1423205769f744d5",
+          "size": 8818
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-900-bss-transition-handling.patch",
+          "mode": "0o664",
+          "sha256": "da1195946dbb136bab7caac56448e43ee29385f8ca716949d668c7c5ba2e033e",
+          "size": 87614
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-901-ath11k-NSS-use-ath11k_nss_get_arvif_from_dev.patch",
+          "mode": "0o664",
+          "sha256": "2cd982a0a2682ec71a35f0a2eca8ac371ad060012f3acbe37374293c6c196872",
+          "size": 1290
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-903-ath11k-use-ath11k_sta_to_arsta.patch",
+          "mode": "0o664",
+          "sha256": "78322b65fb4a120ddaa8ec1cc6b2b4eaab0d5e654981f220c9682dd450c769e0",
+          "size": 2364
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-904-ath11k-nss-use-wrapper-to-avoid-cast.patch",
+          "mode": "0o664",
+          "sha256": "809659494448d2e5aad383226bc01f9449a612faa20eec8b22a96e8b918f1138",
+          "size": 10057
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-906-ath11k-Enable-missing-256_512MB-profiles.patch",
+          "mode": "0o664",
+          "sha256": "79a19721e9d6d7abf409e61f8ec27141d8a0d76b0d0aa750207ac3dbd25e1e1d",
+          "size": 1138
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-907-ath11k-Enable-NSS-for-ipq5018-qcn6122.patch",
+          "mode": "0o664",
+          "sha256": "1cad99f67b823c53586fa271263361188c2a068a9a037256dd9b57aa3fcbcbd7",
+          "size": 3873
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-920-ath11k-add-kernel-6_12.patch",
+          "mode": "0o664",
+          "sha256": "d358280332663722b6a2b03ea48116609cf63e558786a83a81d8e546e5d35ab5",
+          "size": 5675
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-996-rd03v2-sta-state-dont-leak-conf_mutex.patch",
+          "mode": "0o664",
+          "sha256": "4e0a692d54c49e087a97959a12caa551f7ac3c0d5ad8841092bf26b938b0fbee",
+          "size": 1395
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-998-rd03v2-nss-teardown-after-irq-quiesce.patch",
+          "mode": "0o664",
+          "sha256": "ff7c86ed318c57ad00211a865a21617e0442b4321c83319fcbd7245fb09bcba9",
+          "size": 1833
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-999-rd03v2-hybrid-register-address.patch",
+          "mode": "0o664",
+          "sha256": "eb2348a19f9f6292b61ada7f9bf28ec4d9eb7479d5b7b5ae7882b84b22898194",
+          "size": 1700
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-999-rd03v2-nss-recovery-1-clear-stale-lmac-srng-pointers.patch",
+          "mode": "0o664",
+          "sha256": "60ce1ec9a120995fc420de0da64d4e6f752b53467f808d02a1842f5c36e4c9e9",
+          "size": 3517
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-999-rd03v2-nss-recovery-2-release-vdevs-on-restart.patch",
+          "mode": "0o664",
+          "sha256": "f3b91d36a5aa5e262245949bbd1077ee2532e58558b5d937698b04eae58c5ac1",
+          "size": 9629
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-999-rd03v2-nss-vlan-eapol-to-pae-group.patch",
+          "mode": "0o664",
+          "sha256": "d44c4d6dff0ac0216ca8c916192395aeaebd45bd6c1d417310f30d3272757ee3",
+          "size": 3037
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-999-rd03v2-reo-update-queue-noncoherent-free.patch",
+          "mode": "0o664",
+          "sha256": "6124d65172344584fd9bb428246a77fd862e6884b3403a7276a979d8a84fba9d",
+          "size": 1902
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-9999-rd03v2-nss-scheme-failure-sentinel.patch",
+          "mode": "0o664",
+          "sha256": "4d7a25b306260721aeda9710128e0b6ec4b0ec9efb0de5dffa17a69128043bc5",
+          "size": 858
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-9999-z-rd03v2-256m-host-profile.patch",
+          "mode": "0o664",
+          "sha256": "272d49b25a64855499712c154d4a58fae1d50ddb5be5658711d638729a3d7e82",
+          "size": 7411
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-9999-zz-ipq5018-compact-rx-ops.patch",
+          "mode": "0o664",
+          "sha256": "f90d5fcec4ba53432e02d02e1500530291a612b1b75a0e7df0f4148a42781a63",
+          "size": 1673
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/ath11k/999-9999-zzz-nss-peer-accounting.patch",
+          "mode": "0o664",
+          "sha256": "ac33d80750b60bd578a7a8001a7e4e3214efb6e7532d2a923bda417fce4bbd0d",
+          "size": 9160
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/146-mac80211-enable-TKIP-when-using-encapsulation-offloading.patch",
+          "mode": "0o664",
+          "sha256": "eff326d5adf814cbf296041a1acacf9d20d5c5280cd6ec4dd67b7922a792ba30",
+          "size": 452
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/199-001-mac80211-add-nss-support.patch",
+          "mode": "0o664",
+          "sha256": "53f7ee4b066522c0a30e0bee02c6b7faaff19e32eeaced7e6a7d196cfb2361a1",
+          "size": 13799
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/199-mac80211-fix-xmit-callback-when-hwencap-enable-in-st.patch",
+          "mode": "0o664",
+          "sha256": "fe0c2c5cf202c349d23504abe1784af2bd81e521f2a0f6456c045922bb7a4f4d",
+          "size": 1207
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/203-mac80211-ath11k-fw-dynamic-muedca.patch",
+          "mode": "0o664",
+          "sha256": "af30babcdef3240b6468ed204370fc968aa2eb2a7eaa2b766239544c024de782",
+          "size": 8806
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/207-ath11k-Add-support-for-dynamic-vlan.patch",
+          "mode": "0o664",
+          "sha256": "330cc1d23a55a7f40dbf3c766944aaa4478206c64d27682210a8a37d847d38af",
+          "size": 2067
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/207-mac80211-add-nss-redirect-support.patch",
+          "mode": "0o664",
+          "sha256": "b93d643c9481f3b4c18c8e82f4efec3fac23d64c04e8bf9f034af63b9b9bfd95",
+          "size": 7895
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/235-001-mac80211-add-AP_VLAN-iftype-support-on-NSS-offload-case.patch",
+          "mode": "0o664",
+          "sha256": "77bed945c4ba4886fa70b7970683f8709ad367decb65b62008f66529fb3e6aa0",
+          "size": 7668
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/236-001-mac80211-add-dynamic-VLAN-support-on-NSS-offload.patch",
+          "mode": "0o664",
+          "sha256": "2ac430bc3342fce49e6249289be14c1786090973b4beae36af39045c84f25bca",
+          "size": 5703
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/245-compilation_fix.patch",
+          "mode": "0o664",
+          "sha256": "5149932a46ee9997dedb9f48ff8d54d9b266332cfc3f635c3b6db9d1f78ef0c9",
+          "size": 3923
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/300-ath11k-nss-mesh-offload-support.patch",
+          "mode": "0o664",
+          "sha256": "683381189eea15b051b284bd001af956c00f03f58f9685cfb738ec2ce62b932d",
+          "size": 37301
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/335-0003-ath11k-skip-HAL_TCL_DATA_CMD_INFO2_TID_OVERWRITE-con.patch",
+          "mode": "0o664",
+          "sha256": "84fa4b57d08d9506da524c00267e83c02cca25894a05a7e6ec28bc0111b3de9b",
+          "size": 1594
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/335-0005-mac80211-simple-tx-for-AP-mode.patch",
+          "mode": "0o664",
+          "sha256": "c9d76032f36159a1335c056d48dfe0813c6866782e1b53a1ca01df4b8ba6446d",
+          "size": 2721
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/336-mac80211-Mesh-Fast-rx-support.patch",
+          "mode": "0o664",
+          "sha256": "98e3ae89dd12754d782a7f768df57fb327b61e4b7a49b5d524f50c12ddaec12b",
+          "size": 6740
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/342-mac80211-fix-unconditional-sta-usage.patch",
+          "mode": "0o664",
+          "sha256": "e4f6da981cd0824814913c016f4b2b4ef815b1b32c0e6e012f1b70192d569e7d",
+          "size": 2303
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/350-wifi-cfg80211-drop-noisy-key-addition-failed-message-during-FT.patch",
+          "mode": "0o664",
+          "sha256": "ce6851884f0e1c8ab3b27dd307ec9a4016f54728bab350e0a0d2ba23b83c52d8",
+          "size": 1156
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/353-mac80211-fix-dynamic-vlan-warning-with-monitor-interface-restart.patch",
+          "mode": "0o664",
+          "sha256": "ca86d8bde76ac9c147e87b1945ff1c8c8b669ff913685b297bfb21680eea94bb",
+          "size": 1265
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/640-006-01-mac80211-Remove-unused-RX_FLAGS-from-mac80211_rx_fla.patch",
+          "mode": "0o664",
+          "sha256": "f8d3e377bdfd29a29024811a8e23758e8596ba37705b88c8995a4d837b0bc1c2",
+          "size": 2738
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/657-mac80211-Avoid-encapsulation-of-EAPOL-frames-if-OFFL.patch",
+          "mode": "0o664",
+          "sha256": "5237cbb04c96859fc3b301d8b32191e52c41347987a3cf5a003d0aad196cef4e",
+          "size": 7668
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/686-mac80211-fix-RCU-stall-in-mesh-fast-xmit-path.patch",
+          "mode": "0o664",
+          "sha256": "8948cd4b283d9af54e4099610203e5d47b3cad0ea417f6a6888a225a204afdd9",
+          "size": 4728
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/751-mac80211-Get-valid-last_rate-for-rx_bitrate-from-cpu.patch",
+          "mode": "0o664",
+          "sha256": "c066da3298410f827b9b9df88febe372e894aafbfb5a7291300d3739700cfbd9",
+          "size": 2748
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/780-mac80211-Advertise-HW-checksum-offload-only-for-ethm.patch",
+          "mode": "0o664",
+          "sha256": "8033f5ac3ef6fc4e7db2adc236b07bc0268552159129c26251b954d633e53be8",
+          "size": 4160
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/785-wifi-mac80211-Add-mac-hw-flag-to-avoid-queue-skb.patch",
+          "mode": "0o664",
+          "sha256": "84051c31d1ee6f877561fb8f916060f1420f6b8690ffed555e0d2fa0d0edb693",
+          "size": 10827
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/829-mac80211-fix-mesh-ping-issue.patch",
+          "mode": "0o664",
+          "sha256": "705b81e5802c3ed2a74e1781eff67dc7cd6946e4ced05f5cd1f93f715a197dca",
+          "size": 3573
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/917-QSDK-mac80211-WAR-for-association-failure-issue-with.patch",
+          "mode": "0o664",
+          "sha256": "e88dfea28901bb8337bc0a4fa8a9faace8eb1abe917534127d11160ed3719eb9",
+          "size": 1479
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/970-mac80211-ath10k-fix-airtime-underflow.patch",
+          "mode": "0o664",
+          "sha256": "10c047ba6901335b1b33c8def0a6dc6f6f40e0cb1c2084ea5a97791de46e3169",
+          "size": 618
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/999-918-mac80211-fix-NULL-pointer-access-Klocwork-issue.patch",
+          "mode": "0o664",
+          "sha256": "d395aef38cc94f4da828e1b6cf4648abac7d07663fe372981fa79b7aa47aabef",
+          "size": 1896
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/999-920-mac80211-add-kernel-6_12.patch",
+          "mode": "0o664",
+          "sha256": "202006c5f0b2d790f1f0699e2b209bc69e63b3c931eea4b95163d3db793588bf",
+          "size": 1284
+        },
+        {
+          "path": "package/kernel/mac80211/patches/nss/subsys/999-9999-rd03v2-nss-last-active-host-rx-candidate.patch",
+          "mode": "0o664",
+          "sha256": "ad8330a6cfb45ae950293ccd1e748ff6276793b01621a9a26b8a78988c3bd7bb",
+          "size": 1362
+        },
+        {
+          "path": "package/kernel/qca-nss-dp/patches/0001-nss_dp_main-tolerate-fixed-link-registration-failure.patch",
+          "mode": "0o644",
+          "sha256": "2acec8416325d73f79f7a0ebe084d01b5ea155bc314dc5e3ebe48e84e4edfe7a",
+          "size": 1788
+        },
+        {
+          "path": "package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch",
+          "mode": "0o644",
+          "sha256": "06d6ea46307398784913fe281edd71e2899487a0dbaaf7cd0f3965353ad7eeb1",
+          "size": 4155
+        },
+        {
+          "path": "target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts",
+          "mode": "0o644",
+          "sha256": "507d94881edc374d4483942c6d0ccd7a540ca8a75238e737029f9267ca4b0c43",
+          "size": 17812
+        },
+        {
+          "path": "target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq5018-nss.dtsi",
+          "mode": "0o644",
+          "sha256": "1a58817648d0a6d193759e90401bb4acb5bfcf3b9052b8beb488f958719a0db0",
+          "size": 3236
+        },
+        {
+          "path": "target/linux/qualcommax/files/drivers/mfd/airoha-an8855.c",
+          "mode": "0o644",
+          "sha256": "466e9b1971fac51e6762e794e3d4b15561a0a8e11647fb003153c81c2fd434f1",
+          "size": 7676
+        },
+        {
+          "path": "target/linux/qualcommax/files/drivers/net/dsa/an8855.c",
+          "mode": "0o644",
+          "sha256": "b94fe7eb1d8ea625eca21891b6258aa878afc15406d9974e0d4ddaa9e87f340a",
+          "size": 71027
+        },
+        {
+          "path": "target/linux/qualcommax/files/drivers/net/dsa/an8855.h",
+          "mode": "0o644",
+          "sha256": "250556da484a082c2a394c3635542802a5857a7168d9370d0c6cafe3abe14dd1",
+          "size": 30575
+        },
+        {
+          "path": "target/linux/qualcommax/files/drivers/net/dsa/an8855_nl.c",
+          "mode": "0o644",
+          "sha256": "579c97f6d28855a376ba8675ff3cb0ae4b8a379db595d6138921c4449fb13b53",
+          "size": 6999
+        },
+        {
+          "path": "target/linux/qualcommax/files/drivers/net/dsa/an8855_nl.h",
+          "mode": "0o644",
+          "sha256": "41ea6cc1a9207993d73eddc54c2879f168c068943612b878b1bb894cf27c68e9",
+          "size": 844
+        },
+        {
+          "path": "target/linux/qualcommax/files/drivers/net/mdio/mdio-an8855.c",
+          "mode": "0o644",
+          "sha256": "b064a589dac867811418fb7755e6e6c7b5c3a87bbc9ef94d945e50289674859c",
+          "size": 2786
+        },
+        {
+          "path": "target/linux/qualcommax/files/drivers/net/phy/air_an8855.c",
+          "mode": "0o644",
+          "sha256": "cfd65b0d4c625e30b5095f60f8191f75e5810c0cfb06987bb2b2a0b7e7f0d502",
+          "size": 7803
+        },
+        {
+          "path": "target/linux/qualcommax/files/drivers/nvmem/an8855-efuse.c",
+          "mode": "0o644",
+          "sha256": "65d175a5c639c5e298e9c63bee12cbed7e9956330619a16882469cf9d866b4ce",
+          "size": 1674
+        },
+        {
+          "path": "target/linux/qualcommax/files/include/linux/mfd/airoha-an8855-mfd.h",
+          "mode": "0o644",
+          "sha256": "9c9d1007599f91a3b400de6d60fb61feba2ea5e809e0926f8aa36c479cef9aba",
+          "size": 1192
+        },
+        {
+          "path": "target/linux/qualcommax/files/include/net/netfilter/nf_conntrack_dscpremark_ext.h",
+          "mode": "0o644",
+          "sha256": "0eff95ab063c13352822469f72df43b654b7a2833813af00dd349f8a69296401",
+          "size": 3667
+        },
+        {
+          "path": "target/linux/qualcommax/files/net/core/skbuff_debug.c",
+          "mode": "0o644",
+          "sha256": "8dddd9a68f1113106e89235085617821b83dd157241b1156d8872f21a8012729",
+          "size": 8607
+        },
+        {
+          "path": "target/linux/qualcommax/files/net/core/skbuff_debug.h",
+          "mode": "0o644",
+          "sha256": "dbf77921e93d49e9fd05f2b518cf8370edfd0cdd07ab950abf641b784e174de1",
+          "size": 2458
+        },
+        {
+          "path": "target/linux/qualcommax/files/net/core/skbuff_notifier.c",
+          "mode": "0o644",
+          "sha256": "6807589379452e52fac91783825df9c16bb0fb1c8054bf0221fe7712c8599b76",
+          "size": 1493
+        },
+        {
+          "path": "target/linux/qualcommax/files/net/core/skbuff_notifier.h",
+          "mode": "0o644",
+          "sha256": "6e2f2a280ff5ecfd3a6c41de03744e0f955d38a3cdd5545beb4c9828bfc09706",
+          "size": 1763
+        },
+        {
+          "path": "target/linux/qualcommax/files/net/core/skbuff_recycle.c",
+          "mode": "0o644",
+          "sha256": "1cbfcf970dd8c06679d9ec5a065cfafb373d5616e925995393132fc784a67c96",
+          "size": 29599
+        },
+        {
+          "path": "target/linux/qualcommax/files/net/core/skbuff_recycle.h",
+          "mode": "0o644",
+          "sha256": "72c7a882e6468a397ab2a1e1014753dfc043b513e9d9f0e12044a95eff8cae41",
+          "size": 5192
+        },
+        {
+          "path": "target/linux/qualcommax/files/net/netfilter/nf_conntrack_dscpremark_ext.c",
+          "mode": "0o644",
+          "sha256": "61b93ab98a63a4d4b35ab41148f1d2ea97b89ed457537a0a7fe80181160c9757",
+          "size": 2266
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-bufpool",
+          "mode": "0o755",
+          "sha256": "3592b1b41568c4d4be6940a8ae19d6924b0613992a0452bf115a7427284b9170",
+          "size": 4513
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-clock-policy",
+          "mode": "0o775",
+          "sha256": "ba47cb764598f56fabf3cb40c73a2c569a694d88fbae22d8824a4b67ba88013f",
+          "size": 2019
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-pool-boost",
+          "mode": "0o755",
+          "sha256": "dac7c2442661ccba31be98798f7cbc25f21a7b80e1d79fe3c0b262d00e1db508",
+          "size": 523
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nss-wifi-pool",
+          "mode": "0o755",
+          "sha256": "04e3f92cad1b7315a38ee9935d92a90a47df18ff62d62689c42ff075f4f22e95",
+          "size": 3354
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog",
+          "mode": "0o755",
+          "sha256": "f1bdcb0837fb416678c07401db6ded0e84b6e25339233e0858aa08c15958d30d",
+          "size": 243
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/etc/modules.d/33-qca-nss-ecm",
+          "mode": "0o644",
+          "sha256": "d6b284564907cd8323959b4229ead38f8959c9c67a792d591b7b324dff299e87",
+          "size": 4
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/etc/rc.local",
+          "mode": "0o644",
+          "sha256": "e9887272e47ecf2f9c333b737a9aa606b081e173c4f3d2b55e1fd7957312ecbc",
+          "size": 1343
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/etc/uci-defaults/00-nss-manual",
+          "mode": "0o644",
+          "sha256": "cc09266c81893808491795b86bc4235bd1a30854e80a857123df181a28404262",
+          "size": 1042
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nss-pool-boost-monitor",
+          "mode": "0o755",
+          "sha256": "fd73e9b05bb03c3e34ecb27f46b40c41eef2e8bc09db3f27be1df86a9d3a5431",
+          "size": 2514
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-confirm-boot",
+          "mode": "0o755",
+          "sha256": "0c413d6421ebe6b4d6a5221195d26bb0e30a8140637c85a87f39aa6e977814c5",
+          "size": 1022
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-nss-irq",
+          "mode": "0o755",
+          "sha256": "e00c3b8f4da3da52fbbe40173cd57cea2ae4e6554dde3332cc38bbaa7bc4e9df",
+          "size": 2820
+        },
+        {
+          "path": "target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog",
+          "mode": "0o755",
+          "sha256": "2a05b7b91d4a8c7719d33096f2f6f0205cde3562572f40d1cc69b9db38a15f60",
+          "size": 41551
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0413-mtd-spinand-winbond-add-W25N01KW-support.patch",
+          "mode": "0o644",
+          "sha256": "61683bf7a418746f44b57f5a9c2ea27afaae10ceebcb79cd04b35dab360a6165",
+          "size": 3820
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0600-1-qca-nss-ecm-support-CORE.patch",
+          "mode": "0o644",
+          "sha256": "4d6157d91e6ccb8d12023f1c8e987173388d45ccd46085569affe2524cdea0b0",
+          "size": 31422
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0600-2-qca-nss-ecm-support-PPPOE-offload.patch",
+          "mode": "0o644",
+          "sha256": "45f18e09bb55bc15ee51d194a7a9edbb66f67697c7cf29d6440eb258df9aadb9",
+          "size": 15757
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0600-6-qca-nss-ecm-support-netfilter-DSCPREMARK.patch",
+          "mode": "0o644",
+          "sha256": "25d0be97a9a4e6c65750144f0557a5b102e8d15070b5921a0a5adde78aef9763",
+          "size": 5010
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0600-7-qca-nss-ecm-fix-IPv6-user-route-change-event-calls.patch",
+          "mode": "0o644",
+          "sha256": "27f8da7adc4390c043b0062cee304f58b44917db360ae874de03c861290a01b0",
+          "size": 2409
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0600-8-net-disable-fraglist-GRO-by-default.patch",
+          "mode": "0o644",
+          "sha256": "6a74b9d10834f8743cd6d33b56e26477b9540d96788284693ee420cd575237db",
+          "size": 813
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0603-2-qca-nss-clients-add-l2tp-support.patch",
+          "mode": "0o644",
+          "sha256": "14b82dd33a58a3debf2d47e75e2997ffae903bad809cfccc5e25cd86adc07298",
+          "size": 11890
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0603-3-qca-nss-clients-add-PPTP-support.patch",
+          "mode": "0o644",
+          "sha256": "a7e658fcfd335cba915f319aa77733bc7b17e8c803f7fd8d2ad37484373a6a47",
+          "size": 12795
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0603-6-qca-nss-clients-add-bridge-mgr-support.patch",
+          "mode": "0o644",
+          "sha256": "b96251f1092988f7f57ede4b5b1450a0a7c712be2e7bd6036076307922edb0c8",
+          "size": 3357
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0606-1-qca-nss-ecm-bridge-Fixes-for-Bridge-VLAN-Filtering.patch",
+          "mode": "0o644",
+          "sha256": "e490165181f23a2706d360b73068d4eb25f5daa9f3e0a44070942e90c243fb85",
+          "size": 9148
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0819-arm64-dts-qcom-ipq5018-add-NSS-reserved-memory.patch",
+          "mode": "0o644",
+          "sha256": "0f917aa6c91801d6be19efb6df271d9b5d3bf5774182ac83b618127293a77329",
+          "size": 313
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0819-remoteproc-qcom_q6v5_mpd-fix-userpd-array-overflow.patch",
+          "mode": "0o644",
+          "sha256": "b413859ee0eae0c4dff73d1dda3aa635c4a0595b4e2f6e046d16c05bb0b6266b",
+          "size": 1811
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0821-remoteproc-qcom_q6v5_mpd-tear-down-user-pd-when-root-pd-is-dead.patch",
+          "mode": "0o644",
+          "sha256": "244593caa91bdee915b04bf4d90f259209e8858bbb6908ae07261ad1ec1b2ae0",
+          "size": 2507
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0822-remoteproc-qcom_q6v5_mpd-unwind-a-failed-root-pd-start.patch",
+          "mode": "0o644",
+          "sha256": "e1502a34666e16b0d0e3ac70446733910aa5a619d44129a8eaba195da3709fb6",
+          "size": 2039
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0823-remoteproc-qcom_q6v5_mpd-respawn-user-pds-after-root-pd-crash.patch",
+          "mode": "0o644",
+          "sha256": "e355911a3511b02f4aa1ae403756a213060abafa43ee910f80780f9276a854dd",
+          "size": 24838
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0824-remoteproc-qcom_q6v5_mpd-tear-down-user-pds-even-when-respawn-is-suppressed.patch",
+          "mode": "0o644",
+          "sha256": "f1a086be202a5c494a7ba94f8a40b2eb220af578cf3cfcf3de48d14f7efb888b",
+          "size": 4720
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0825-remoteproc-qcom_q6v5_mpd-unwind-a-failed-user-pd-start.patch",
+          "mode": "0o644",
+          "sha256": "76335452d16e1965b58e69efe9b58d2ce35cda2718cca9bd7953a61511122e0d",
+          "size": 12824
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0918-soc-qcom-smp2p-clear-cached-inbound-values-on-restart.patch",
+          "mode": "0o644",
+          "sha256": "0dccb5d1814ae0b19e6b71733a715fd7a2be89580e2a5b32546ae19793626926",
+          "size": 4043
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/0981-1-qca-skb_recycler-support.patch",
+          "mode": "0o644",
+          "sha256": "19b0869a7526f6147a05fac2a996520f12e0aeea74b1e5ffe174502b66275130",
+          "size": 22944
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/737-net-dsa-add-Airoha-AN8855.patch",
+          "mode": "0o644",
+          "sha256": "b8ec4e90c740029cddcd9c580ff87c61b438ab2e774b2ae17d0573cf8c5a25af",
+          "size": 12419
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/999-2757-net-dsa-add-an8855-v2p0p1-and-netlink-support.patch",
+          "mode": "0o644",
+          "sha256": "8da83af18ec233cb49d1b1d5598e42d7bcf0ecb5b5da65946c63229b1bcfe970",
+          "size": 42302
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/999-2758-nss-an8855-tag8021q-core.patch",
+          "mode": "0o644",
+          "sha256": "116bb6edfaee7593574046e44130e687c70aa39ed6a525cea09d71cd3f8e513b",
+          "size": 31138
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/999-2759-nss-an8855-tag8021q-bridge-leave.patch",
+          "mode": "0o644",
+          "sha256": "ab2836f3b0981c4b3e0099e7d9f8b54ef1a9e7aab6ee005f29ab39358ba17ec6",
+          "size": 2695
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/999-2760-nss-an8855-tag8021q-host-fdb-vid.patch",
+          "mode": "0o644",
+          "sha256": "7201c3e5a52a335837f687148db8149f9f051f587031f51b32a4e45f58635e8f",
+          "size": 5742
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/999-2761-nss-an8855-user-port-flood-default.patch",
+          "mode": "0o644",
+          "sha256": "56cb241c833b95efa530671a6b9d8e6922ae456b6c1e3131cf1e18bfd145f398",
+          "size": 4911
+        },
+        {
+          "path": "target/linux/qualcommax/patches-6.12/999-2762-nss-an8855-vlan-filtering.patch",
+          "mode": "0o644",
+          "sha256": "d9081e227f53917f86be9c15ce654183101c3777269ad035f712a51f50f2f10c",
+          "size": 18590
+        }
+      ]
+    },
+    "luci": {
+      "url": "https://git.openwrt.org/project/luci.git",
+      "commit": "7c91cb278d7cf19878069a44d5d1992f65c4e315",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "overlay": []
+    },
+    "nss_packages": {
+      "url": "https://github.com/qosmio/nss-packages.git",
+      "commit": "0d970dbf0185e3f53709bd803e8a466598023c57",
+      "patch_sha256": "79ed13ed1db8dbac06b56c7be8256f4bf24c47b4732776d14682719a2e986213",
+      "overlay": [
+        {
+          "path": "qca-nss-clients/patches/0001-clients-no-bonding-support-against-mainline.patch",
+          "mode": "0o664",
+          "sha256": "5753145f369146b5ceba3c92061d0cb42de41eebd638a965282ee703b8ad01cd",
+          "size": 3032
+        },
+        {
+          "path": "qca-nss-drv/patches/0029-ipq50xx-nss-core-boot-reset-pulse.patch",
+          "mode": "0o664",
+          "sha256": "2f68f1485b8ea4f39ebd0183c3f755b5c92bdd483abd0c063115f133dc07a167",
+          "size": 3514
+        },
+        {
+          "path": "qca-nss-drv/patches/0031-nss-meminfo-map-block-table-noncacheable.patch",
+          "mode": "0o664",
+          "sha256": "d4ba360fd90e8493f783808cb4362a14a4f422b5d76d49a297f0bdda42abdc96",
+          "size": 3160
+        },
+        {
+          "path": "qca-nss-drv/patches/0032-nss-log-show-full-coredump.patch",
+          "mode": "0o664",
+          "sha256": "b9dcff8cd2c38b382c450f9321907c555d5423a091243b622146442b15301d93",
+          "size": 877
+        },
+        {
+          "path": "qca-nss-drv/patches/0033-optional-refill-diagnostics.patch",
+          "mode": "0o664",
+          "sha256": "be3df6d425f9bfaabb7c1afe64bed330130dd7fea8c5a73af2189b5816aea89a",
+          "size": 3943
+        },
+        {
+          "path": "qca-nss-ecm/patches/0026-frontends-nss-dsa-conduit-awareness.patch",
+          "mode": "0o664",
+          "sha256": "7ad84bb79da7debd4ec040907d5cfd7197471ab2723c837b3aaa3f4a9fac7c35",
+          "size": 3489
+        },
+        {
+          "path": "qca-nss-ecm/patches/0027-ecm-nss-dsa-tag8021q-precise-egress.patch",
+          "mode": "0o664",
+          "sha256": "34a92cc3294385c69809eace5a405609442f10d6d45d154b4f2b877be5bbf8f5",
+          "size": 10291
+        },
+        {
+          "path": "qca-nss-ecm/patches/0028-ecm-nss-dsa-bridged-tags.patch",
+          "mode": "0o664",
+          "sha256": "fd58fe38a5e8b8992d6adc6264c74f54a718e4441d5c65c915ab74f69ab86cde",
+          "size": 2690
+        },
+        {
+          "path": "qca-nss-ecm/patches/0029-ecm-nss-vlan-aware-bridge-wifi.patch",
+          "mode": "0o664",
+          "sha256": "cc5cacfd1cf5cab41a97d7b11267248ad859b31eb9b4248630d41a8c5f74313d",
+          "size": 17195
+        }
+      ]
+    },
+    "packages": {
+      "url": "https://git.openwrt.org/feed/packages.git",
+      "commit": "6e46ddbe2ddaee2b4381dbf1a5046ef942b8265b",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "overlay": [
+        {
+          "path": "net/usteer/patches/100-expose-band-steering-signal-threshold.patch",
+          "mode": "0o664",
+          "sha256": "9e6b2bc3c245caa65c1e3dfb22d3923c0b4371f1b4eadaef60a31733f606320b",
+          "size": 319
+        }
+      ]
+    },
+    "routing": {
+      "url": "https://git.openwrt.org/feed/routing.git",
+      "commit": "4b9891b9136259f93294a424507ed24c5e8c1cbd",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "overlay": []
+    },
+    "sqm_scripts_nss": {
+      "url": "https://github.com/qosmio/sqm-scripts-nss.git",
+      "commit": "4b4ed8639229be5e70cf94b73cdf7dbc09e66d5d",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "overlay": []
+    },
+    "telephony": {
+      "url": "https://git.openwrt.org/feed/telephony.git",
+      "commit": "5d68d53c160a325ea9d03fce393e051573bcc736",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "overlay": []
+    },
+    "video": {
+      "url": "https://github.com/openwrt/video.git",
+      "commit": "938621437fbf4abdea12792361173dd69164ab16",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "overlay": []
+    }
+  },
+  "build_config_sha256": "8a565b3c32eecdeda1ffd4099eb7eb82269ac70f0d8d23114fcd6cb586b09e35"
+}

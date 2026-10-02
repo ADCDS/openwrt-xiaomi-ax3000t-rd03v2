@@ -1,0 +1,59 @@
+#!/bin/sh
+# Experimental policy, not a guarantee against allocation bursts/OOM.
+# Does not write Wi-Fi pool, empty pool, low watermark, or restart Wi-Fi.
+N2H=/proc/sys/dev/nss/n2hcfg
+TARGET=30258
+FLOOR=24576
+# User requested disabling only available-memory guards.
+MEMORY_GUARD=0
+STATE=/tmp/nss-pool-boost.status
+FAIL=/etc/nss-pool-boost.failed
+readval() { cat "$N2H/$1" 2>/dev/null; }
+available() { awk '/^MemAvailable:/ { print $2 }' /proc/meminfo; }
+emit() { echo "$*" > "$STATE"; logger -t nss-pool-boost "$*"; }
+fail() {
+    echo "$*" > "$FAIL"
+    echo 4096 > "$N2H/n2h_high_water_core0"
+    emit "FALLBACK: $*; high=$(readval n2h_high_water_core0); extra pbuf remains until reboot"
+    exit 1
+}
+trap 'echo 4096 > "$N2H/n2h_high_water_core0"; exit 0' TERM INT
+
+[ ! -e "$FAIL" ] || exit 0
+[ "$(cat /tmp/sysinfo/board_name)" = xiaomi,mi-router-ax3000t-v2 ] || exit 1
+# RAM recovery/installation must retain its memory for the upgrade image.
+[ "$(ubus call system board | jsonfilter -e '@.rootfs_type')" = squashfs ] || {
+    emit 'SKIP RAM boot: preserve recovery memory'
+    exit 0
+}
+[ "$(readval n2h_low_water_core0)" = 2048 ] || { emit 'SKIP unexpected low watermark'; exit 1; }
+[ "$(readval n2h_wifi_pool_buf)" = 4096 ] || { emit 'SKIP unexpected Wi-Fi pool'; exit 1; }
+[ "$(readval n2h_high_water_core0)" = 4096 ] || { emit 'SKIP unexpected high watermark'; exit 1; }
+mem=$(available)
+[ "$MEMORY_GUARD" = 0 ] || { [ -n "$mem" ] && [ "$mem" -ge 32768 ]; } || { emit "SKIP insufficient starting memory: $mem KiB"; exit 1; }
+extra=$(readval extra_pbuf_core0)
+case "$extra" in
+    0) echo 3100000 > "$N2H/extra_pbuf_core0" || fail 'extra-pbuf write failed' ;;
+    3100672) : ;;
+    *) emit "SKIP unexpected extra pbuf $extra"; exit 1 ;;
+esac
+[ "$(readval extra_pbuf_core0)" = 3100672 ] || fail 'extra-pbuf readback mismatch'
+
+high=4096
+while :; do
+    mem=$(available)
+    [ "$MEMORY_GUARD" = 0 ] || { [ -n "$mem" ] && [ "$mem" -ge "$FLOOR" ]; } || fail "MemAvailable=$mem KiB below $FLOOR"
+    current=$(readval n2h_high_water_core0)
+    [ "$current" = "$high" ] || fail "unexpected high=$current wanted=$high"
+    if [ "$high" -lt "$TARGET" ]; then
+        high=$((high + 1024))
+        [ "$high" -le "$TARGET" ] || high=$TARGET
+        echo "$high" > "$N2H/n2h_high_water_core0" || fail "high write $high failed"
+        [ "$(readval n2h_high_water_core0)" = "$high" ] || fail "high readback $high failed"
+        emit "RAMP high=$high mem_before=$mem KiB extra=3100672 wifi=4096 low=2048 memory_guard=$MEMORY_GUARD"
+        sleep 2
+    else
+        echo "ACTIVE high=$high MemAvailable=$mem KiB extra=3100672 wifi=4096 low=2048 memory_guard=$MEMORY_GUARD" > "$STATE"
+        sleep 1
+    fi
+done

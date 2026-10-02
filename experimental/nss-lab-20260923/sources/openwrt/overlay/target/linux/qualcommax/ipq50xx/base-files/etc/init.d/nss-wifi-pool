@@ -1,0 +1,90 @@
+#!/bin/sh /etc/rc.common
+# Experimental RD03v2 policy: finish both writes before netifd (START=20).
+# Based on qosmio/openwrt-ipq 36ce806: Wi-Fi pool overwrites high-water.
+# This is not an atomic firmware transaction or a proven throughput fix.
+START=18
+
+read_value() {
+	sysctl -n "dev.nss.n2hcfg.$1" 2>/dev/null
+}
+
+write_value() {
+	sysctl -w "dev.nss.n2hcfg.$1=$2" >/dev/null 2>&1
+}
+
+pool_log() {
+	logger -t nss-wifi-pool "$*"
+}
+
+boot() {
+	local board offload tries pool low high wifi extra wifi_rc high_rc
+	board=$(cat /tmp/sysinfo/board_name 2>/dev/null)
+	[ "$board" = 'xiaomi,mi-router-ax3000t-v2' ] || return 0
+	offload=$(cat /sys/module/ath11k/parameters/nss_offload 2>/dev/null)
+	[ "$offload" = 1 ] || return 0
+
+	# Modules load before this service, but NSS firmware registration is async.
+	tries=0
+	while ! pool=$(read_value n2h_empty_pool_buf_core0); do
+		tries=$((tries + 1))
+		if [ "$tries" -ge 10 ]; then
+			pool_log 'FAILED: NSS not ready; Wi-Fi policy not written'
+			return 1
+		fi
+		sleep 1
+	done
+	low=$(read_value n2h_low_water_core0) || return 1
+	high=$(read_value n2h_high_water_core0) || return 1
+	wifi=$(read_value n2h_wifi_pool_buf) || return 1
+	extra=$(read_value extra_pbuf_core0) || return 1
+	# v1.10 uses MEDIUM for connection capacity. Move its existing S96 host
+	# pool reduction ahead of netifd, without changing connection limits.
+	# Accept only the observed untouched MEDIUM or LOW baseline.
+	if [ "$pool:$low:$high:$wifi:$extra" = '8704:4352:8704:0:0' ]; then
+		if ! write_value n2h_empty_pool_buf_core0 4096; then
+			pool_log 'FAILED: early host pool reduction; Wi-Fi policy not written'
+			return 1
+		fi
+		pool=$(read_value n2h_empty_pool_buf_core0) || return 1
+		low=$(read_value n2h_low_water_core0) || return 1
+		high=$(read_value n2h_high_water_core0) || return 1
+		wifi=$(read_value n2h_wifi_pool_buf) || return 1
+		extra=$(read_value extra_pbuf_core0) || return 1
+	fi
+	# Never copy the generic extra_pbuf/high-water profile into this board.
+	if [ "$pool:$low:$high:$wifi:$extra" != '4096:2048:4096:0:0' ]; then
+		pool_log "SKIP: unexpected baseline pool=$pool low=$low high=$high wifi=$wifi extra=$extra"
+		return 1
+	fi
+
+	# No logging, readback or network round trip between these two writes.
+	# Attempt to restore high-water even if the first command reports failure:
+	# a timeout does not prove firmware left its state unchanged.
+	wifi_rc=0
+	write_value n2h_wifi_pool_buf 4096 || wifi_rc=$?
+	high_rc=0
+	write_value n2h_high_water_core0 4096 || high_rc=$?
+
+	pool=$(read_value n2h_empty_pool_buf_core0) || pool=unknown
+	low=$(read_value n2h_low_water_core0) || low=unknown
+	high=$(read_value n2h_high_water_core0) || high=unknown
+	wifi=$(read_value n2h_wifi_pool_buf) || wifi=unknown
+	extra=$(read_value extra_pbuf_core0) || extra=unknown
+	if [ "$wifi_rc:$high_rc:$pool:$low:$high:$wifi:$extra" = '0:0:4096:2048:4096:4096:0' ]; then
+		pool_log 'verified: wifi=4096 then high=4096; pool=4096 low=2048 extra=0'
+		return 0
+	fi
+	pool_log "FAILED: wifi_rc=$wifi_rc high_rc=$high_rc pool=$pool low=$low high=$high wifi=$wifi extra=$extra; no retry"
+	return 1
+}
+
+# Changing this policy over a live NSS datapath caused loss of connectivity.
+# Only the boot entry applies it; raw driver sysctls are not modified/blocked.
+start() {
+	pool_log 'boot-only experiment; no live policy change performed'
+	return 1
+}
+
+stop() {
+	:
+}

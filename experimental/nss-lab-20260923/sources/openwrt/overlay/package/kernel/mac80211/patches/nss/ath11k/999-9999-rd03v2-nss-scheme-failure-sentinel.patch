@@ -1,0 +1,21 @@
+Subject: [PATCH] ath11k: match NSS scheme allocation failure to uint8_t API
+
+nss_wifili_thread_scheme_alloc() returns uint8_t. Its failure return of -1
+therefore reaches the int caller as 255, not -1. Match the wire/API sentinel
+so the existing fallback to scheme zero runs and failure is not marked as
+a successful thread-scheme allocation. Valid scheme IDs are unchanged.
+
+This fixes an allocation-failure path, not a demonstrated payload-starvation
+cause. It does not change priorities, pool sizes or the driver ABI.
+
+--- a/drivers/net/wireless/ath/ath11k/nss.h
++++ b/drivers/net/wireless/ath/ath11k/nss.h
+@@ -124,7 +124,7 @@
+ /* Enables the MCBC exception in NSS fw, 1 = enable */
+ #define ATH11K_NSS_ENABLE_MCBC_EXC	1
+ 
+-#define WIFILI_SCHEME_ID_INVALID	-1
++#define WIFILI_SCHEME_ID_INVALID	0xff
+ 
+ enum ath11k_nss_opmode {
+ 	ATH11K_NSS_OPMODE_UNKNOWN,
