@@ -241,14 +241,16 @@ target/linux/qualcommax/ipq50xx/base-files/
          See docs/q6-firmware-crash.md.
    243  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog
          procd service for the above (START=99, respawns).
-  15372  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc
+  16150  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc
          The NFC tag (#18): keeps it empty (mode clear, the default,
          which wipes the SSID/password stock left on it) or holds a WSC
          Wi-Fi credential for one AP (mode wifi), in the record layout
          stock writes. Talks to the tag with i2ctransfer. Writes only
          4-byte blocks inside the NDEF data area 0x010-0x377, and only
          the blocks that differ, with the length block last, then reads
-         them back. Retries NACKs only; mode off does no I2C access.
+         them back. Reads each range in one transfer (DMA), and re-reads
+         one that holds the header row: a late read answers from 0.
+         Retries NACKs only; mode off does no I2C access.
          Refuses any other board or tag. Commands: status, update,
          clear, dump. See docs/nfc.md.
     729  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nfc
