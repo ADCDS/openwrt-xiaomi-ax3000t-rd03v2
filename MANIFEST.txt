@@ -212,7 +212,7 @@ target/linux/qualcommax/ipq50xx/base-files/
    4034  target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
          Caldata extraction from 0:ART — 2.4 GHz @ 0x1000,
          5 GHz (QCN6122) @ 0x26800, 0x20000 each.
- 41551  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
+ 44608  target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
          Issue #15. Backstop for the WiFi failures the driver does not
          recover by itself: any of remoteproc0/pd-1/pd-2 not "running"
          for 2 samples; a radio registered at arm time, or configured in
@@ -237,7 +237,12 @@ target/linux/qualcommax/ipq50xx/base-files/
          uptime and reboots, never the wall clock (no RTC): 10-minute
          minimum uptime, 1 hour after a watchdog reboot - 10 minutes, up to
          3 in a row, when no radio is serving - and a held reboot happens
-         once allowed. Touch /etc/rd03v2-watchdog.disable to neuter it.
+         once allowed. When ath11k recovers a radio's firmware in place,
+         it reloads that radio's encrypted 802.11s mesh supplicants over
+         ubus, retrying for up to ~2.5 min: the firmware restarts CCMP
+         packet numbers from zero, so mesh peers drop its traffic until
+         the mesh is joined again. APs and open meshes are left alone.
+         Touch /etc/rd03v2-watchdog.disable to neuter it.
          See docs/q6-firmware-crash.md.
    243  target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog
          procd service for the above (START=99, respawns).
