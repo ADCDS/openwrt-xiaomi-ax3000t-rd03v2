@@ -98,16 +98,32 @@ xfer() {
 	[ -z "$out" ] || echo "$out"
 }
 
-# read_mem <offset> <length>: the bytes, as 0x.. words on one line. Reads go
-# 16 bytes at a time, which keeps the QUP in FIFO mode.
+# read_mem <offset> <length>: the bytes, as 0x.. words on one line, read in
+# one transfer. When the read comes late after the address write, the chip
+# drops the address and answers from address 0, without any error. Short
+# transfers, like the 16-byte header read, use the QUP FIFO: i2c-qup then
+# sends the address write and the read as separate steps, and under CPU load
+# the read can come late. Longer ones go by DMA, which queues both at once. A
+# read away from 0 that contains the header row is this fault, even midway
+# (if DMA is missing, block mode can pause mid-read), so it is read again.
+# The check needs $HDR from open_tag; reads under 16 bytes cannot be checked.
 read_mem() {
-	local a=$1 end=$(($1 + $2)) n out=
+	local try=0 out
 
-	while [ $a -lt $end ]; do
-		n=$((end - a))
-		[ $n -gt 16 ] && n=16
-		out="$out $(xfer w2@$ADDR $((a >> 8)) $((a & 255)) r$n)" || return 1
-		a=$((a + n))
+	while :; do
+		out=$(xfer w2@$ADDR $(($1 >> 8)) $(($1 & 255)) r$2) || return 1
+		[ $1 = 0 ] || [ -z "$HDR" ] && break
+		case " $(echo $out) " in
+		*" $HDR "*) ;;
+		*) break ;;
+		esac
+		try=$((try + 1))
+		if [ $try = 10 ]; then
+			echo "nfc: reads at $1 keep returning address 0" >&2
+			logger -t nfc -p daemon.err "reads at $1 keep returning address 0"
+			return 1
+		fi
+		sleep 1
 	done
 	echo $out
 }
@@ -489,13 +505,11 @@ status() {
 }
 
 dump() {
-	local a=0 row
+	local mem
 
-	while [ $a -lt 1024 ]; do
-		row=$(read_mem $a 16) || die "cannot read the tag"
-		printf '%04x: %s\n' $a "$(echo $row | sed 's/0x//g')"
-		a=$((a + 16))
-	done
+	mem=$(read_mem 0 1024) || die "cannot read the tag"
+	echo $mem | sed 's/0x//g' | tr ' ' '\n' |
+		awk '{ row = row " " $0 } NR % 16 == 0 { printf "%04x:%s\n", NR - 16, row; row = "" }'
 }
 
 usage() {
