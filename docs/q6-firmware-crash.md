@@ -1,16 +1,16 @@
 # When the WiFi firmware dies (Q6 / WCSS root-PD fatal)
 
 > TL;DR — a fatal error in the **root** PD of the WiFi Q6 kills both radios.
-> Several driver bugs stood in the way of recovering it and are fixed; the
-> interesting one is that the Q6 restarts perfectly well and the kernel was
-> discarding the interrupt that says so. **The root PD now restarts by itself,
-> but the radios still do not come back**: nothing in the committed kernel
-> respawns the user PDs that carry them, so their firmware never returns. In
-> every trial so far — asserts 7 to 32 minutes after boot — the radios stayed
-> dead until a reboot, which the watchdog does a couple of minutes later. An
-> assert early in the boot may be routed differently (the withdrawn log below
-> was at 42 s) and has not been tested. A kernel fix is written but not yet in
-> this tree or tested on hardware.
+> Several driver bugs stood in the way of recovering it; all are fixed in this
+> tree. The interesting one is that the Q6 restarts perfectly well and the
+> kernel was discarding the interrupt that says so (`0918` plus
+> `qcom,smp2p-feature-ssr-ack` in the DTS; both are needed). Since v1.10, `0823`
+> also respawns the user PDs that carry the radios, so **both radios recover in
+> place, about 1.2 s after the assert**: reproduced again on 2026-10-05 after
+> 7 h of uptime, see [the 0823 section](#with-the-user-pd-respawn-kernel-0823).
+> One known issue remains: on the default build a root PD crash can reset the
+> board (same section). The sections in between describe the kernel before
+> 0823, where the root PD restarted but the radios stayed dead until a reboot.
 
 ## The failure
 
@@ -38,8 +38,8 @@ remoteproc remoteproc0: can't start rproc cd00000.remoteproc: -110
 ath11k b00a040.wifi: failed to send WMI_... cmd: -108     (repeating forever)
 ```
 
-With them, it does — and the radios stay dead anyway (2026-09-13, NSS Wi-Fi
-image; the default build and the NSS image with offload off behave the same):
+With them but without 0823, it does — and the radios stay dead anyway
+(2026-09-13, NSS Wi-Fi image; the default build and the NSS image with offload off behave the same):
 
 ```
 [1691.407] qcom-q6-mpd cd00000.remoteproc: fatal error received: err_smem_ver.2.1: ...
@@ -151,8 +151,9 @@ final:        cd00000.remoteproc=running pd-1=running pd-2=running   ready_irq=2
 
 `ready_irq` 1 → 2 is the edge finally being delivered. Both radios come back
 and their survey counters advance again, with no reboot. The same fixes are
-what let the root PD restart after an assert (the log above) — but see the
-next section for why that is not enough.
+what let the root PD restart after an assert (the log above) — but before
+0823 that was not enough; see
+[below](#before-0823-the-user-pds-were-never-respawned).
 
 A footnote on how this was nearly missed: the failed-start path in
 `q6_wcss_start()` also unwinds nothing — no `qcom_scm_pas_shutdown()`, no
@@ -168,7 +169,7 @@ With the restart working, a firmware crash test stopped leaving the radios
 dead and started **rebooting the SoC instead** — instantly, before a one-second
 sampling loop could take its first reading. The earlier stall had been hiding
 this. (The trigger and PD routing of that test were not recorded; see
-[the section below](#what-is-still-broken-the-user-pds-are-never-respawned) for
+[the section below](#before-0823-the-user-pds-were-never-respawned) for
 why a root-PD assert alone does not reach ath11k's recovery today.)
 
 `ath11k_core_reset()` calls `ath11k_hif_ce_irq_disable()` before powering the
@@ -183,7 +184,10 @@ never disabled them at all.
 Fixed by cherry-picking **openwrt/openwrt#24578** (patches `950-` and `953-`;
 the PR's own `951-` is renumbered because this tree already has a `951-`).
 
-## What is still broken: the user PDs are never respawned
+## Before 0823: the user PDs were never respawned
+
+This section describes the kernel before v1.10. `0823` fixes it; see
+[its section](#with-the-user-pd-respawn-kernel-0823).
 
 On a root-PD fatal, `q6v5_fatal_interrupt()` reports the crash of the **root**
 rproc only, and the remoteproc core recovers exactly that rproc:
@@ -251,21 +255,17 @@ Two more things make the dead state stick:
   the restarted firmware read a stale NSS-written head pointer; it has not been
   confirmed. Candidate patches exist; none is in this tree or benched.
 
-**The pending fix (0823, not in this tree).** Two variants are written against
-the patched 6.12.94 `qcom_q6v5_mpd.c` and compile, neither run on hardware
-(`CONFIG_QCOM_Q6V5_MPD=y`, so testing needs a kernel image):
+**The fix (0823, in this tree since v1.10).** It was written against the
+patched 6.12.94 `qcom_q6v5_mpd.c` and carries both halves:
 
-- *Minimal:* a root boot generation counter, so stopping a user PD that the
-  current root firmware never spawned skips the stop handshake instead of
-  timing out. That would let the watchdog's per-PD steps below respawn the
-  radios, ~2 min after the assert (detection) plus a few seconds; it does
-  nothing on its own, and with NSS offload the `hw-restart` path hits the
-  failure above.
-- *Full:* tear the user PDs down with the crashed root and respawn them once it
-  is back, so the radios recover with no watchdog involvement. The respawn
-  still has to move to after glink is started (it currently runs inside the
-  root's start, before glink, under the root's lock), and a failed root
-  restart is not handled.
+- *Stale user PDs, always on:* a root boot generation counter, so stopping a
+  user PD that the current root firmware never spawned skips the stop
+  handshake instead of timing out.
+- *Respawn* (`qcom_q6v5_mpd.respawn_userpds`, default on): tear the user PDs
+  down with the crashed root, before its `pas_shutdown`, and respawn them from
+  an rproc subdevice registered after glink, so the respawn runs once glink is
+  up again. The radios then recover with no watchdog involvement; results are
+  in [the 0823 section](#with-the-user-pd-respawn-kernel-0823).
 
 ## Also fixed: a latent array overflow
 
@@ -278,10 +278,13 @@ allocator slack — it silently corrupts whatever is placed after it. Fixed by
 
 ## What the port does about it
 
-`/usr/sbin/rd03v2-watchdog` (procd service, `START=99`) is a **backstop**. It
-cannot bring back radios whose user PDs are gone — nothing short of a reboot
-can today — so for a root-PD assert its job is to notice and reboot, keeping
-the evidence. For the cases in-place recovery can fix, it tries that first.
+`/usr/sbin/rd03v2-watchdog` (procd service, `START=99`) is a **backstop**. With
+0823 the kernel brings the radios back by itself after a root-PD assert, and the
+watchdog does nothing (see the hardware results in
+[the 0823 section](#with-the-user-pd-respawn-kernel-0823)). Its job is what the
+kernel does not recover: a suppressed respawn, a silent death, a radio that
+never comes up. For those it tries in-place recovery first and reboots as a
+last resort, keeping the evidence.
 
 **What it watches**, every 30 s once the boot has settled:
 
@@ -360,8 +363,8 @@ handled in place, however many steps each one takes, so a fault that needs
 constant nursing gets a reboot rather than being papered over every couple of
 minutes.
 
-What that should mean for each failure on the current kernel — worked out from
-the code and the 2026-09-13 logs; this version has not run on hardware:
+What that meant for each failure on the kernel before 0823 — worked out from
+the code and the 2026-09-13 logs, not run on hardware:
 
 | failure | expected |
 |---|---|
@@ -425,9 +428,29 @@ with and without station traffic.
 
 ### With the user-PD respawn kernel (0823)
 
-With `qcom_q6v5_mpd.respawn_userpds=1` (patch 0823, in the integration branch)
+With `qcom_q6v5_mpd.respawn_userpds=1` (patch 0823, default on since v1.10)
 the kernel restarts pd-1 and pd-2 after a root PD crash, and ath11k recovers
 both radios in place in about a second.
+
+Reproduced on 2026-10-05 on the NSS Wi-Fi build (OpenWrt r35297-25ee12629e,
+6.12.94), after 7 h of uptime, with one assert through each radio about a
+minute apart. Both recovered the same way; the 2.4 GHz one:
+
+```
+[25662.401] ath11k c000000.wifi: simulating firmware assert crash
+[25662.676] qcom-q6-mpd cd00000.remoteproc: fatal error received: err_smem_ver.2.1: ...
+[25662.748] remoteproc remoteproc0: handling crash #1 in cd00000.remoteproc
+[25662.767] qcom-q6-mpd pd-1: pd-1: torn down with crashed root PD
+[25662.769] qcom-q6-mpd pd-2: pd-2: torn down with crashed root PD
+[25662.896] qcom-q6-mpd pd-1: pd-1: respawned after root PD recovery
+[25662.906] qcom-q6-mpd pd-2: pd-2: respawned after root PD recovery
+[25662.906] remoteproc remoteproc0: remote processor cd00000.remoteproc is now up
+[25663.492] ath11k c000000.wifi: pdev 1 successfully recovered
+[25663.868] ath11k b00a040.wifi: pdev 1 successfully recovered
+```
+
+No `-110` and no reboot; both APs kept their channels. The 5 GHz assert
+(crash #2) recovered both radios 1.5 s after the assert.
 
 An in-place recovery re-installs the stations' keys, but the firmware starts
 its transmit packet numbers again from zero. A client that enforces CCMP
@@ -513,8 +536,10 @@ dmesg | grep -E 'pd not stopped|can.t stop rproc|stopped remote processor|is now
 ```
 
 `q6v5 fatal` incrementing while the `userpd1`/`userpd2` spawn-ack counters do
-not is a root-PD assert whose user PDs were never respawned — the radios will
-not come back without a reboot. A `userpd1_fatal`/`userpd2_fatal` increment is
+not is a root-PD assert whose user PDs were not respawned: a kernel without
+0823, or a suppressed respawn (`respawn suppressed after repeated root PD
+crashes` in the log). The radios will not come back without a reboot or the
+watchdog's driver reload. A `userpd1_fatal`/`userpd2_fatal` increment is
 a user-PD crash, which goes through the remoteproc core's recovery of that PD
 instead (not observed on this board so far). All counters at their boot values
 while a radio is dead means the *silent* variant instead.
@@ -523,8 +548,8 @@ The box has no RTC and, as an AP, often no reachable NTP server, so the dates
 inside incident files can be wrong — `uptime` is recorded alongside them and in
 the file name, and is the trustworthy clock.
 
-Recovering by hand after a root-PD assert does not work on a shipped build,
-and is worth knowing so you don't chase it: `echo stop >
+Before 0823, recovering by hand after a root-PD assert did not work, which is
+worth knowing so you don't chase it on an older build: `echo stop >
 /sys/class/remoteproc/remoteprocN/state` times out after 5 s or more
 (`pd not stopped`, `-110`) with the state still `running`; and once an ath11k
 reset has tried and failed, the stop returns at once and does nothing (the
