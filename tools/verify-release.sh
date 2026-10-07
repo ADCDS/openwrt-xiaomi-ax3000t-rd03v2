@@ -112,6 +112,22 @@ check_tree() {
 		bad "$label DTB not found in the tree"
 	fi
 
+	# UK 5.8 GHz band (patch 964, issue #34) — both flavours. Its one-entry
+	# table compiles to immediates, not data, so disassemble the ath11k.ko that
+	# went into the image and look for the two the patch adds: the "GB" country
+	# compare (0x4247) and the low half of 5725000 kHz, the band's start
+	# (0x5b48). A v1.12 ath11k.ko has neither.
+	local od ko
+	od=$(ls "$tree"/staging_dir/toolchain-*/bin/*-linux-musl-objdump 2>/dev/null | head -1)
+	ko=$(find "$d/x/lib/modules" -name ath11k.ko 2>/dev/null | head -1)
+	if [ -n "$od" ] && [ -n "$ko" ]; then
+		chk "$label ath11k.ko adds GB 5725-5850 MHz (964)" \
+			"$("$od" -d "$ko" | grep -oE 'mov[[:space:]]+w[0-9]+, #0x(4247|5b48)\b' | grep -oE '0x[0-9a-f]+$' | sort -u | xargs)" \
+			"0x4247 0x5b48"
+	else
+		bad "$label ath11k.ko or the tree's objdump not found"
+	fi
+
 	if [ "$want_offload" = yes ]; then
 		chk "$label ath11k nss_offload modparam" \
 			"$(grep -rh 'nss_offload' "$d/x/etc/modules.d/" 2>/dev/null | head -1)" \

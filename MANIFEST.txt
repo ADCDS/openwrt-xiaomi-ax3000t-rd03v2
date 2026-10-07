@@ -135,6 +135,15 @@ WiFi low-memory support (ath11k smallbuffers — 256 MB fits two radios)
          (hit during double-crash stress). Keeps CRASH_FLUSH set until the CE
          and DP rings exist, unless the firmware crashed again, and checks
          the ring in ath11k_ce_send().
+  4109  package/kernel/mac80211/patches/ath11k/964-wifi-ath11k-add-the-UK-5.8-GHz-band-missing-from-the-fw-regdb.patch
+         Issue #34. ath11k takes its channels from the firmware's built-in
+         regulatory database, and WLAN.HK.2.7.0.1-01744 puts GB in the EU
+         ETSI domain, which ends at 5710 MHz: with country GB channels
+         144-177 were disabled and an AP on 149-165 never started. Adds a
+         table of bands a regulator permits that the firmware omits, applied
+         on top of the firmware's rules for that country only and never over
+         a band the firmware reports. One entry: GB 5725-5850 MHz, 23 dBm,
+         indoor (Ofcom IR 2030, wireless-regdb). See docs/regulatory-gb-5ghz.md.
   12707  package/kernel/mac80211/Makefile
          Adds -DCONFIG_ATH11K_SMALLBUFFERS to the smallbuffers build variant
          (mirrors the existing ath10k-smallbuffers define).
@@ -453,3 +462,9 @@ Native IPQ5018 BDF (see docs/ipq5018-native-bdf.md):
     applies the common 2.5 -> 2.7 schema byte established by the accepted
     QCN6122 conversion, rebuilds the XOR checksum, and verifies the exact
     output hash before writing the board-2 container.
+
+UK 5.8 GHz channels (see docs/regulatory-gb-5ghz.md):
+  tools/ath11k-fw-regdb.py lists the 5 GHz rules and regulatory domains
+    compiled into an ath11k Q6 firmware (found by signature in the user PD
+    data segments), so a new firmware can be checked for the UK band
+    before 964's table entry is dropped.
