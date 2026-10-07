@@ -1,0 +1,1102 @@
+Issue #34 bench run, 2026-10-07: 5 GHz channels 149-165 under country GB
+==========================================================================
+Bench: RD03v2 running v1.12 NSS Wi-Fi (r35297-25ee12629e, kernel 6.12.94,
+kernel package vermagic b8b357d59665e168c40d5dd63a78dd3b), WLAN.HK.2.7.0.1-01744.
+Client/scanner: "hal", QCA9377 (ath10k), regulatory BR; it reaches the router's
+LAN by cable and scans/joins over its Wi-Fi card.
+Patched module: built in a tree configured like the v1.12 NSS Wi-Fi release
+(KMODS=1 NSS=1, pinned donor). Kernel vermagic b8b357d59665e168c40d5dd63a78dd3b
+(= bench); unpatched ath11k.ko md5 128b8b9900e1693f31cb7850ae5ff680 (= the
+bench's /lib/modules/6.12.94/ath11k.ko); with 964: b5cf01cf34322e16b0867ff1ad704798.
+Loaded with /tmp/i34/swap.sh: wifi down; rmmod ath11k_ahb ath11k;
+insmod <ath11k.ko> nss_offload=1 frame_mode=2; insmod ath11k_ahb; wifi up.
+The phy numbers change on every reload (phy1 at boot, phy3, phy5, phy7).
+PSK and hal's MAC redacted.
+
+##### 0: baseline (stock v1.12, country BR)
++ cat /etc/openwrt_release /etc/openwrt_version
+DISTRIB_ID='OpenWrt'
+DISTRIB_RELEASE='SNAPSHOT'
+DISTRIB_REVISION='r35297-25ee12629e'
+DISTRIB_TARGET='qualcommax/ipq50xx'
+DISTRIB_ARCH='aarch64_cortex-a53'
+DISTRIB_DESCRIPTION='OpenWrt SNAPSHOT r35297-25ee12629e'
+DISTRIB_TAINTS=''
+r35297-25ee12629e
++ uname -a
+Linux OpenWrt 6.12.94 #0 SMP Thu Jul  9 11:01:03 2026 aarch64 GNU/Linux
++ uptime
+ 10:52:43 up 12:18,  load average: 0.00, 0.03, 0.00
++ cat /proc/cmdline
+ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs cnss2.bdf_integrated=0x24 cnss2.bdf_pci0=0x60 cnss2.bdf_pci1=0x60 cnss2.skip_radio_bmap=4 rootwait uart_en=1 ubi.mtd=rootfs root=/dev/ubiblock0_0 coherent_pool=2M
++ sha256sum (selection)
+8c2c5fd824de56dd2e096aac405d7784e17488c16c0526cfe7ec9b5084c59efa  /lib/firmware/ath11k/IPQ5018/hw1.0/board-2.bin
+536b50a7a2a8936dfa1dfa57b641275b12ca580371b2c5c9eae131701217fb75  /lib/firmware/ath11k/IPQ5018/hw1.0/q6_fw.b03
+653ee56bc58b58e58433b82f9b80df253fa33d21732c559a557fd797a5a29b9f  /lib/firmware/ath11k/IPQ5018/hw1.0/q6_fw.mdt
+8eef5b9922a7daab374a6ff65adee7f6d9dd371c2dcfeac303a9f3f69c8ec161  /lib/firmware/ath11k/QCN6122/hw1.0/board-2.bin
+[   19.151938] ath11k c000000.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[   19.152008] ath11k c000000.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
+[   19.346729] ath11k b00a040.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[   19.346805] ath11k b00a040.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
++ uci show wireless
+wireless.radio0=wifi-device
+wireless.radio0.type='mac80211'
+wireless.radio0.path='platform/soc@0/c000000.wifi'
+wireless.radio0.band='2g'
+wireless.radio0.channel='1'
+wireless.radio0.htmode='HE20'
+wireless.radio0.country='BR'
+wireless.default_radio0=wifi-iface
+wireless.default_radio0.device='radio0'
+wireless.default_radio0.network='lan'
+wireless.default_radio0.mode='ap'
+wireless.default_radio0.ssid='benchtest'
+wireless.default_radio0.encryption='psk2'
+wireless.default_radio0.disabled='0'
+wireless.default_radio0.key='<psk>'
+wireless.default_radio0.hostapd_bss_options='wpa_pairwise_update_count=8'
+wireless.radio1=wifi-device
+wireless.radio1.type='mac80211'
+wireless.radio1.path='platform/soc@0/b00a040.wifi'
+wireless.radio1.band='5g'
+wireless.radio1.channel='36'
+wireless.radio1.htmode='HE80'
+wireless.radio1.country='BR'
+wireless.default_radio1=wifi-iface
+wireless.default_radio1.device='radio1'
+wireless.default_radio1.network='lan'
+wireless.default_radio1.mode='ap'
+wireless.default_radio1.ssid='benchtest'
+wireless.default_radio1.encryption='psk2'
+wireless.default_radio1.disabled='0'
+wireless.default_radio1.key='<psk>'
+wireless.default_radio1.hostapd_bss_options='wpa_pairwise_update_count=8'
++ iw reg get
+global
+country BR: DFS-FCC
+	(2400 - 2483 @ 40), (N/A, 30), (N/A)
+	(5150 - 5250 @ 80), (N/A, 27), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5350 @ 80), (N/A, 27), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5470 - 5725 @ 160), (N/A, 27), (0 ms), DFS, AUTO-BW
+	(5725 - 5850 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5925 - 7125 @ 320), (N/A, 12), (N/A), NO-OUTDOOR
+	(57000 - 71000 @ 2160), (N/A, 40), (N/A)
+
+phy#1 (self-managed)
+country BR: DFS-FCC
+	(2402 - 2482 @ 40), (N/A, 30), (N/A)
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+
+phy#0 (self-managed)
+country BR: DFS-FCC
+	(2402 - 2482 @ 40), (N/A, 30), (N/A)
+
++ iw phy phy1 channels
+Band 2:
+	* 5180 MHz [36] 
+	  Maximum TX power: 24.0 dBm
+	* 5200 MHz [40] 
+	  Maximum TX power: 24.0 dBm
+	* 5220 MHz [44] 
+	  Maximum TX power: 24.0 dBm
+	* 5240 MHz [48] 
+	  Maximum TX power: 24.0 dBm
+	* 5260 MHz [52] 
+	  Maximum TX power: 24.0 dBm
+	* 5280 MHz [56] 
+	  Maximum TX power: 24.0 dBm
+	* 5300 MHz [60] 
+	  Maximum TX power: 24.0 dBm
+	* 5320 MHz [64] 
+	  Maximum TX power: 24.0 dBm
+	* 5500 MHz [100] 
+	  Maximum TX power: 24.0 dBm
+	* 5520 MHz [104] 
+	  Maximum TX power: 24.0 dBm
+	* 5540 MHz [108] 
+	  Maximum TX power: 24.0 dBm
+	* 5560 MHz [112] 
+	  Maximum TX power: 24.0 dBm
+	* 5580 MHz [116] 
+	  Maximum TX power: 24.0 dBm
+	* 5600 MHz [120] 
+	  Maximum TX power: 24.0 dBm
+	* 5620 MHz [124] 
+	  Maximum TX power: 24.0 dBm
+	* 5640 MHz [128] 
+	  Maximum TX power: 24.0 dBm
+	* 5660 MHz [132] 
+	  Maximum TX power: 24.0 dBm
+	* 5680 MHz [136] 
+	  Maximum TX power: 24.0 dBm
+	* 5700 MHz [140] 
+	  Maximum TX power: 24.0 dBm
+	* 5720 MHz [144] 
+	  Maximum TX power: 24.0 dBm
+	* 5745 MHz [149] 
+	  Maximum TX power: 30.0 dBm
+	* 5765 MHz [153] 
+	  Maximum TX power: 30.0 dBm
+	* 5785 MHz [157] 
+	  Maximum TX power: 30.0 dBm
+	* 5805 MHz [161] 
+	  Maximum TX power: 30.0 dBm
+	* 5825 MHz [165] 
+	  Maximum TX power: 30.0 dBm
+	* 5845 MHz [169] 
+	  Maximum TX power: 30.0 dBm
+	* 5865 MHz [173] 
+	  Maximum TX power: 30.0 dBm
+	* 5885 MHz [177] 
+	  Maximum TX power: 30.0 dBm
+
+##### control: stock module reloaded the same way
+md5 128b8b9900e1693f31cb7850ae5ff680  vermagic: 6.12.94 SMP mod_unload aarch64
+phys after 1s: phy2 phy3 
+1 2 
+a5d364dda62191ba7e0d42da1f7a9231  /sys/module/ath11k/sections/.text
+[46238.447766] remoteproc remoteproc1: Booting fw image ath11k/IPQ5018/hw1.0/q6_fw.mdt, size 1820
+[46238.451777] remoteproc remoteproc0: powering up cd00000.remoteproc
+[46238.460161] remoteproc remoteproc0: Booting fw image ath11k/IPQ5018/hw1.0/q6_fw.mdt, size 1820
+[46238.562942] remoteproc remoteproc0: remote processor cd00000.remoteproc is now up
+[46238.581837] remoteproc remoteproc1: remote processor pd-1 is now up
+[46238.583122] ath11k b00a040.wifi: Multipd architecture - userpd: 2
+[46238.587555] ath11k b00a040.wifi: qcn6122 hw1.0
+[46238.593460] ath11k b00a040.wifi: FW memory mode: 1
+[46238.618199] ath11k c000000.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[46238.618261] ath11k c000000.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
+[46238.683803] remoteproc remoteproc2: powering up pd-2
+[46238.684137] remoteproc remoteproc2: Booting fw image ath11k/IPQ5018/hw1.0/q6_fw.mdt, size 1820
+[46238.700067] remoteproc remoteproc2: remote processor pd-2 is now up
+[46238.780762] ath11k b00a040.wifi: qmi ignore invalid mem req type 10
+[46238.788102] ath11k b00a040.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[46238.788158] ath11k b00a040.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
+[46238.798167] ath11k b00a040.wifi: hybrid register BAR 0x0000000081e00000 size 2097152
+[46238.911096] ath11k c000000.wifi: nss init soc nss if_num 203 userpd_id 0
+[46239.025404] ath11k b00a040.wifi: nss init soc nss if_num 215 userpd_id 1
+[46245.242780] ath11k c000000.wifi phy2-ap0: entered allmulticast mode
+[46245.245445] ath11k c000000.wifi phy2-ap0: entered promiscuous mode
+[46245.909424] ath11k b00a040.wifi phy3-ap0: entered allmulticast mode
+[46245.917913] ath11k b00a040.wifi phy3-ap0: entered promiscuous mode
+[46246.310618] ath11k b00a040.wifi: calibrated noise floor -91 dBm @ 5240 MHz (4 freqs)
+[46251.331479] ath11k c000000.wifi: calibrated noise floor -98 dBm @ 2412 MHz (2 freqs)
+phy#3
+	Interface phy3-ap0
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+		txpower 24.00 dBm
+phy#2
+	Interface phy2-ap0
+		channel 1 (2412 MHz), width: 20 MHz, center1: 2412 MHz
+		txpower 30.00 dBm
+uptime:  11:24:51 up 12:51,  load average: 0.18, 0.08, 0.03
+
+##### A: stock v1.12 ath11k.ko, country GB, radio1 channel 149 HE80 (Wed Oct  7 11:27:48 UTC 2026)
+ath11k.ko md5: 128b8b9900e1693f31cb7850ae5ff680 (loaded from /lib/modules)
+== 5 GHz radio is phy3 ==
+== iw reg get (phy3 section) ==
+phy#3 (self-managed)
+country GB: DFS-ETSI
+	(2402 - 2482 @ 40), (N/A, 20), (N/A)
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(6045 - 6425 @ 160), (N/A, 21), (N/A), NO-OUTDOOR, AUTO-BW
+
+== global ==
+global
+country GB: DFS-ETSI
+	(2400 - 2483 @ 40), (N/A, 20), (N/A)
+== phy3 channels (5.6-5.9 GHz) ==
+* 5660 MHz [132]  | Maximum TX power: 30.0 dBm
+* 5680 MHz [136]  | Maximum TX power: 30.0 dBm
+* 5700 MHz [140]  | Maximum TX power: 30.0 dBm
+* 5720 MHz [144] (disabled)
+* 5745 MHz [149] (disabled)
+* 5765 MHz [153] (disabled)
+* 5785 MHz [157] (disabled)
+* 5805 MHz [161] (disabled)
+* 5825 MHz [165] (disabled)
+* 5845 MHz [169] (disabled)
+* 5865 MHz [173] (disabled)
+* 5885 MHz [177] (disabled)
+== iw dev phy3 ==
+	Interface phy3-ap0
+		type AP
+== hostapd (phy of b00a040) since step ==
+Wed Oct  7 11:27:51 2026 daemon.notice hostapd: phy3-ap0: interface state UNINITIALIZED->COUNTRY_UPDATE
+Wed Oct  7 11:27:51 2026 daemon.notice hostapd: Frequency 5745 (primary) not allowed for AP mode, flags: 0x1
+Wed Oct  7 11:27:51 2026 daemon.err hostapd: Primary frequency not allowed
+Wed Oct  7 11:27:51 2026 daemon.warn hostapd: phy3-ap0: IEEE 802.11 Configured channel (149) or frequency (5745) (secondary_channel=1) not found from the channel list of the current mode (2) IEEE 802.11a
+Wed Oct  7 11:27:51 2026 daemon.warn hostapd: phy3-ap0: IEEE 802.11 Hardware does not support configured channel
+Wed Oct  7 11:27:51 2026 daemon.err hostapd: Could not select hw_mode and channel. (-3)
+Wed Oct  7 11:27:51 2026 daemon.notice hostapd: phy3-ap0: interface state COUNTRY_UPDATE->DISABLED
+Wed Oct  7 11:27:51 2026 daemon.notice hostapd: phy3-ap0: AP-DISABLED
+Wed Oct  7 11:27:51 2026 daemon.err hostapd: phy3-ap0: Unable to setup interface.
+Wed Oct  7 11:27:52 2026 daemon.notice hostapd: phy3-ap0: CTRL-EVENT-TERMINATING
+Wed Oct  7 11:27:56 2026 daemon.notice hostapd: phy2-ap0: interface state COUNTRY_UPDATE->ENABLED
+Wed Oct  7 11:27:56 2026 daemon.notice hostapd: phy2-ap0: AP-ENABLED
+##### A: hal scan
+scan rc=0 bss=11
+scan rc=0 bss=16
+BSS 50:92:6a:f3:3f:5e(on wlp4s0)
+freq: 2412.0
+signal: -22.00 dBm
+Country: GB	Environment: Indoor/Outdoor
+* primary channel: 1
+* STA channel width: 20 MHz
+scan rc=0 bss=18
+BSS 50:92:6a:f3:3f:5e(on wlp4s0)
+freq: 2412.0
+signal: -21.00 dBm
+Country: GB	Environment: Indoor/Outdoor
+* primary channel: 1
+* STA channel width: 20 MHz
+scan rc=0 bss=16
+BSS 50:92:6a:f3:3f:5e(on wlp4s0)
+freq: 2412.0
+signal: -23.00 dBm
+Country: GB	Environment: Indoor/Outdoor
+* primary channel: 1
+* STA channel width: 20 MHz
+
+##### B: v1.12 + patched ath11k.ko (964), country GB, radio1 channel 149 HE80 (Wed Oct  7 12:43:48 UTC 2026)
+wireless.radio0.country='GB'
+wireless.radio1.channel='149'
+wireless.radio1.htmode='HE80'
+wireless.radio1.country='GB'
+md5 b5cf01cf34322e16b0867ff1ad704798  vermagic: 
+phys after 1s: phy4 phy5 
+1 2 
+a5d364dda62191ba7e0d42da1f7a9231  /sys/module/ath11k/sections/.text
+[51009.812004] remoteproc remoteproc1: Booting fw image ath11k/IPQ5018/hw1.0/q6_fw.mdt, size 1820
+[51009.815475] remoteproc remoteproc0: powering up cd00000.remoteproc
+[51009.824082] remoteproc remoteproc0: Booting fw image ath11k/IPQ5018/hw1.0/q6_fw.mdt, size 1820
+[51009.926280] remoteproc remoteproc0: remote processor cd00000.remoteproc is now up
+[51009.943631] remoteproc remoteproc1: remote processor pd-1 is now up
+[51009.944724] ath11k b00a040.wifi: Multipd architecture - userpd: 2
+[51009.949915] ath11k b00a040.wifi: qcn6122 hw1.0
+[51009.955062] ath11k b00a040.wifi: FW memory mode: 1
+[51009.979310] ath11k c000000.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[51009.979380] ath11k c000000.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
+[51010.037866] remoteproc remoteproc2: powering up pd-2
+[51010.039976] remoteproc remoteproc2: Booting fw image ath11k/IPQ5018/hw1.0/q6_fw.mdt, size 1820
+[51010.052423] remoteproc remoteproc2: remote processor pd-2 is now up
+[51010.133299] ath11k b00a040.wifi: qmi ignore invalid mem req type 10
+[51010.140664] ath11k b00a040.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[51010.140720] ath11k b00a040.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
+[51010.150459] ath11k b00a040.wifi: hybrid register BAR 0x0000000081e00000 size 2097152
+[51010.273702] ath11k c000000.wifi: nss init soc nss if_num 203 userpd_id 0
+[51010.374075] ath11k b00a040.wifi: nss init soc nss if_num 215 userpd_id 1
+[51016.613979] ath11k c000000.wifi phy4-ap0: entered allmulticast mode
+[51016.614976] ath11k c000000.wifi phy4-ap0: entered promiscuous mode
+[51017.325395] ath11k b00a040.wifi phy5-ap0: entered allmulticast mode
+[51017.327702] ath11k b00a040.wifi phy5-ap0: entered promiscuous mode
+[51017.709881] ath11k b00a040.wifi: calibrated noise floor -91 dBm @ 5240 MHz (4 freqs)
+[51022.686587] ath11k c000000.wifi: calibrated noise floor -98 dBm @ 2412 MHz (2 freqs)
+phy#5
+	Interface phy5-ap0
+		channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+		txpower 23.00 dBm
+phy#4
+	Interface phy4-ap0
+		channel 1 (2412 MHz), width: 20 MHz, center1: 2412 MHz
+		txpower 30.00 dBm
+== state ==
+== 5 GHz radio is phy5 ==
+== iw reg get (phy5 section) ==
+phy#5 (self-managed)
+country GB: DFS-ETSI
+	(2402 - 2482 @ 40), (N/A, 20), (N/A)
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(6045 - 6425 @ 160), (N/A, 21), (N/A), NO-OUTDOOR, AUTO-BW
+	(5725 - 5850 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+
+== global ==
+global
+country GB: DFS-ETSI
+	(2400 - 2483 @ 40), (N/A, 20), (N/A)
+== phy5 channels (5.6-5.9 GHz) ==
+* 5660 MHz [132]  | Maximum TX power: 30.0 dBm
+* 5680 MHz [136]  | Maximum TX power: 30.0 dBm
+* 5700 MHz [140]  | Maximum TX power: 30.0 dBm
+* 5720 MHz [144] (disabled)
+* 5745 MHz [149]  | Maximum TX power: 23.0 dBm
+* 5765 MHz [153]  | Maximum TX power: 23.0 dBm
+* 5785 MHz [157]  | Maximum TX power: 23.0 dBm
+* 5805 MHz [161]  | Maximum TX power: 23.0 dBm
+* 5825 MHz [165]  | Maximum TX power: 23.0 dBm
+* 5845 MHz [169] (disabled)
+* 5865 MHz [173] (disabled)
+* 5885 MHz [177] (disabled)
+== iw dev phy5 ==
+	Interface phy5-ap0
+		type AP
+		channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+		txpower 23.00 dBm
+== hostapd since swap ==
+Wed Oct  7 12:43:49 2026 daemon.notice hostapd: phy2-ap0: interface state ENABLED->DISABLED
+Wed Oct  7 12:43:49 2026 daemon.notice hostapd: phy2-ap0: AP-DISABLED
+Wed Oct  7 12:43:49 2026 daemon.notice hostapd: phy2-ap0: CTRL-EVENT-TERMINATING
+Wed Oct  7 12:44:03 2026 daemon.notice hostapd: phy4-ap0: interface state UNINITIALIZED->COUNTRY_UPDATE
+Wed Oct  7 12:44:03 2026 daemon.notice hostapd: phy4-ap0: interface state COUNTRY_UPDATE->ENABLED
+Wed Oct  7 12:44:03 2026 daemon.notice hostapd: phy4-ap0: AP-ENABLED
+Wed Oct  7 12:44:03 2026 daemon.notice hostapd: phy5-ap0: interface state UNINITIALIZED->COUNTRY_UPDATE
+Wed Oct  7 12:44:03 2026 daemon.notice hostapd: phy5-ap0: interface state COUNTRY_UPDATE->HT_SCAN
+Wed Oct  7 12:44:05 2026 daemon.notice hostapd: phy5-ap0: interface state HT_SCAN->ENABLED
+Wed Oct  7 12:44:05 2026 daemon.notice hostapd: phy5-ap0: AP-ENABLED
+== kernel since swap ==
+[51009.979310] ath11k c000000.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[51009.979380] ath11k c000000.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
+[51010.039976] remoteproc remoteproc2: Booting fw image ath11k/IPQ5018/hw1.0/q6_fw.mdt, size 1820
+[51010.133299] ath11k b00a040.wifi: qmi ignore invalid mem req type 10
+[51010.140664] ath11k b00a040.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[51010.140720] ath11k b00a040.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
+[51010.150459] ath11k b00a040.wifi: hybrid register BAR 0x0000000081e00000 size 2097152
+[51010.273702] ath11k c000000.wifi: nss init soc nss if_num 203 userpd_id 0
+[51010.374075] ath11k b00a040.wifi: nss init soc nss if_num 215 userpd_id 1
+[51016.613979] ath11k c000000.wifi phy4-ap0: entered allmulticast mode
+[51016.614976] ath11k c000000.wifi phy4-ap0: entered promiscuous mode
+[51017.325395] ath11k b00a040.wifi phy5-ap0: entered allmulticast mode
+[51017.327702] ath11k b00a040.wifi phy5-ap0: entered promiscuous mode
+[51017.709881] ath11k b00a040.wifi: calibrated noise floor -91 dBm @ 5240 MHz (4 freqs)
+[51022.686587] ath11k c000000.wifi: calibrated noise floor -98 dBm @ 2412 MHz (2 freqs)
+##### B: hal scans (Wed Oct  7 12:44:31 UTC 2026)
+scan rc=0 bss=18
+BSS 50:92:6a:f3:3f:5e(on wlp4s0)
+freq: 2412.0
+signal: -22.00 dBm
+Country: GB	Environment: Indoor/Outdoor
+* primary channel: 1
+* STA channel width: 20 MHz
+BSS 50:92:6a:f3:3f:5f(on wlp4s0)
+freq: 5745.0
+signal: -41.00 dBm
+Country: GB	Environment: Indoor/Outdoor
+* primary channel: 149
+* STA channel width: any
+scan rc=0 bss=20
+BSS 50:92:6a:f3:3f:5e(on wlp4s0)
+freq: 2412.0
+signal: -22.00 dBm
+Country: GB	Environment: Indoor/Outdoor
+* primary channel: 1
+* STA channel width: 20 MHz
+BSS 50:92:6a:f3:3f:5f(on wlp4s0)
+freq: 5745.0
+signal: -40.00 dBm
+Country: GB	Environment: Indoor/Outdoor
+* primary channel: 149
+* STA channel width: any
+scan rc=0 bss=16
+BSS 50:92:6a:f3:3f:5e(on wlp4s0)
+freq: 2412.0
+signal: -22.00 dBm
+Country: GB	Environment: Indoor/Outdoor
+* primary channel: 1
+* STA channel width: 20 MHz
+BSS 50:92:6a:f3:3f:5f(on wlp4s0)
+freq: 5745.0
+signal: -41.00 dBm
+Country: GB	Environment: Indoor/Outdoor
+* primary channel: 149
+* STA channel width: any
+##### B: Country element as received by hal
+Country: GB	Environment: Indoor/Outdoor
+Channels [1 - 13] @ 33 dBm
+Country: GB	Environment: Indoor/Outdoor
+Channels [36 - 64] @ 23 dBm
+Channels [100 - 140] @ 30 dBm
+Channels [149 - 165] @ 23 dBm
+##### B: hal joins benchtest 5 GHz (ch149) (Wed Oct  7 12:45:09 UTC 2026)
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/12)
+Connected to 50:92:6a:f3:3f:5f (on wlp4s0)
+	SSID: benchtest
+	freq: 5745.0
+	signal: -40 dBm
+	rx bitrate: 260.0 MBit/s VHT-MCS 5 80MHz short GI VHT-NSS 1
+[36mwlp4s0           [0m[32mUP             [0m[35m192.168.1.226[0m/24 
+##### B: ping over wlp4s0
+--- 192.168.1.1 ping statistics ---
+30 packets transmitted, 30 received, 0% packet loss, time 5828ms
+rtt min/avg/max/mdev = 3.325/4.061/9.391/1.037 ms
+##### B: bench station dump
+Station <hal-mac> (on phy5-ap0)
+	rx packets:	47
+	tx packets:	39
+	tx failed:	0
+	signal:  	-9 dBm
+	tx bitrate:	6.0 MBit/s
+	rx bitrate:	6.0 MBit/s
+	connected time:	11 seconds
+##### B: 8 MB HTTP download bench -> hal over the ch149 link (Wed Oct  7 12:45:37 UTC 2026)
+-rw-r--r--    1 root     root       8388608 Oct  7 12:45 /tmp/i34/blob.bin
+lrwxrwxrwx    1 root     root            17 Oct  7 12:45 /www/i34.bin -> /tmp/i3
+download 8388608 B in 0.345444s = 24283553 B/s
+download 8388608 B in 0.347805s = 24118710 B/s
+download 8388608 B in 0.397239s = 21117282 B/s
+	signal: -47 dBm
+	rx bitrate: 433.3 MBit/s VHT-MCS 9 80MHz short GI VHT-NSS 1
+	rx packets:	17729
+	tx packets:	1072
+	tx retries:	0
+	tx failed:	0
+	rx bytes:	72744
+	tx bytes:	26319140
+	tx retries:	0
+	tx failed:	0
+	tx bitrate:	433.3 MBit/s VHT-MCS 9 80MHz short GI VHT-NSS 1
+	rx bitrate:	433.3 MBit/s VHT-MCS 9 80MHz short GI VHT-NSS 1
+[51017.327702] ath11k b00a040.wifi phy5-ap0: entered promiscuous mode
+[51017.709881] ath11k b00a040.wifi: calibrated noise floor -91 dBm @ 5240 MHz (4 freqs)
+[51018.462620] br-lan: port 5(phy5-ap0) entered blocking state
+[51018.462683] br-lan: port 5(phy5-ap0) entered forwarding state
+[51022.686587] ath11k c000000.wifi: calibrated noise floor -98 dBm @ 2412 MHz (2 freqs)
+
+##### C: patched module, US ch149 (Wed Oct  7 12:45:53 UTC 2026)
+== iw reg get (phy5 section) ==
+phy#5 (self-managed)
+country US: DFS-FCC
+	(2402 - 2472 @ 40), (6, 30), (N/A)
+	(5170 - 5250 @ 80), (6, 30), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+	(6045 - 7125 @ 160), (N/A, 27), (N/A), NO-OUTDOOR, AUTO-BW
+
+== iw dev phy5 ==
+	Interface phy5-ap0
+		type AP
+		channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+		txpower 28.00 dBm
+Wed Oct  7 12:45:54 2026 daemon.notice hostapd: phy4-ap0: AP-DISABLED
+Wed Oct  7 12:45:55 2026 daemon.notice hostapd: phy5-ap0: AP-DISABLED
+Wed Oct  7 12:45:57 2026 daemon.notice hostapd: phy5-ap0: AP-ENABLED
+Wed Oct  7 12:46:01 2026 daemon.notice hostapd: phy4-ap0: AP-ENABLED
+BSS 50:92:6a:f3:3f:5f(on wlp4s0) -- associated
+freq: 5745.0
+signal: -34.00 dBm
+Channels [36 - 48] @ 30 dBm
+Channels [52 - 64] @ 24 dBm
+Channels [100 - 144] @ 24 dBm
+Channels [149 - 177] @ 30 dBm
+##### C: patched module, BR ch36 (Wed Oct  7 12:46:33 UTC 2026)
+== iw reg get (phy5 section) ==
+phy#5 (self-managed)
+country BR: DFS-FCC
+	(2402 - 2482 @ 40), (N/A, 30), (N/A)
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+
+== iw dev phy5 ==
+	Interface phy5-ap0
+		type AP
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+		txpower 24.00 dBm
+Wed Oct  7 12:46:34 2026 daemon.notice hostapd: phy4-ap0: AP-DISABLED
+Wed Oct  7 12:46:34 2026 daemon.notice hostapd: phy5-ap0: AP-DISABLED
+Wed Oct  7 12:46:37 2026 daemon.notice hostapd: phy5-ap0: AP-ENABLED
+Wed Oct  7 12:46:40 2026 daemon.notice hostapd: phy4-ap0: AP-ENABLED
+BSS 50:92:6a:f3:3f:5f(on wlp4s0) -- associated
+freq: 5180.0
+signal: -39.00 dBm
+Channels [36 - 64] @ 24 dBm
+Channels [100 - 144] @ 24 dBm
+Channels [149 - 177] @ 30 dBm
+##### C: patched module, GB ch36 (Wed Oct  7 12:47:12 UTC 2026)
+== iw reg get (phy5 section) ==
+phy#5 (self-managed)
+country GB: DFS-ETSI
+	(2402 - 2482 @ 40), (N/A, 20), (N/A)
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(6045 - 6425 @ 160), (N/A, 21), (N/A), NO-OUTDOOR, AUTO-BW
+	(5725 - 5850 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+
+== iw dev phy5 ==
+	Interface phy5-ap0
+		type AP
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+		txpower 23.00 dBm
+Wed Oct  7 12:47:13 2026 daemon.notice hostapd: phy4-ap0: AP-DISABLED
+Wed Oct  7 12:47:14 2026 daemon.notice hostapd: phy5-ap0: AP-DISABLED
+Wed Oct  7 12:47:15 2026 daemon.notice hostapd: phy5-ap0: AP-ENABLED
+Wed Oct  7 12:47:20 2026 daemon.notice hostapd: phy4-ap0: AP-ENABLED
+BSS 50:92:6a:f3:3f:5f(on wlp4s0) -- associated
+freq: 5180.0
+signal: -40.00 dBm
+Channels [36 - 64] @ 23 dBm
+Channels [100 - 140] @ 30 dBm
+Channels [149 - 165] @ 23 dBm
+
+##### D: stock v1.12 ath11k.ko back in (Wed Oct  7 12:48:29 UTC 2026)
+md5 128b8b9900e1693f31cb7850ae5ff680  vermagic: 6.12.94 SMP mod_unload aarch64
+phys after 1s: phy6 phy7 
+1 2 
+a5d364dda62191ba7e0d42da1f7a9231  /sys/module/ath11k/sections/.text
+[51291.032894] ath11k b00a040.wifi: Multipd architecture - userpd: 2
+[51291.037565] ath11k b00a040.wifi: qcn6122 hw1.0
+[51291.043341] ath11k b00a040.wifi: FW memory mode: 1
+[51291.067539] ath11k c000000.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[51291.067620] ath11k c000000.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
+[51291.225431] ath11k b00a040.wifi: qmi ignore invalid mem req type 10
+[51291.232793] ath11k b00a040.wifi: chip_id 0x0 chip_family 0x4 board_id 0xff soc_id 0xffffffff
+[51291.232853] ath11k b00a040.wifi: fw_version 0x270206d0 fw_build_timestamp 2022-08-04 13:28 fw_build_id WLAN.HK.2.7.0.1-01744-QCAHKSWPL_SILICONZ-1
+[51291.242775] ath11k b00a040.wifi: hybrid register BAR 0x0000000081e00000 size 2097152
+[51291.363145] ath11k c000000.wifi: nss init soc nss if_num 203 userpd_id 0
+[51291.467533] ath11k b00a040.wifi: nss init soc nss if_num 215 userpd_id 1
+[51298.828971] ath11k b00a040.wifi: calibrated noise floor -91 dBm @ 5240 MHz (4 freqs)
+[51299.683658] ath11k c000000.wifi: calibrated noise floor -98 dBm @ 2412 MHz (2 freqs)
+phy#7
+	Interface phy7-ap0
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+		txpower 23.00 dBm
+phy#6
+	Interface phy6-ap0
+		channel 1 (2412 MHz), width: 20 MHz, center1: 2412 MHz
+		txpower 30.00 dBm
+128b8b9900e1693f31cb7850ae5ff680
+##### D: 2.4 GHz radio (IPQ5018) rules with the stock module
+GB: (2402 - 2482 @ 40), (N/A, 33), (N/A)   txpower now: 30.00 dBm
+DE: (2402 - 2482 @ 40), (N/A, 33), (N/A)   txpower now: 30.00 dBm
+FR: (2402 - 2482 @ 40), (N/A, 33), (N/A)   txpower now: 30.00 dBm
+US: (2402 - 2472 @ 40), (6, 33), (N/A)   txpower now: 30.00 dBm
+BR: (2402 - 2482 @ 40), (N/A, 30), (N/A)   txpower now: 30.00 dBm
+
+##### E: restored (stock module, BR, ch36)
+wireless.radio0.channel='1'
+wireless.radio0.htmode='HE20'
+wireless.radio0.country='BR'
+wireless.radio1.channel='36'
+wireless.radio1.htmode='HE80'
+wireless.radio1.country='BR'
+== iw reg get (phy7 section) ==
+phy#7 (self-managed)
+country BR: DFS-FCC
+	(2402 - 2482 @ 40), (N/A, 30), (N/A)
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+
+== global ==
+	Interface phy7-ap0
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+		txpower 24.00 dBm
+	Interface phy6-ap0
+		channel 1 (2412 MHz), width: 20 MHz, center1: 2412 MHz
+		txpower 30.00 dBm
+128b8b9900e1693f31cb7850ae5ff680
+ath11k                499712  1 ath11k_ahb
+1
+
+##### F: country survey, stock module, wifi down: `iw reg set XX`, phy#1 block
+### GB
+country GB: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(6045 - 6425 @ 160), (N/A, 21), (N/A), NO-OUTDOOR, AUTO-BW
+### IE
+country IE: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### FR
+country FR: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### DE
+country DE: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### NL
+country NL: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### BE
+country BE: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### LU
+country LU: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### ES
+country ES: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### PT
+country PT: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### IT
+country IT: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### AT
+country AT: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### CH
+country CH: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### LI
+country LI: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### NO
+country NO: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### SE
+country SE: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### DK
+country DK: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### FI
+country FI: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### IS
+country IS: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### PL
+country PL: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### CZ
+country CZ: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### SK
+country SK: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### HU
+country HU: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### RO
+country RO: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### BG
+country BG: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### GR
+country GR: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### HR
+country HR: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### SI
+country SI: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### EE
+country EE: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### LV
+country LV: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### LT
+country LT: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### MT
+country MT: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### CY
+country CY: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### TR
+country TR: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5710 @ 40), (N/A, 30), (0 ms), DFS, AUTO-BW
+### RU
+country RU: DFS-UNSET
+	(5170 - 5250 @ 80), (N/A, 30), (N/A), AUTO-BW, NO-HE
+	(5250 - 5330 @ 80), (N/A, 23), (N/A), AUTO-BW, NO-HE
+	(5490 - 5730 @ 160), (N/A, 30), (N/A), AUTO-BW, NO-HE
+	(5735 - 5835 @ 80), (N/A, 30), (N/A), AUTO-BW, NO-HE
+### UA
+country UA: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 30), (N/A), AUTO-BW, NO-HE
+	(5250 - 5330 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW, NO-HE
+	(5490 - 5590 @ 80), (N/A, 24), (0 ms), DFS, AUTO-BW, NO-HE
+	(5590 - 5650 @ 40), (N/A, 24), (600000 ms), DFS, AUTO-BW, NO-HE
+	(5650 - 5710 @ 40), (N/A, 24), (0 ms), DFS, AUTO-BW, NO-HE
+	(5735 - 5835 @ 80), (N/A, 24), (N/A), AUTO-BW, NO-HE
+### IL
+country IL: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5650 - 5730 @ 80), (N/A, 30), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5735 - 5855 @ 80), (N/A, 14), (N/A), NO-OUTDOOR, AUTO-BW
+### AE
+country AE: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5730 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5735 - 5875 @ 80), (N/A, 14), (N/A), AUTO-BW
+### SA
+country SA: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5730 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5735 - 5815 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+### QA
+country QA: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 20), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 20), (600000 ms), DFS, AUTO-BW
+	(5650 - 5730 @ 80), (N/A, 20), (0 ms), DFS, AUTO-BW
+	(5735 - 5875 @ 80), (N/A, 20), (0 ms), DFS, AUTO-BW
+### EG
+country EG: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+### ZA
+country ZA: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### NG
+country NG: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 20), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 20), (0 ms), DFS, AUTO-BW
+	(5735 - 5835 @ 80), (N/A, 20), (N/A), AUTO-BW
+### KE
+country KE: DFS-ETSI
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5590 - 5650 @ 40), (N/A, 30), (600000 ms), DFS, AUTO-BW
+	(5650 - 5730 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5735 - 5875 @ 80), (N/A, 14), (N/A), AUTO-BW
+### IN
+country IN: DFS-FCC
+	(5170 - 5250 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (N/A, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5875 @ 80), (N/A, 30), (N/A), AUTO-BW
+### PK
+country PK: DFS-UNSET
+	(5735 - 5835 @ 80), (N/A, 30), (N/A), AUTO-BW
+### CN
+country CN: DFS-FCC
+	(5170 - 5250 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 30), (0 ms), DFS, AUTO-BW
+	(5735 - 5835 @ 80), (N/A, 33), (N/A), AUTO-BW
+### HK
+country HK: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### TW
+country TW: DFS-FCC
+	(2402 - 2472 @ 40), (6, 30), (N/A)
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### JP
+country JP: DFS-JP
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), NO-OUTDOOR, DFS, AUTO-BW
+	(5490 - 5730 @ 160), (N/A, 23), (0 ms), DFS, AUTO-BW
+### KR
+country KR: DFS-ETSI
+	(5170 - 5250 @ 80), (6, 30), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 30), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 23), (0 ms), DFS, AUTO-BW
+	(5735 - 5835 @ 80), (6, 23), (N/A), AUTO-BW
+	(6045 - 7125 @ 160), (N/A, 17), (N/A), NO-OUTDOOR, AUTO-BW
+### SG
+country SG: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### MY
+country MY: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5650 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5835 @ 80), (6, 24), (N/A), AUTO-BW
+### TH
+country TH: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### ID
+country ID: DFS-UNSET
+	(5735 - 5815 @ 20), (N/A, 20), (N/A), AUTO-BW
+### PH
+country PH: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### VN
+country VN: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 80), (6, 30), (N/A), AUTO-BW
+### AU
+country AU: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5590 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5650 - 5730 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5835 @ 80), (6, 30), (N/A), AUTO-BW
+### NZ
+country NZ: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### US
+country US: DFS-FCC
+	(2402 - 2472 @ 40), (6, 30), (N/A)
+	(5170 - 5250 @ 80), (6, 30), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+	(6045 - 7125 @ 160), (N/A, 27), (N/A), NO-OUTDOOR, AUTO-BW
+### CA
+country CA: DFS-FCC
+	(2402 - 2472 @ 40), (6, 30), (N/A)
+	(5170 - 5250 @ 80), (6, 24), (N/A), NO-OUTDOOR, AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5590 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5650 - 5730 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5835 @ 80), (6, 30), (N/A), AUTO-BW
+### MX
+country MX: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### BR
+country BR: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### AR
+country AR: DFS-UNSET
+	(5170 - 5250 @ 80), (N/A, 17), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5490 - 5590 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5650 - 5730 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5735 - 5835 @ 80), (N/A, 30), (N/A), AUTO-BW
+### CL
+country CL: DFS-UNSET
+	(5170 - 5250 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 24), (N/A), AUTO-BW
+	(5490 - 5730 @ 160), (N/A, 24), (N/A), AUTO-BW
+	(5735 - 5835 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(6045 - 7125 @ 160), (N/A, 27), (N/A), NO-OUTDOOR, AUTO-BW
+### CO
+country CO: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+### PE
+country PE: DFS-FCC
+	(5170 - 5250 @ 80), (6, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (6, 24), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (6, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 160), (6, 30), (N/A), AUTO-BW
+
+##### G: tools/ath11k-fw-regdb.py on WLAN.HK.2.7.0.1-01744
+q6_fw.b10 @ 0x27980: 84 5 GHz rules, 51 domains
+  domain 0x00  -    dfs=UNINIT  
+  domain 0x01  FCC  dfs=FCC     5170-5250/17 5250-5330/23/RADAR 5735-5835/30
+  domain 0x02  FCC  dfs=FCC     5170-5250/23 5250-5330/23/RADAR 5735-5835/30
+  domain 0x03  FCC  dfs=FCC     5170-5250/24 5250-5330/24/RADAR 5490-5730/24/RADAR 5735-5835/30
+  domain 0x04  FCC  dfs=FCC     4940-4990/33
+  domain 0x05  FCC  dfs=UNINIT  5170-5250/30 5735-5835/30
+  domain 0x06  FCC  dfs=FCC     5170-5250/24 5250-5330/24/RADAR 5490-5590/24/NO_IR 5650-5730/24/NO_IR 5735-5835/30
+  domain 0x07  FCC  dfs=FCC     5170-5250/30 5250-5330/24/RADAR 5490-5730/24/RADAR 5735-5835/30
+  domain 0x08  FCC  dfs=FCC     5170-5250/30 5250-5330/24/RADAR 5490-5730/24/RADAR 5735-5835/30 5850-5925/24
+  domain 0x09  FCC  dfs=FCC     5170-5250/24 5250-5330/24/RADAR 5490-5650/24/NO_IR 5735-5835/24
+  domain 0x0a  FCC  dfs=UNINIT  5170-5330/24 5250-5330/24 5490-5730/24 5735-5835/30
+  domain 0x0b  FCC  dfs=UNINIT  5170-5250/30 5250-5330/24 5490-5730/24 5735-5835/30
+  domain 0x0c  FCC  dfs=FCC     5170-5250/24 5250-5330/24/RADAR 5490-5730/24/RADAR 5735-5875/30 5945-7125/21/INDOOR
+  domain 0x0d  FCC  dfs=FCC     5170-5250/30 5250-5330/24/RADAR 5490-5730/24/RADAR 5735-5875/30 5945-7125/27/INDOOR
+  domain 0x0e  ETSI dfs=ETSI    5170-5250/23/INDOOR 5250-5330/23/RADAR|INDOOR 5490-5710/30/NO_IR
+  domain 0x0f  ETSI dfs=ETSI    5170-5250/23 5250-5330/23/RADAR
+  domain 0x10  ETSI dfs=ETSI    5170-5250/18 5250-5330/18/RADAR
+  domain 0x11  ETSI dfs=UNINIT  5170-5250/23 5250-5330/23 5490-5730/30 5735-5835/30
+  domain 0x12  ETSI dfs=ETSI    5170-5250/23 5250-5330/23/RADAR 5490-5710/24/NO_IR 5735-5835/24
+  domain 0x13  ETSI dfs=ETSI    5170-5250/20/INDOOR 5250-5330/20/RADAR|INDOOR 5490-5710/27/NO_IR 5850-5925/30
+  domain 0x14  ETSI dfs=ETSI    5170-5250/20/INDOOR 5250-5330/20/RADAR|INDOOR 5490-5710/27/NO_IR 5735-5875/27/RADAR
+  domain 0x15  ETSI dfs=ETSI    5170-5250/20/INDOOR 5250-5330/20/RADAR|INDOOR 5490-5730/23/NO_IR 5735-5835/23/RADAR
+  domain 0x16  ETSI dfs=ETSI    5170-5250/23/INDOOR 5250-5330/23/RADAR|INDOOR 5490-5730/30/NO_IR 5735-5875/14
+  domain 0x17  ETSI dfs=ETSI    5170-5250/23 5250-5330/23/RADAR 5490-5730/20/NO_IR 5735-5875/20
+  domain 0x18  ETSI dfs=ETSI    5170-5250/23 5250-5330/23/RADAR 5490-5730/30/NO_IR 5735-5815/30/RADAR
+  domain 0x19  ETSI dfs=UNINIT  5170-5250/16 5735-5875/14
+  domain 0x1a  ETSI dfs=UNINIT  5735-5835/30
+  domain 0x1b  ETSI dfs=UNINIT  5735-5815/20
+  domain 0x1c  ETSI dfs=UNINIT  5170-5250/23 5735-5835/23
+  domain 0x1d  ETSI dfs=ETSI    5170-5250/20 5250-5330/20/RADAR 5735-5835/20
+  domain 0x1e  FCC  dfs=ETSI    5250-5330/30/RADAR 5735-5835/30
+  domain 0x1f  MKK  dfs=KR      5170-5250/23 5250-5330/23/RADAR 5490-5730/23/NO_IR 5735-5835/23
+  domain 0x20  ETSI dfs=FCC     5170-5250/23 5250-5330/30/RADAR 5490-5710/30/NO_IR 5735-5815/30
+  domain 0x21  ETSI dfs=ETSI    5170-5250/30 5250-5330/30/RADAR 5490-5710/30/NO_IR 5735-5875/30
+  domain 0x22  ETSI dfs=ETSI    5170-5250/23 5490-5570/30/NO_IR 5735-5775/23
+  domain 0x23  ETSI dfs=ETSI    5170-5250/23 5250-5330/23/RADAR 5490-5670/23/NO_IR
+  domain 0x24  MKK  dfs=CN      5170-5250/23 5250-5330/23/RADAR 5735-5835/33
+  domain 0x25  FCC  dfs=UNINIT  5170-5250/23/INDOOR 5250-5330/23/INDOOR 5735-5835/33
+  domain 0x26  FCC  dfs=UNINIT  5170-5250/17 5250-5330/30 5490-5590/30 5650-5730/30 5735-5835/30
+  domain 0x27  FCC  dfs=UNINIT  5170-5250/23 5250-5330/36 5490-5590/36 5650-5730/36 5735-5835/36
+  domain 0x28  FCC  dfs=ETSI    5170-5250/30 5250-5330/24/RADAR 5490-5730/24/RADAR 5735-5875/30
+  domain 0x29  ETSI dfs=ETSI    5170-5250/23/INDOOR 5250-5330/23/RADAR|INDOOR 5490-5730/30/NO_IR 5735-5835/33
+  domain 0x2a  ETSI dfs=UNINIT  5170-5250/20/INDOOR 5250-5330/20/INDOOR 5735-5835/20
+  domain 0x2b  ETSI dfs=ETSI    5170-5250/23/INDOOR 5250-5330/23/RADAR|INDOOR 5735-5815/23/INDOOR
+  domain 0x2c  MKK  dfs=UNINIT  5170-5250/20
+  domain 0x2d  MKK  dfs=MKK     5170-5250/23/INDOOR 5250-5330/23/RADAR|INDOOR 5490-5710/23/NO_IR
+  domain 0x2e  MKK  dfs=MKK     4910-4990/20 5170-5250/23 5030-5090/20 5250-5330/23/RADAR 5490-5710/23/NO_IR
+  domain 0x2f  MKK  dfs=MKK     5490-5710/26/NO_IR
+  domain 0x30  MKK  dfs=UNDEF   5170-5250/23/INDOOR 5250-5330/23/RADAR|INDOOR 5490-5730/23/NO_IR
+  domain 0x31  NONE dfs=UNINIT  5170-5330/20/NO_IR 5735-5835/20/NO_IR 5945-7125/20/NO_IR
+  domain 0x32  NONE dfs=UNINIT  5170-5330/20/NO_IR 5490-5730/20/INDOOR 5735-5835/20/NO_IR 5945-7125/20/NO_IR
+q6_fw.b17: same tables as above
+q6_fw.b22: same tables as above
