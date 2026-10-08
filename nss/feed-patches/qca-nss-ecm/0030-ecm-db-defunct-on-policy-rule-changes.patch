@@ -1,0 +1,166 @@
+ecm: defunct connections when policy routing rules change
+
+ECM builds a connection's NSS rule from the egress its packets took when it
+was accelerated. It defuncts connections on route add/del (the
+ip_rt/rt6 notifiers in ecm_db.c), on netdev, FDB and neighbour events, and
+on conntrack destroy. It has no notifier for "ip rule" changes, and
+conntrack mark events only reach the netlink classifier, which this build
+does not enable. Policy routing that changes only rules or marks therefore
+never moves an accelerated flow.
+
+This matters with multi-WAN policy routing such as mwan3 (fwmark rules to
+per-WAN tables). On a restart or failover the rules and the table routes are
+removed and re-added. The route events in that window defunct the
+connections, the next packets follow whatever routing is left, and ECM
+re-accelerates them there. If the last step restores the rules, nothing
+defuncts them again: the flows stay on the transient egress. For routed IPv6
+(no NAT, so no masquerade cleanup) that is the other WAN with the wrong
+source prefix, and the flow stalls until some unrelated event defuncts it.
+
+Reproduced on an RD03v2 with an mwan3-like setup: PPPoE plus a second WAN,
+fwmark rules to two tables, NAT66 on the second WAN, and the far end
+dropping wrong-prefix sources. The test removes the rules and the table
+defaults for 3 s, then restores the routes and finally the rules. Routed
+IPv6 upload over PPPoE then stayed at 0 Mbit/s for the rest of a 40 s run,
+while the far end kept dropping the flow's retransmits on the wrong WAN.
+With the routes restored last, or with the IPv6 front end stopped, the flows
+recovered as soon as routing was complete; "echo 1 > ecm_db/defunct_all"
+also cleared it.
+
+Register a FIB notifier and, on FIB_EVENT_RULE_ADD/DEL, defunct all
+connections of the rule's family, the same action the route notifiers take.
+FIB notifiers are called from an atomic notifier chain, so the event only
+sets a per-family bit and schedules a work item; a burst of rule changes
+collapses into a few defunct passes, and a change during a pass schedules
+another one after it. The registration dump of the existing rules schedules
+one pass at load, while the database is still empty. ECM logs one line when
+the notifier is registered; if registration fails it logs a warning and
+carries on as before.
+
+--- a/ecm_db/ecm_db.c
++++ b/ecm_db/ecm_db.c
+@@ -33,6 +33,8 @@
+ #include <asm/uaccess.h>	/* for put_user */
+ #include <net/ipv6.h>
+ #include <net/ip6_route.h>
++#include <net/fib_notifier.h>
++#include <linux/workqueue.h>
+ #include <linux/inet.h>
+ #include <linux/in.h>
+ #include <linux/udp.h>
+@@ -427,6 +429,85 @@
+ #endif
+ 
+ /*
++ * Policy routing rule changes.
++ *
++ * An accelerated connection keeps the egress its packets took when it was
++ * accelerated, and the route notifiers above defunct connections only when a
++ * route changes. Adding or deleting an "ip rule" (multi-WAN managers such as
++ * mwan3 do this when they start, stop or fail over) can move a flow to
++ * another interface with no route event at all, so the connection stays on
++ * its old path. A connection re-accelerated while the rules were being
++ * rewritten keeps the path it had in that window, possibly a WAN that drops
++ * its source prefix, until something else defuncts it.
++ *
++ * Defunct all connections of the rule's family whenever a rule is added or
++ * deleted, so their next packets are routed with the current rules. FIB
++ * notifiers run in atomic context, so the defunct runs from a work item, and
++ * a burst of rule changes collapses into a few passes.
++ */
++#define ECM_DB_FIB_RULE_PENDING_IPV4 0
++#define ECM_DB_FIB_RULE_PENDING_IPV6 1
++static unsigned long ecm_db_fib_rule_pending;
++static bool ecm_db_fib_rule_registered;
++
++/*
++ * ecm_db_fib_rule_work_fn()
++ *	Defunct the connections of each family that had a rule change.
++ */
++static void ecm_db_fib_rule_work_fn(struct work_struct *work)
++{
++	if (test_and_clear_bit(ECM_DB_FIB_RULE_PENDING_IPV4, &ecm_db_fib_rule_pending)) {
++		DEBUG_TRACE("policy rule change v4, defunct all IPv4 connections\n");
++		ecm_front_end_ipv4_stop(1);
++		ecm_db_connection_defunct_ip_version(4);
++		ecm_front_end_ipv4_stop(0);
++	}
++#ifdef ECM_IPV6_ENABLE
++	if (test_and_clear_bit(ECM_DB_FIB_RULE_PENDING_IPV6, &ecm_db_fib_rule_pending)) {
++		DEBUG_TRACE("policy rule change v6, defunct all IPv6 connections\n");
++		ecm_front_end_ipv6_stop(1);
++		ecm_db_connection_defunct_ip_version(6);
++		ecm_front_end_ipv6_stop(0);
++	}
++#endif
++}
++
++static DECLARE_WORK(ecm_db_fib_rule_work, ecm_db_fib_rule_work_fn);
++
++/*
++ * ecm_db_fib_rule_event()
++ *	FIB notifier callback: note which family had a rule added or deleted.
++ */
++static int ecm_db_fib_rule_event(struct notifier_block *nb, unsigned long event, void *ptr)
++{
++	struct fib_notifier_info *info = ptr;
++
++	if ((event != FIB_EVENT_RULE_ADD) && (event != FIB_EVENT_RULE_DEL)) {
++		return NOTIFY_DONE;
++	}
++
++	switch (info->family) {
++	case AF_INET:
++		set_bit(ECM_DB_FIB_RULE_PENDING_IPV4, &ecm_db_fib_rule_pending);
++		break;
++#ifdef ECM_IPV6_ENABLE
++	case AF_INET6:
++		set_bit(ECM_DB_FIB_RULE_PENDING_IPV6, &ecm_db_fib_rule_pending);
++		break;
++#endif
++	default:
++		return NOTIFY_DONE;
++	}
++
++	schedule_work(&ecm_db_fib_rule_work);
++	return NOTIFY_DONE;
++}
++
++static struct notifier_block ecm_db_fib_rule_nb = {
++	.notifier_call = ecm_db_fib_rule_event,
++};
++
++/*
+  * ecm_db_init()
+  */
+ int ecm_db_init(struct dentry *dentry)
+@@ -502,6 +583,17 @@
+ #ifdef ECM_IPV6_ENABLE
+ 	rt6_register_notifier(&ecm_db_ip6route_table_update_nb);
+ #endif
++
++	/*
++	 * register for policy routing rule changes. Without it ECM still works,
++	 * it just does not re-route accelerated flows when only a rule changes.
++	 */
++	if (register_fib_notifier(&init_net, &ecm_db_fib_rule_nb, NULL, NULL)) {
++		printk(KERN_WARNING "ECM: failed to register the FIB rule notifier, policy rule changes will not defunct connections\n");
++	} else {
++		ecm_db_fib_rule_registered = true;
++		printk(KERN_INFO "ECM: policy routing rule changes defunct accelerated connections\n");
++	}
+ 	return 0;
+ 
+ init_cleanup_4:
+@@ -536,6 +628,11 @@
+ #ifdef ECM_IPV6_ENABLE
+ 	rt6_unregister_notifier(&ecm_db_ip6route_table_update_nb);
+ #endif
++	if (ecm_db_fib_rule_registered) {
++		unregister_fib_notifier(&init_net, &ecm_db_fib_rule_nb);
++		ecm_db_fib_rule_registered = false;
++	}
++	cancel_work_sync(&ecm_db_fib_rule_work);
+ 	ecm_db_connection_defunct_all();
+ 
+ 	/*
