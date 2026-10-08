@@ -453,6 +453,10 @@ NSS Wi-Fi opt-in integration (see docs/nss-wifi-validation.md):
   nss/feed-patches/qca-nss-ecm/0028-ecm-nss-dsa-bridged-tags.patch tags bridged ported flows.
   nss/feed-patches/qca-nss-ecm/0029-ecm-nss-vlan-aware-bridge-wifi.patch fixes rule VLAN tags for
     Wi-Fi flows over a VLAN-aware DSA bridge (bridged and routed).
+  nss/feed-patches/qca-nss-ecm/0030-ecm-db-defunct-on-policy-rule-changes.patch defuncts the
+    accelerated connections of a family when an "ip rule" is added or deleted, so multi-WAN
+    policy routing (mwan3) cannot leave flows pinned to the wrong WAN (#36; see
+    docs/ecm-policy-routing.md).
   The switch-conduit RX-pause patch is not part of this integration:
     files/package/kernel/qca-nss-dp/patches/0002-rd03v2-switch-rx-pause.patch applies to
     every build (ethtool -A eth1 rx on|off at runtime).
