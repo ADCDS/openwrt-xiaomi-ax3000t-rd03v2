@@ -35,7 +35,7 @@ from elsewhere (Amnezia's releases, other OpenWrt builds) will not install.
 The OpenWrt packaging comes from the community
 [awg-openwrt](https://github.com/Slava-Shchipunov/awg-openwrt) feed, pinned in
 [`feeds.lock`](../feeds.lock). Amnezia's own `amneziawg-openwrt` stopped at
-AWG 1.0 in 2024.
+AWG 1.0 in 2024. The exact source commits are under [Sources](#sources).
 
 They depend on modules and tools that are also in the archive:
 `kmod-crypto-lib-chacha20poly1305`, `kmod-crypto-lib-curve25519` and their
@@ -44,6 +44,39 @@ dependencies, `kmod-udptunnel4`/`6` (the `-nss` image already has these two),
 
 v1.13 has the same kernels and package signing keys as v1.14, so the v1.14
 packages also install on v1.13.
+
+## Sources
+
+Every AmneziaWG binary in a release comes from these exact upstream commits:
+
+| Package | Upstream | Tag | Commit |
+|---|---|---|---|
+| `kmod-amneziawg` 3.1.20260906 | [amneziawg-linux-kernel-module](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module) | `v3.1.20260906` | [`4569c4c67f3a57414969260cafbbd04694fbaae0`](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module/commit/4569c4c67f3a57414969260cafbbd04694fbaae0) |
+| `amneziawg-tools` 3.1.20260812 | [amneziawg-tools](https://github.com/amnezia-vpn/amneziawg-tools) | `v3.1.20260812` | [`ee0f0a9aa34ff0a0da4b3433b9512781cfe02843`](https://github.com/amnezia-vpn/amneziawg-tools/commit/ee0f0a9aa34ff0a0da4b3433b9512781cfe02843) |
+| packaging: Makefiles, netifd protocol, LuCI page | [awg-openwrt](https://github.com/Slava-Shchipunov/awg-openwrt) | | [`03b62269e2edc168504f057cffaafda11b25ed92`](https://github.com/Slava-Shchipunov/awg-openwrt/commit/03b62269e2edc168504f057cffaafda11b25ed92) |
+
+OpenWrt's source tarballs of those two commits, which the build compiles:
+
+```
+25a91c7492221291ec8d4ad5672f20c2ed49ec11f0e61478280bf0a37c89b37f  kmod-amneziawg-3.1.20260906.tar.zst
+0c27841a3b4860c7fd085cd627c5b0f9c25653afdaef1e73fd3e350fb3445dab  amneziawg-tools-3.1.20260812.tar.zst
+```
+
+The packaging commit is pinned in [`feeds.lock`](../feeds.lock). The packaging
+itself names Amnezia's sources by tag only, and tags can move, so
+[`build.sh`](../build.sh) rewrites the two Makefiles to build from the commits
+above and sets these tarball hashes as `PKG_MIRROR_HASH`. A download that does
+not match fails the build. The build also stops if the feed's version no longer
+matches the pin, so a feed update cannot ship old source under a new version.
+
+v1.14 was built before the pin was added, from the tags. Its downloaded source
+tarballs were checked afterwards: they have the hashes above, and they are
+file-for-file identical to `git archive` of the two commits.
+
+To check the source yourself, clone the repository and check out the commit,
+or build the port (`KMODS=1 ./build.sh`, see
+[`docs/development.md`](development.md)) and compare
+`openwrt/dl/*amneziawg*.tar.zst` with the hashes above.
 
 ## Installing
 
