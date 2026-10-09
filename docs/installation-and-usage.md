@@ -266,6 +266,7 @@ pins the boot-success flags). Don't re-flash over it.
 | **One** `UBI init error 22` on the first boot after flashing | Benign: A/B loader retries and attaches → let it boot |
 | `UBI init error 22` on **every** boot | In-place/torn flash → RAM-boot initramfs + `sysupgrade -n` (steps 3–4) |
 | NSS build: every port `failed to open conduit`, LAN+WAN dead | NSS fw/driver version mismatch → see [`docs/nss-offload.md`](nss-offload.md) Troubleshooting |
+| `apk add kmod-…` or LuCI's Software page: `(no such package)` | The online feeds have no modules for this port's kernel → install from the release's kmod tarball: [Installing kernel modules](#installing-kernel-modules) |
 
 For repeated flashing, [`tools/uboot-catch.sh`](../tools/uboot-catch.sh) does step 3's catch + TFTP + boot hands-free — a serial-triggered `reboot` is enough; no reset button, no typing into the 5-second window.
 
@@ -283,8 +284,54 @@ the `kmod-*` packages on `downloads.openwrt.org` will not install here. Every re
 ships a `…-kmods.tar.gz` containing every module built against **that release's** image, already
 signed with the key that image trusts.
 
-The tarball holds well over a thousand packages, so extract and serve it from your PC rather than
-copying the whole thing onto a 256 MB router:
+**`apk add kmod-…` fails with `no such package`** when you use the built-in feeds or LuCI's
+Software page:
+
+```
+ERROR: unable to select packages:
+  kmod-nft-queue (no such package):
+    required by: world[kmod-nft-queue]
+```
+
+That does not mean the module is missing. The built-in feeds are OpenWrt's snapshot feeds,
+which never carry modules for this port's kernel. Install the module from the release's kmod
+tarball with one of the two methods below.
+
+#### A few modules, straight from the router
+
+The router can pull single packages out of the tarball by itself. Each `wget` streams the whole
+archive (about 67 MB, a few seconds on a fast connection) but keeps only the files you name, so
+it fits in the router's RAM. Set `TAG` to the release your image came from:
+
+```sh
+TAG=v1.13
+A=openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2-kmods.tar.gz   # …-kmods-nss.tar.gz on an -nss image
+U=https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/releases/download/$TAG/$A
+
+# 1. Find the exact file names, and check that the archive's kernel is the router's.
+apk list --installed kernel
+wget -q -O - "$U" | tar -tzf - | grep -E '^\./kernel-|queue'
+
+# 2. Extract only those files and install them.
+cd /tmp
+wget -q -O - "$U" | tar -xzf - ./kmod-nfnetlink-queue-6.12.94-r1.apk ./kmod-nft-queue-6.12.94-r1.apk
+apk add --repositories-file /dev/null ./kmod-nfnetlink-queue-6.12.94-r1.apk ./kmod-nft-queue-6.12.94-r1.apk
+rm ./kmod-*.apk
+```
+
+- The `kernel-6.12.94~…-r1` line from the archive must match the router's `kernel-…` package
+  exactly. If it doesn't, you have the wrong release or the wrong flavour.
+- The `.apk` files are signed with the image's key, so they install without
+  `--allow-untrusted`. A module whose package sets it to autoload (most do) is loaded right away
+  and on every boot.
+- Most modules depend only on modules already in the image. When one doesn't, `apk` names the
+  missing one, for example
+  `kmod-scsi-core (no such package): required by: kmod-usb-storage-6.12.94-r1[kmod-scsi-core]`.
+  Extract that file too and add it to the same `apk add`.
+
+#### Many modules, or a router without internet
+
+Extract the tarball on your PC and serve it, so `apk` resolves dependencies by itself:
 
 ```sh
 tar -xzf openwrt-…-v2-kmods.tar.gz -C kmods && cd kmods
@@ -296,23 +343,23 @@ apk add --repositories-file /dev/null \
         --repository http://<pc-ip>:8000/packages.adb kmod-usb-storage
 ```
 
-Three things that will otherwise bite:
+**Point `--repository` at `packages.adb`, not the directory.** Given a bare directory, `apk`
+looks for an Alpine-style `aarch64_cortex-a53/` subdirectory that does not exist here.
 
-- **Point `--repository` at `packages.adb`, not the directory.** Given a bare directory, `apk`
-  looks for an Alpine-style `aarch64_cortex-a53/` subdirectory that does not exist here.
+#### Either way
+
 - **Install onto the NAND system, not the RAM initramfs.** `apk` refuses a package that would be
   lost on the next reboot, and the initramfs root is tmpfs.
 - **Use the tarball matching your exact image** — same release *and* same flavour. The NSS build
   has a different kernel, so its modules are rejected on the default image and vice versa. That is
-  the vermagic check doing its job, not a broken download. Cross-release also fails.
+  the vermagic check doing its job, not a broken download.
+- `--repositories-file /dev/null` suppresses the built-in OpenWrt snapshot feeds, which are built
+  from a different commit than this pinned tree.
 
-`--repositories-file /dev/null` suppresses the built-in OpenWrt snapshot feeds, which are built
-from a different commit than this pinned tree.
-
-> **The Software page in LuCI points at those snapshot feeds**, not at this build. Modules
-> installed from there are correctly rejected on the vermagic check; userspace packages may
-> install but can drag in a mismatched library. Treat remote installs as unsupported and use the
-> kmod tarball.
+> **The Software page in LuCI points at those snapshot feeds**, not at this build. Modules are
+> either not found there (`no such package`) or rejected on the vermagic check; userspace packages
+> may install but can drag in a mismatched library. Treat remote installs as unsupported and use
+> the kmod tarball.
 
 ### Controlling the LEDs
 
