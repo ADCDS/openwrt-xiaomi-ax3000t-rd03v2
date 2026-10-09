@@ -136,6 +136,9 @@ check_tree() {
 		[ "$n" -ge 2 ] && ok "$label ath11k modules ($n)" || bad "$label ath11k modules: $n (want >=2)"
 		[ -f "$d/x/lib/modules"/*/ath11k_ahb.ko ] && ok "$label ath11k_ahb.ko" || bad "$label ath11k_ahb.ko MISSING"
 		chk "$label ecm autoload" "$(ls "$d/x/etc/modules.d/" 2>/dev/null | grep -c ecm)" "1"
+		# ECM 0030 (issue #36): the notifier logs this string when it registers
+		chk "$label ecm.ko has the policy-rule notifier (0030)" \
+			"$(find "$d/x/lib/modules" -name ecm.ko -exec grep -a -o 'policy routing rule changes defunct accelerated connections' {} + 2>/dev/null | wc -l)" "1"
 		chk "$label rc.local NSS writes" "$(grep -cE '^[[:space:]]*echo .*> */proc/sys/dev/nss' "$d/x/etc/rc.local" 2>/dev/null | head -1)" "3"
 	else
 		chk "$label ecm autoload (want none)" "$(ls "$d/x/etc/modules.d/" 2>/dev/null | grep -c ecm)" "0"
