@@ -62,17 +62,21 @@ git checkout 25ee12629edcc38feffbd06255dd47840cd7af7e
 # Overlay the device-support files (path-preserving)
 cp -a ../files/. .
 
+# Every sed below that edits OpenWrt or a feed is checked with anchor: sed
+# exits 0 when it matches nothing, so an unanchored substitution whose anchor
+# has drifted silently produces a build that is missing what the sed was
+# supposed to add. That is how the NSS dtsi include was lost once. Both
+# flavours use it (the AmneziaWG source pins below), so it is defined here.
+anchor() {  # anchor <count-expected> <pattern> <file>
+	# || true: grep -c exits 1 on zero matches, and under set -e that would end
+	# the script here, before the error below says which anchor drifted
+	local n; n=$(grep -c -- "$2" "$3" || true)
+	[ "$n" = "$1" ] || { echo "ERROR: anchor '$2' matched $n times (want $1) in $3" >&2; exit 1; }
+}
+
 # ---- optional: QCA NSS hardware offload (NSS=1) ----
 if [ "$WITH_NSS" = "1" ]; then
 	echo ">>> NSS=1: layering QCA NSS hardware offload (experimental)"
-	# Defined up here because the DEVICE_PACKAGES sed below needs it too: sed
-	# exits 0 when it matches nothing, so an unanchored substitution whose
-	# anchor has drifted silently produces a build that is missing what the sed
-	# was supposed to add. That is how the NSS dtsi include was lost once.
-	anchor() {  # anchor <count-expected> <pattern> <file>
-		local n; n=$(grep -c -- "$2" "$3")
-		[ "$n" = "$1" ] || { echo "ERROR: anchor '$2' matched $n times (want $1) in $3" >&2; exit 1; }
-	}
 	# extra feeds: qosmio nss-packages (qca-nss-drv/ecm/...) + sqm-scripts-nss
 	cat ../nss/feeds.conf.append >> feeds.conf.default
 	# NSS Wi-Fi builds (which include 802.11s mesh offload) pin the moving
@@ -222,6 +226,32 @@ grep -E '^src-' feeds.conf.default | sed 's/^/    /'
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
+
+# AmneziaWG sources, pinned to commits. The amneziawg feed (pinned itself in
+# feeds.lock) names Amnezia's kernel module and tools by git tag only, with no
+# hash, so a moved tag would silently change what gets compiled and shipped.
+# Build them from the commits those tags pointed to for v1.14 instead: git's
+# content addressing makes that exact on every download path. PKG_MIRROR_HASH
+# is the hash of OpenWrt's source tarball of that commit, and a download that
+# does not match it fails the build. The version check catches a feed bump
+# that would otherwise label old source with a new version. To move to a new
+# upstream release, update these lines and the Sources table in
+# docs/amneziawg.md together.
+awg_pin() {  # awg_pin <package> <PKG_VERSION> <commit> <source tarball sha256>
+	local mk=feeds/amneziawg/$1/Makefile
+	anchor 1 "^PKG_VERSION:=$2\$" "$mk"
+	anchor 1 '^PKG_SOURCE_VERSION:=v$(PKG_VERSION)$' "$mk"
+	if grep -q '^PKG_MIRROR_HASH:=' "$mk"; then
+		echo "ERROR: $mk already sets PKG_MIRROR_HASH; review the pin" >&2; exit 1
+	fi
+	sed -i "s#^PKG_SOURCE_VERSION:=v\$(PKG_VERSION)\$#PKG_SOURCE_VERSION:=$3\nPKG_MIRROR_HASH:=$4#" "$mk"
+	anchor 1 "^PKG_SOURCE_VERSION:=$3\$" "$mk"
+	anchor 1 "^PKG_MIRROR_HASH:=$4\$" "$mk"
+}
+awg_pin kmod-amneziawg  3.1.20260906 4569c4c67f3a57414969260cafbbd04694fbaae0 \
+	25a91c7492221291ec8d4ad5672f20c2ed49ec11f0e61478280bf0a37c89b37f
+awg_pin amneziawg-tools 3.1.20260812 ee0f0a9aa34ff0a0da4b3433b9512781cfe02843 \
+	0c27841a3b4860c7fd085cd627c5b0f9c25653afdaef1e73fd3e350fb3445dab
 
 # The IPQ5018 NSS core-boot fix: mainline 6.12 leaves the UBI32 core's GCC
 # resets de-asserted, so the stock driver's core_reset is a no-op and the core
