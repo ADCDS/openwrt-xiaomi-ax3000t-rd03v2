@@ -72,6 +72,7 @@ for details, measurements and known limitations.
 - [Troubleshooting](docs/installation-and-usage.md#quick-troubleshooting)
 - [LED configuration](docs/installation-and-usage.md#controlling-the-leds)
 - [NFC tag](docs/nfc.md)
+- [AmneziaWG](docs/amneziawg.md) (obfuscated WireGuard, from the release package archive)
 - [File and patch manifest](MANIFEST.txt)
 
 ## Credits and contributing
