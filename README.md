@@ -34,7 +34,7 @@ NSS hardware offload for wired routing and Wi-Fi; see the
 | `…-initramfs-factory.ubi` | Initramfs wrapped in UBI for installation without UART; follow the installation guide |
 | `…-initramfs-uImage.itb` | RAM boot through UART + TFTP |
 | `…-squashfs-sysupgrade.bin` | Permanent firmware, flashed from the RAM initramfs |
-| `…-kmods.tar.gz` | Kernel modules matching the exact release and build variant |
+| `…-kmods.tar.gz` | Every kernel module (`kmod-*`) for that exact release and build variant, as `.apk` packages |
 
 See [all image variants and release notes](docs/installation-and-usage.md#release-images)
 for the optional `-wifi` installers, NAND support and NSS upgrade notes.
@@ -46,8 +46,11 @@ for the optional `-wifi` installers, NAND support and NSS upgrade notes.
 - **Every flash, including updates, must run from the RAM initramfs.** In-place
   `sysupgrade` from the installed NAND system is unsupported and can leave the
   router unbootable. Follow [updating without UART](docs/no-uart-reflash.md).
-- Use kernel modules from the **same release and variant** as your image.
-  See [installing modules](docs/installation-and-usage.md#installing-kernel-modules).
+- **Kernel modules (`kmod-*`) come from the release's `…-kmods.tar.gz`**, from
+  the same release and variant as your image. `apk add` and LuCI's Software
+  page can't find them (`no such package`), because the online feeds have no
+  modules for this port's kernel. The router can install one straight from
+  the release; see [installing modules](docs/installation-and-usage.md#installing-kernel-modules).
 - For recovery, see [returning to stock](docs/installation-and-usage.md#recovering--going-back-to-stock).
   Stock recovery images must be at least as new as the last stock firmware the router ran.
 - The first boot clears the NFC tag, which still holds the Wi-Fi name and
