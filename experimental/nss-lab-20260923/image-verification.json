@@ -1,0 +1,172 @@
+{
+  "checks": [
+    "MEDIUM enabled",
+    "LOW not enabled",
+    "NSS Wi-Fi enabled",
+    "SMALLBUFFERS enabled",
+    "native v1.10 IPQ5018 BDF",
+    "etc/init.d/nss-wifi-pool content",
+    "etc/init.d/nss-wifi-pool executable",
+    "usr/sbin/rd03v2-confirm-boot content",
+    "usr/sbin/rd03v2-confirm-boot executable",
+    "usr/sbin/rd03v2-nss-irq content",
+    "usr/sbin/rd03v2-nss-irq executable",
+    "early pool service enabled",
+    "rc.local uses boot helper",
+    "no baked private network config",
+    "NSS ath11k autoload",
+    "ath11k.ko present",
+    "ath11k_ahb.ko present",
+    "mac80211.ko present",
+    "qca-nss-drv.ko present",
+    "refill diagnostics in module",
+    "ecm.ko present",
+    "zram.ko present",
+    "zsmalloc.ko present",
+    "module vermagic consistency",
+    "one generated mac80211 source",
+    "host RX candidate in generated source",
+    "host RX loop retains NSS guard",
+    "zram package selected",
+    "zram module selected",
+    "zram service enabled",
+    "bounded zram init shipped",
+    "logical default 32 MiB",
+    "allocator default 16 MiB",
+    "limit set before swapon",
+    "one generated NSS driver",
+    "memory safety batch changes excluded",
+    "DMA occupancy patch excluded",
+    "peer CREATE patch excluded",
+    "ECM compact experiment excluded",
+    "DMA pool remains 2M",
+    "one BusyBox configuration",
+    "BusyBox MKSWAP",
+    "BusyBox SWAPON",
+    "BusyBox SWAPOFF",
+    "BusyBox FEATURE_SWAPON_DISCARD",
+    "BusyBox FEATURE_SWAPON_PRI",
+    "one generated ath11k NSS header",
+    "uint8 scheme failure sentinel",
+    "fallback guard retained",
+    "ath11k rebuilt after patched header",
+    "one packaged ath11k",
+    "image ath11k matches stripped package",
+    "ath11k differs from zram-only baseline",
+    "compiled 256M profile",
+    "512M profile disabled",
+    "compiled resource assertions 4/64/68/2048/1816",
+    "RX layout gates shared with 256M",
+    "mode 2 enforced for host profile",
+    "both DT radios mode 2",
+    "ath11k differs from scheme-only build",
+    "IPQ5018 compact RX ops complete",
+    "etc/init.d/nss-pool-boost embedded",
+    "etc/init.d/nss-pool-boost executable",
+    "usr/sbin/nss-pool-boost-monitor embedded",
+    "usr/sbin/nss-pool-boost-monitor executable",
+    "boost enabled",
+    "ath11k changed for accounting",
+    "clock policy embedded",
+    "clock policy executable",
+    "clock policy enabled",
+    "ath11k NSS12.5 ABI flag",
+    "single generated kernel config",
+    "KALLSYMS_UNCOMPRESSED disabled in kernel",
+    "MPTCP disabled in kernel",
+    "IPV6_SEG6_LWTUNNEL disabled in kernel",
+    "CGROUP_RDMA disabled in kernel",
+    "EXT4_FS disabled in kernel",
+    "USB disabled in kernel",
+    "802.11s Mesh retained",
+    "ext4.ko omitted",
+    "jbd2.ko omitted",
+    "mbcache.ko omitted",
+    "dwc3.ko omitted",
+    "dwc3-qcom.ko omitted",
+    "xhci-hcd.ko omitted",
+    "pptp.ko omitted",
+    "l2tp_core.ko omitted",
+    "ip_gre.ko omitted",
+    "pppoe.ko retained",
+    "ppp_generic.ko retained",
+    "qca-nss-pppoe.ko retained",
+    "single NSS compiler record",
+    "NSS GRE omitted",
+    "NSS L2TP omitted",
+    "NSS PPTP omitted",
+    "NSS12.5 ABI retained",
+    "kernel optimized for size",
+    "maximum CPU count 2",
+    "actual kernel compiler -Os",
+    "NSS compiler -Os",
+    "MEMCG disabled",
+    "GCC kernel",
+    "kernel LTO disabled",
+    "package LTO disabled",
+    "cgroups retained",
+    "swap retained",
+    "compiler not Clang",
+    "kernel source no LLVM bitcode",
+    "build exit zero",
+    "no hidden build failures",
+    "RAM rootfs really embedded",
+    "RAM Image distinct from installed kernel",
+    "failure propagation enabled",
+    "only MEMCG and kernel dependencies changed",
+    "userspace unchanged bin/busybox",
+    "userspace unchanged usr/sbin/dropbear",
+    "userspace unchanged usr/sbin/dnsmasq",
+    "userspace unchanged sbin/netifd",
+    "userspace unchanged sbin/procd",
+    "userspace unchanged usr/sbin/uhttpd",
+    "no Clang patches"
+  ],
+  "passed": 121,
+  "image_sha256": "f6855e4b7d4b798aad583b3afbda8d22dc1766fb5c4584df9d663afb11c2eba6",
+  "modules": {
+    "ath11k.ko": {
+      "sha256": "d8d43bee0434ac6179f675f51aa6a26db1fc50e1b57db43ecdd3d47178a42d97",
+      "vermagic": [
+        "vermagic=6.12.94 SMP mod_unload aarch64"
+      ]
+    },
+    "ath11k_ahb.ko": {
+      "sha256": "ea2c2b6d665a439b05ceff80f0d6aefd8d753a09bb8d2f3ac7d95d3fdb3943a9",
+      "vermagic": [
+        "vermagic=6.12.94 SMP mod_unload aarch64"
+      ]
+    },
+    "mac80211.ko": {
+      "sha256": "8ba639defa627c5ec323123609036dc27525a9f60a478f6491de7e505c0257ee",
+      "vermagic": [
+        "vermagic=6.12.94 SMP mod_unload aarch64"
+      ]
+    },
+    "qca-nss-drv.ko": {
+      "sha256": "504b20e37c73e5483db7b8dc3ebefaabe951828616137032866b3fcfd1298a0d",
+      "vermagic": [
+        "vermagic=6.12.94 SMP mod_unload aarch64"
+      ]
+    },
+    "ecm.ko": {
+      "sha256": "4a17673606dcc8c924b2dff6baa912d25938f0cd372295fc4977cadef44fb1a5",
+      "vermagic": [
+        "vermagic=6.12.94 SMP mod_unload aarch64"
+      ]
+    },
+    "zram.ko": {
+      "sha256": "f42174a542e09711695f507ee2ab5c3d5ae52da0419b33adfc77df410be7593d",
+      "vermagic": [
+        "vermagic=6.12.94 SMP mod_unload aarch64"
+      ]
+    },
+    "zsmalloc.ko": {
+      "sha256": "bb9bea6848d22eaa40b7a1b6ad860130fde8034c49a58b7fc8e91ca0c2219342",
+      "vermagic": [
+        "vermagic=6.12.94 SMP mod_unload aarch64"
+      ]
+    }
+  },
+  "scope": "Offline image/source inspection, not boot or RF validation; MEDIUM startup path needs hardware readback."
+}

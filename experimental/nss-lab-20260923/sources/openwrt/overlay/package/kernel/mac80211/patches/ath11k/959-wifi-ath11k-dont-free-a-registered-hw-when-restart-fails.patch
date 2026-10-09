@@ -1,0 +1,52 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: don't free a registered hw when restart fails
+
+On crash recovery, ath11k_core_reconfigure_on_crash() goes through
+ath11k_core_qmi_firmware_ready() and ath11k_core_start() again. There
+ath11k_mac_allocate() returns early because ATH11K_FLAG_REGISTERED is set,
+but a later failure (e.g. "failed to receive wmi unified ready event: -110"
+when the firmware crashes again during recovery) unwinds through
+err_mac_destroy, and ath11k_mac_destroy() frees the ieee80211_hw that is
+still registered with mac80211 and sets pdev->ar to NULL.
+
+The next restart then dereferences the NULL ar in ath11k_dp_rx_pdev_free()
+from ath11k_dp_pdev_free(), and anything that still reaches the freed hw
+faults as well. On an IPQ5018/QCN6122 AX3000T a second root-PD crash during
+recovery (under heavy host TX) followed by a user-PD restart oopsed with:
+
+  pc : ath11k_dp_rx_pdev_free+0x34/0x148 [ath11k]
+  lr : ath11k_dp_pdev_free+0x4c/0x84 [ath11k]
+  Workqueue: ath11k_wq ath11k_core_restart [ath11k]
+
+and with panic_on_oops the box rebooted.
+
+Only destroy the mac when it is not registered, in both unwinds that
+reach ath11k_mac_destroy() from a restart: ath11k_core_start() and
+ath11k_core_qmi_firmware_ready().
+
+--- a/drivers/net/wireless/ath/ath11k/core.c
++++ b/drivers/net/wireless/ath/ath11k/core.c
+@@ -2267,7 +2267,12 @@
+ err_reo_cleanup:
+ 	ath11k_dp_pdev_reo_cleanup(ab);
+ err_mac_destroy:
+-	ath11k_mac_destroy(ab);
++	/* During crash recovery the hw is still registered with mac80211
++	 * (ath11k_mac_allocate() returned early): freeing it here leaves
++	 * mac80211 with a dangling hw and pdev->ar NULL for the next restart.
++	 */
++	if (!test_bit(ATH11K_FLAG_REGISTERED, &ab->dev_flags))
++		ath11k_mac_destroy(ab);
+ err_hif_stop:
+ 	ath11k_hif_stop(ab);
+ err_wmi_detach:
+@@ -2351,7 +2356,8 @@
+ 
+ err_core_stop:
+ 	ath11k_core_stop(ab);
+-	ath11k_mac_destroy(ab);
++	if (!test_bit(ATH11K_FLAG_REGISTERED, &ab->dev_flags))
++		ath11k_mac_destroy(ab);
+ err_dp_free:
+ 	ath11k_dp_free(ab);
+ 	mutex_unlock(&ab->core_lock);

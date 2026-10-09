@@ -1,0 +1,23 @@
+#!/bin/sh
+# Batch only changed boot flags. Never write an unreadable environment.
+umask 077
+fail() { logger -t rd03v2-boot "$1"; exit 1; }
+[ -e /etc/fw_env.config ] || exit 0
+current=$(fw_printenv 2>/dev/null) || fail 'Cannot read boot environment; no flags written'
+pending=$(mktemp /tmp/rd03v2-boot.XXXXXX) || fail 'Cannot allocate boot flag batch'
+trap 'rm -f "$pending"' EXIT
+trap 'exit 1' HUP INT TERM
+for item in flag_boot_success=1 flag_last_success=1 flag_try_sys1_failed=8 flag_try_sys2_failed=8; do
+	key=${item%%=*}
+	value=${item#*=}
+	if ! printf '%s\n' "$current" | grep -qx "$item"; then
+		printf '%s %s\n' "$key" "$value" >> "$pending"
+	fi
+done
+[ -s "$pending" ] || exit 0
+fw_setenv -s "$pending" || fail 'Boot flag batch write failed'
+current=$(fw_printenv 2>/dev/null) || fail 'Cannot read back boot flag batch'
+while read -r key value; do
+	printf '%s\n' "$current" | grep -qx "$key=$value" || fail "Boot flag readback failed: $key"
+done < "$pending"
+logger -t rd03v2-boot 'Boot flags updated and verified'

@@ -1,0 +1,49 @@
+nss_dp_main: do not fail probe when fixed-link registration fails
+
+swphy cannot emulate PHY speeds above 1000 Mbit/s, so
+of_phy_register_fixed_link() fails for fixed-link nodes declaring
+2500 Mbit/s ("swphy: unknown speed"). This is the case for the
+IPQ5018 GMAC1 uplink to the Airoha AN8855 switch (HSGMII, DSA CPU
+port with a 2500 Mbit/s fixed-link, e.g. Xiaomi AX3000T RD03v2).
+
+The failure is harmless in that setup: the MAC/uniphy speed is
+forced by SSDK via qcom,port_phyinfo forced-speed, and nss_dp_open()
+forces the carrier on when no PHY is attached. Tolerate the failure
+instead of aborting probe, and only use the node as phy_node when a
+fixed-link PHY was actually registered.
+
+Based on work by csharper2005 (openwrt an8855h branch).
+
+--- a/nss_dp_main.c
++++ b/nss_dp_main.c
+@@ -678,17 +678,23 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
+ 	if(!dp_priv->phy_node) {
+ 		if(of_phy_is_fixed_link(np)) {
+ 			int ret = of_phy_register_fixed_link(np);
+-			if(ret < 0) {
++
++			/*
++			 * swphy cannot emulate link speeds above 1000
++			 * Mbit/s ("swphy: unknown speed"), e.g. for the
++			 * 2500 Mbit/s fixed-link of an Airoha AN8855
++			 * HSGMII CPU port. This is not fatal: the MAC
++			 * speed is forced by SSDK (forced-speed) and
++			 * nss_dp_open() forces the carrier on when no
++			 * PHY is attached.
++			 */
++			if(ret < 0)
+ 				pr_err("%s: fail to register fixed-link: %d\n", np->name, ret);
+-				return -EFAULT;
+-			}
++			else
++				dp_priv->phy_node = of_node_get(np);
+ 		}
+-		dp_priv->phy_node = of_node_get(np);
+ 	}
+ 
+-	if(!dp_priv->phy_node)
+-		pr_err("%s: no phy-handle or fixed-link found\n", np->name);
+-
+ 	if (of_property_read_u32(np, "qcom,mactype", &hal_pdata->mactype)) {
+ 		pr_err("%s: error reading mactype\n", np->name);
+ 		return -EFAULT;

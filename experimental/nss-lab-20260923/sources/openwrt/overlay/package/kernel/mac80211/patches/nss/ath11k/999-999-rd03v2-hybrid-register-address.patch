@@ -1,0 +1,46 @@
+From: ds2bkp <ds2bkp@users.noreply.github.com>
+Subject: [PATCH] ath11k: preserve hybrid BAR and translate NSS ring registers
+
+QCN6122 bypasses ordinary AHB resource mapping. Its QMI mapping initializes
+mem but leaves mem_pa zero. NSS consumes mem_pa as its device/register base.
+Also provide the same static-window translation used by CPU read32/write32
+through the HIF callback consumed by ath11k_nss_fill_srng_info. QCN6122 uses
+the first DP window, unlike the third window used by the PCI implementation.
+Peer join and local TCP transfer were validated on RD03v2; see the hardware report.
+
+--- a/drivers/net/wireless/ath/ath11k/qmi.c
++++ b/drivers/net/wireless/ath/ath11k/qmi.c
+@@ -2203,6 +2203,9 @@
+ 	}
+ 
+ 	ab->mem = bar_addr_va;
++	ab->mem_pa = resp.bar_addr;
++	ath11k_info(ab, "hybrid register BAR %pad size %u\n",
++		    &ab->mem_pa, resp.bar_size);
+ 	ab->mem_len = resp.bar_size;
+ 
+ 	if (!ab->hw_params.ce_remap)
+--- a/drivers/net/wireless/ath/ath11k/ahb.c
++++ b/drivers/net/wireless/ath/ath11k/ahb.c
+@@ -165,6 +165,13 @@
+ 	return window_start;
+ }
+ 
++static u32 ath11k_ahb_get_window_offset_qcn6122(struct ath11k_base *ab,
++					     u32 offset)
++{
++	return ath11k_ahb_get_window_start_wcn6750(ab, offset) +
++		(offset & ATH11K_PCI_WINDOW_RANGE_MASK);
++}
++
+ static void
+ ath11k_ahb_window_write32_wcn6750(struct ath11k_base *ab, u32 offset, u32 value)
+ {
+@@ -852,6 +859,7 @@
+ 	.ce_irq_enable = ath11k_pci_enable_ce_irqs_except_wake_irq,
+ 	.ce_irq_disable = ath11k_pci_disable_ce_irqs_except_wake_irq,
+ 	.config_static_window = ath11k_ahb_config_static_window_qcn6122,
++	.get_window_offset = ath11k_ahb_get_window_offset_qcn6122,
+ };
+ 
+ static int ath11k_core_get_rproc(struct ath11k_base *ab)

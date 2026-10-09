@@ -1,0 +1,72 @@
+#!/bin/sh
+# Opt-in experiment. No boot-time invocation; never changes RPS or data IRQs.
+set -eu
+state=/var/run/rd03v2-nss-irq.state
+lock=/var/run/rd03v2-nss-irq.lock
+fail() { echo "$*" >&2; exit 1; }
+[ "$(cat /tmp/sysinfo/board_name)" = xiaomi,mi-router-ax3000t-v2 ] || fail 'Unsupported board'
+mkdir "$lock" 2>/dev/null || fail 'Another IRQ operation is running'
+trap 'rm -f "$state.tmp"; rmdir "$lock"' EXIT
+trap 'exit 1' HUP INT TERM
+umask 077
+find_irq() {
+	awk -v name="$1" '$NF == name {gsub(":", "", $1); print $1}' /proc/interrupts
+}
+normalize() { tr -d ',\n' | sed 's/^0*//;s/^$/0/'; }
+restore() {
+	[ -f "$state" ] || return 0
+	failed=0
+	while read -r irq name mask; do
+		current=$(find_irq "$name")
+		if [ "$current" != "$irq" ]; then
+			echo "IRQ identity changed: $name" >&2; failed=1; continue
+		fi
+		if ! echo "$mask" > "/proc/irq/$irq/smp_affinity"; then
+			failed=1; continue
+		fi
+		got=$(normalize < "/proc/irq/$irq/smp_affinity")
+		want=$(printf '%s' "$mask" | normalize)
+		[ "$got" = "$want" ] || failed=1
+	done < "$state"
+	[ "$failed" = 0 ] || return 1
+	rm -f "$state"
+}
+case "${1:-status}" in
+status)
+	for name in nss_empty_buf_sos nss_empty_buf_queue; do
+		irq=$(find_irq "$name")
+		case "$irq" in ''|*[!0-9]*) fail "Missing or ambiguous IRQ: $name";; esac
+		printf '%s irq=%s requested=' "$name" "$irq"
+		cat "/proc/irq/$irq/smp_affinity"
+		printf 'effective='; cat "/proc/irq/$irq/effective_affinity_list"
+	done
+	;;
+restore) restore || fail 'Restore incomplete; state retained for retry';;
+apply)
+	[ "$(cat /sys/devices/system/cpu/online)" = 0-1 ] || fail 'Both CPUs must be online'
+	[ ! -e "$state" ] || fail 'Saved state exists; restore before applying again'
+	: > "$state.tmp"
+	for name in nss_empty_buf_sos nss_empty_buf_queue; do
+		irq=$(find_irq "$name")
+		case "$irq" in ''|*[!0-9]*) fail "Missing or ambiguous IRQ: $name";; esac
+		mask=$(cat "/proc/irq/$irq/smp_affinity")
+		case "$mask" in ''|*[!0-9a-fA-F,]*) fail 'Invalid affinity';; esac
+		[ -r "/proc/irq/$irq/effective_affinity_list" ] || fail 'No effective affinity readback'
+		printf '%s %s %s\n' "$irq" "$name" "$mask" >> "$state.tmp"
+	done
+	mv "$state.tmp" "$state"
+	# Interruptions after the first mutation also restore the saved baseline.
+	trap 'restore || echo "Restore incomplete; state retained" >&2; exit 1' HUP INT TERM
+	failed=0
+	while read -r irq name mask; do
+		if ! echo 2 > "/proc/irq/$irq/smp_affinity"; then failed=1; break; fi
+		if [ "$(cat /proc/irq/$irq/effective_affinity_list)" != 1 ]; then failed=1; break; fi
+	done < "$state"
+	if [ "$failed" != 0 ]; then
+		restore || fail 'Apply and rollback failed; state retained'
+		fail 'Apply failed; original affinities restored'
+	fi
+	echo 'SOS and empty-return IRQs moved to CPU1; run restore to undo'
+	;;
+*) fail 'Usage: rd03v2-nss-irq [status|apply|restore]';;
+esac

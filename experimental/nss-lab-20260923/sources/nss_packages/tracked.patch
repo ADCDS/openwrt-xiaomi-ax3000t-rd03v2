@@ -1,0 +1,154 @@
+diff --git a/qca-nss-clients/Makefile b/qca-nss-clients/Makefile
+index f172027..f273397 100644
+--- a/qca-nss-clients/Makefile
++++ b/qca-nss-clients/Makefile
+@@ -181,7 +181,6 @@ define KernelPackage/qca-nss-drv-pppoe
+   DEPENDS:=@(TARGET_qualcommax||TARGET_ipq806x) \
+ 	   +kmod-qca-nss-drv \
+ 	   +@NSS_DRV_PPPOE_ENABLE \
+-	   +kmod-bonding \
+ 	   +kmod-ppp \
+ 	   +kmod-pppoe
+   FILES:=$(PKG_BUILD_DIR)/pppoe/qca-nss-pppoe.ko
+diff --git a/qca-nss-drv/Makefile b/qca-nss-drv/Makefile
+index 29a87fd..4268ce0 100644
+--- a/qca-nss-drv/Makefile
++++ b/qca-nss-drv/Makefile
+@@ -70,6 +70,8 @@ QSDK_VERSION:=11.4.0.5
+ PKG_VERSION:=$(QSDK_VERSION).$(subst -,.,$(PKG_SOURCE_DATE))~$(PKG_SOURCE_VERSION)
+ endif
+ 
++PKG_CONFIG_DEPENDS += CONFIG_NSS_MEM_PROFILE_HIGH CONFIG_NSS_MEM_PROFILE_MEDIUM CONFIG_NSS_MEM_PROFILE_LOW
++
+ include $(INCLUDE_DIR)/kernel.mk
+ include $(INCLUDE_DIR)/package.mk
+ 
+diff --git a/qca-nss-ecm/Makefile b/qca-nss-ecm/Makefile
+index d7cba36..1826b0b 100644
+--- a/qca-nss-ecm/Makefile
++++ b/qca-nss-ecm/Makefile
+@@ -32,14 +32,8 @@ define KernelPackage/qca-nss-ecm
+ 		   +@(TARGET_qualcommax||TARGET_ipq806x):NSS_DRV_VIRT_IF_ENABLE \
+ 		   +@((TARGET_qualcommax||TARGET_ipq806x)&&PACKAGE_kmod-pppoe):NSS_DRV_PPPOE_ENABLE \
+ 		   +PACKAGE_kmod-qca-nss-drv:kmod-qca-nss-drv \
+-		   +PACKAGE_kmod-qca-mcs:kmod-qca-mcs \
+-		   +PACKAGE_kmod-bonding:kmod-bonding \
+-		   +PACKAGE_kmod-vxlan:kmod-vxlan \
+-		   +PACKAGE_kmod-nat46:kmod-nat46 \
+ 		   +PACKAGE_kmod-ppp:kmod-ppp \
+-		   +PACKAGE_kmod-pppoe:kmod-pppoe \
+-		   +PACKAGE_kmod-pppoe:kmod-pptp \
+-		   +PACKAGE_kmod-pppoe:kmod-pppol2tp
++		   +PACKAGE_kmod-pppoe:kmod-pppoe
+   TITLE:=QCA NSS Enhanced Connection Manager (ECM)
+   FILES:=$(PKG_BUILD_DIR)/ecm.ko
+   KCONFIG:=CONFIG_NF_CONNTRACK_DSCPREMARK_EXT=y
+@@ -79,7 +73,7 @@ ECM_MAKE_OPTS+= ECM_NON_PORTED_SUPPORT_ENABLE=y \
+ 			   ECM_CLASSIFIER_PCC_ENABLE=n
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-qca-nss-drv),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-qca-nss-drv)),)
+ ECM_MAKE_OPTS+=ECM_FRONT_END_NSS_ENABLE=y
+ endif
+ 
+@@ -93,43 +87,43 @@ ifneq ($(CONFIG_BRIDGE_VLAN_FILTERING),)
+ ECM_MAKE_OPTS+=ECM_BRIDGE_VLAN_FILTERING_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-qca-nss-drv-igs),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-qca-nss-drv-igs)),)
+ ECM_MAKE_OPTS+=ECM_CLASSIFIER_DSCP_IGS=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-qca-nss-drv-ovpn-link),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-qca-nss-drv-ovpn-link)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_OVPN_ENABLE=y
+ endif
+ 
+-ifeq ($(CONFIG_PACKAGE_kmod-vxlan),y)
++ifeq ($(filter y,$(CONFIG_PACKAGE_kmod-vxlan)),y)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_VXLAN_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-qca-ovsmgr),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-qca-ovsmgr)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_OVS_BRIDGE_ENABLE=y \
+ 			   ECM_CLASSIFIER_OVS_ENABLE=y
+ EXTRA_CFLAGS+= -I$(STAGING_DIR)/usr/include/qca-ovsmgr
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-macvlan),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-macvlan)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_MACVLAN_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-qca-mcs),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-qca-mcs)),)
+ ECM_MAKE_OPTS+=ECM_MULTICAST_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-nat46),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-nat46)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_MAP_T_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-ipsec),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-ipsec)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_IPSEC_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-pppoe),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-pppoe)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_PPPOE_ENABLE=y \
+-			   ECM_INTERFACE_PPTP_ENABLE=y \
++			   ECM_INTERFACE_PPTP_ENABLE=n \
+ 			   ECM_INTERFACE_PPP_ENABLE=y
+ else
+ ECM_MAKE_OPTS+=ECM_INTERFACE_PPPOE_ENABLE=n \
+@@ -137,34 +131,38 @@ ECM_MAKE_OPTS+=ECM_INTERFACE_PPPOE_ENABLE=n \
+ 			   ECM_INTERFACE_PPP_ENABLE=n
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-pppol2tp),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-pptp)),)
++ECM_MAKE_OPTS+=ECM_INTERFACE_PPTP_ENABLE=y
++endif
++
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-pppol2tp)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_L2TPV2_ENABLE=y
+ else
+ ECM_MAKE_OPTS+=ECM_INTERFACE_L2TPV2_ENABLE=n
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-gre)$(CONFIG_PACKAGE_kmod-gre6),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-gre))$(filter y,$(CONFIG_PACKAGE_kmod-gre6)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_GRE_TAP_ENABLE=y \
+ 			   ECM_INTERFACE_GRE_TUN_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-sit),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-sit)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_SIT_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-ip6-tunnel),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-ip6-tunnel)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_TUNIPIP6_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-qca-nss-drv-mscs),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-qca-nss-drv-mscs)),)
+ ECM_MAKE_OPTS+=ECM_CLASSIFIER_MSCS_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-bonding),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-bonding)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_BOND_ENABLE=y
+ endif
+ 
+-ifneq ($(CONFIG_PACKAGE_kmod-qmi_wwan_q),)
++ifneq ($(filter y,$(CONFIG_PACKAGE_kmod-qmi_wwan_q)),)
+ ECM_MAKE_OPTS+=ECM_INTERFACE_RAWIP_ENABLE=y
+ endif
+ 

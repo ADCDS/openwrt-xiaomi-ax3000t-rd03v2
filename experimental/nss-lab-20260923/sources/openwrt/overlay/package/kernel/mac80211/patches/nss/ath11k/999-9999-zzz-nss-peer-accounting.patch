@@ -1,0 +1,304 @@
+--- a/drivers/net/wireless/ath/ath11k/nss.c
++++ b/drivers/net/wireless/ath/ath11k/nss.c
+@@ -144,14 +144,20 @@
+ 	struct ath11k_peer *peer;
+ 	struct nss_wifili_peer_ctrl_stats *pstats = NULL;
+ 	int i, j, i2;
+-	u64 tx_packets, tx_bytes, tx_dropped = 0;
++	u64 tx_packets, tx_bytes, tx_dropped;
+ 	u64 rx_packets, rx_bytes, rx_dropped;
+ 
+-	if (!ab->nss.stats_enabled)
++	if (!READ_ONCE(ab->nss.stats_enabled)) {
++		atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_DISABLED_BATCHES]);
+ 		return;
++	}
+ 
+ 	for (i = 0; i < stats->npeers; i++) {
+ 		pstats = &stats->wpcs[i];
++		peer = NULL;
++		tx_dropped = 0;
++		atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_ENTRIES]);
++		atomic64_set(&ab->nss.stats_diag[ATH11K_NSS_DIAG_LAST_PEER], pstats->peer_id);
+ 
+ 		rcu_read_lock();
+ 		spin_lock_bh(&ab->base_lock);
+@@ -164,6 +170,10 @@
+ 				break;
+ 		}
+ 		if (!peer || !peer->sta) {
++			if (!peer)
++				atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_LOOKUP_MISS]);
++			else
++				atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_MISSING_STA]);
+ 			ath11k_dbg(ab, ATH11K_DBG_NSS, "nss wifili: unable to find peer %d\n", pstats->peer_id);
+ 			spin_unlock_bh(&ab->base_lock);
+ 			rcu_read_unlock();
+@@ -171,9 +181,10 @@
+ 		}
+ 
+ 		if (!peer->nss.nss_stats) {
++			atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_MISSING_STATS]);
+ 			spin_unlock_bh(&ab->base_lock);
+ 			rcu_read_unlock();
+-			return;
++			continue;
+ 		}
+ 
+ 		if (pstats->tx.tx_success_cnt)
+@@ -216,6 +227,9 @@
+ 		else
+ 			ATH11K_NSS_TXRX_NETDEV_STATS(rx, peer->vif, rx_bytes, rx_packets);
+ 
++		atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_APPLIED]);
++		atomic64_add(tx_bytes, &ab->nss.stats_diag[ATH11K_NSS_DIAG_TX_BYTES]);
++		atomic64_add(rx_bytes, &ab->nss.stats_diag[ATH11K_NSS_DIAG_RX_BYTES]);
+ 		spin_unlock_bh(&ab->base_lock);
+ 		rcu_read_unlock();
+ 	}
+@@ -326,6 +340,9 @@
+ 	if (!ab)
+ 		return;
+ 
++	if (msg_type < ARRAY_SIZE(ab->nss.stats_events))
++		atomic64_inc(&ab->nss.stats_events[msg_type]);
++
+ 	ath11k_dbg(ab, ATH11K_DBG_NSS, "nss wifili event received %d response %d error %d\n",
+ 		   msg_type, response, error);
+ 
+@@ -377,12 +394,23 @@
+ 		}
+ 		ath11k_nss_wifili_stats_sync(ab, &msg->msg.wlsoc_stats);
+ 		break;
++	case NSS_WIFILI_STATS_CFG_MSG:
++		if (response == NSS_CMN_RESPONSE_ACK)
++			atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_CFG_ACK]);
++		else {
++			atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_CFG_NACK]);
++			atomic64_set(&ab->nss.stats_diag[ATH11K_NSS_DIAG_CFG_LAST_ERROR], error);
++		}
++		break;
+ 	case NSS_WIFILI_PEER_STATS_MSG:
++		atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_PEER_EVENTS]);
+ 		peer_stats = &msg->msg.peer_stats.stats;
+ 		if (response == NSS_CMN_RESPONSE_EMSG) {
++			atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_PEER_ERRORS]);
+ 			ath11k_warn(ab, "peer stats msg failed with error = %u\n", error);
+ 			break;
+ 		}
++		atomic64_set(&ab->nss.stats_diag[ATH11K_NSS_DIAG_LAST_NPEERS], peer_stats->npeers);
+ 		ath11k_nss_get_peer_stats(ab, peer_stats);
+ 		break;
+ 	case NSS_WIFILI_TID_REOQ_SETUP_MSG:
+@@ -4637,6 +4665,12 @@
+ 			 msg_cb, NULL);
+ 
+ 	status = nss_wifili_tx_msg(ar->nss.ctx, wlmsg);
++	if (nss_msg == NSS_WIFILI_STATS_CFG_MSG) {
++		if (status == NSS_TX_SUCCESS)
++			atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_CFG_SENT]);
++		else
++			atomic64_inc(&ab->nss.stats_diag[ATH11K_NSS_DIAG_CFG_SEND_FAIL]);
++	}
+ 	if (status != NSS_TX_SUCCESS) {
+ 		ath11k_warn(ab, "nss stats cfg %d msg tx failure: %d\n",
+ 			    nss_msg, status);
+@@ -4657,15 +4691,15 @@
+ 			     ATH11K_NSS_STATS_DISABLE);
+ }
+ 
+-void ath11k_nss_peer_stats_disable(struct ath11k *ar)
+-{
+-	ath11k_nss_stats_cfg(ar, NSS_WIFILI_STATS_CFG_MSG,
++int ath11k_nss_peer_stats_disable(struct ath11k *ar)
++{
++	return ath11k_nss_stats_cfg(ar, NSS_WIFILI_STATS_CFG_MSG,
+ 			     ATH11K_NSS_STATS_DISABLE);
+ }
+ 
+-void ath11k_nss_peer_stats_enable(struct ath11k *ar)
+-{
+-	ath11k_nss_stats_cfg(ar, NSS_WIFILI_STATS_CFG_MSG,
++int ath11k_nss_peer_stats_enable(struct ath11k *ar)
++{
++	return ath11k_nss_stats_cfg(ar, NSS_WIFILI_STATS_CFG_MSG,
+ 			     ATH11K_NSS_STATS_ENABLE);
+ }
+ 
+--- a/drivers/net/wireless/ath/ath11k/nss.h
++++ b/drivers/net/wireless/ath/ath11k/nss.h
+@@ -6,6 +6,7 @@
+ #ifndef ATH11K_NSS_H
+ #define ATH11K_NSS_H
+ 
++#include <linux/atomic.h>
+ #include "net/cfg80211.h"
+ #ifdef CPTCFG_ATH11K_NSS_SUPPORT
+ #include <nss_api_if.h>
+@@ -252,7 +253,31 @@
+ };
+ 
+ /* Structure to hold the soc related info for nss offload support */
++/* Per-SOC control-message accounting; no per-packet logging. */
++enum ath11k_nss_stats_diag {
++	ATH11K_NSS_DIAG_PEER_EVENTS,
++	ATH11K_NSS_DIAG_PEER_ERRORS,
++	ATH11K_NSS_DIAG_ENTRIES,
++	ATH11K_NSS_DIAG_DISABLED_BATCHES,
++	ATH11K_NSS_DIAG_LOOKUP_MISS,
++	ATH11K_NSS_DIAG_MISSING_STA,
++	ATH11K_NSS_DIAG_MISSING_STATS,
++	ATH11K_NSS_DIAG_APPLIED,
++	ATH11K_NSS_DIAG_TX_BYTES,
++	ATH11K_NSS_DIAG_RX_BYTES,
++	ATH11K_NSS_DIAG_CFG_SENT,
++	ATH11K_NSS_DIAG_CFG_SEND_FAIL,
++	ATH11K_NSS_DIAG_CFG_ACK,
++	ATH11K_NSS_DIAG_CFG_NACK,
++	ATH11K_NSS_DIAG_CFG_LAST_ERROR,
++	ATH11K_NSS_DIAG_LAST_PEER,
++	ATH11K_NSS_DIAG_LAST_NPEERS,
++	ATH11K_NSS_DIAG_MAX,
++};
++
+ struct ath11k_soc_nss {
++	atomic64_t stats_diag[ATH11K_NSS_DIAG_MAX];
++	atomic64_t stats_events[64];
+ 	/* turn on/off nss offload support in ath11k */
+ 	bool enabled;
+ 	/* turn on/off nss stats support in ath11k */
+@@ -289,8 +314,8 @@
+ int ath11k_nss_peer_delete(struct ath11k *ar, u32 vdev_id, const u8 *addr);
+ int ath11k_nss_set_peer_authorize(struct ath11k *ar, u16 peer_id);
+ int ath11k_nss_peer_create(struct ath11k *ar, struct ath11k_peer *peer);
+-void ath11k_nss_peer_stats_enable(struct ath11k *ar);
+-void ath11k_nss_peer_stats_disable(struct ath11k *ar);
++int ath11k_nss_peer_stats_enable(struct ath11k *ar);
++int ath11k_nss_peer_stats_disable(struct ath11k *ar);
+ int ath11k_nss_add_wds_peer(struct ath11k *ar, struct ath11k_peer *peer,
+ 			    u8 *dest_mac, enum ath11k_ast_entry_type type);
+ int ath11k_nss_update_wds_peer(struct ath11k *ar, struct ath11k_peer *peer,
+@@ -481,14 +506,14 @@
+ 	return 0;
+ }
+ 
+-static inline void ath11k_nss_peer_stats_enable(struct ath11k *ar)
+-{
+-	return;
+-}
+-
+-static inline void ath11k_nss_peer_stats_disable(struct ath11k *ar)
+-{
+-	return;
++static inline int ath11k_nss_peer_stats_enable(struct ath11k *ar)
++{
++	return -EOPNOTSUPP;
++}
++
++static inline int ath11k_nss_peer_stats_disable(struct ath11k *ar)
++{
++	return -EOPNOTSUPP;
+ }
+ 
+ static inline int ath11k_nss_set_peer_sec_type(struct ath11k *ar, struct ath11k_peer *peer,
+--- a/drivers/net/wireless/ath/ath11k/debugfs.c
++++ b/drivers/net/wireless/ath/ath11k/debugfs.c
+@@ -1699,14 +1699,15 @@
+ 		goto out;
+ 	}
+ 
+-	if (nss_stats > 0) {
+-		ab->nss.stats_enabled = 1;
+-		ath11k_nss_peer_stats_enable(ar);
+-	} else {
+-		ab->nss.stats_enabled = 0;
+-		ath11k_nss_peer_stats_disable(ar);
+-	}
+-
++	if (nss_stats > 0)
++		ret = ath11k_nss_peer_stats_enable(ar);
++	else
++		ret = ath11k_nss_peer_stats_disable(ar);
++	if (ret)
++		goto out;
++
++	/* Host intent only: firmware ACK is reported by nss_stats_diag. */
++	WRITE_ONCE(ab->nss.stats_enabled, !!nss_stats);
+ 	ret = count;
+ out:
+ 	mutex_unlock(&ar->conf_mutex);
+@@ -1737,6 +1738,58 @@
+ 	.open = simple_open,
+ 	.owner = THIS_MODULE,
+ 	.llseek = default_llseek,
++};
++
++static ssize_t ath11k_read_nss_stats_diag(struct file *file,
++                                         char __user *ubuf,
++                                         size_t count, loff_t *ppos)
++{
++    struct ath11k *ar = file->private_data;
++    struct ath11k_base *ab = ar->ab;
++    static const char * const names[] = {
++        "peer_events",
++        "peer_errors",
++        "entries",
++        "disabled_batches",
++        "lookup_miss",
++        "missing_sta",
++        "missing_stats",
++        "applied",
++        "tx_bytes",
++        "rx_bytes",
++        "cfg_sent",
++        "cfg_send_fail",
++        "cfg_ack",
++        "cfg_nack",
++        "cfg_last_error",
++        "last_peer",
++        "last_npeers",
++    };
++    char *buf;
++    int i, len = 0;
++    ssize_t ret;
++
++    buf = kzalloc(4096, GFP_KERNEL);
++    if (!buf)
++        return -ENOMEM;
++    for (i = 0; i < ARRAY_SIZE(names); i++)
++        len += scnprintf(buf + len, 4096 - len, "%s %lld\n", names[i],
++                         (long long)atomic64_read(&ab->nss.stats_diag[i]));
++    for (i = 0; i < ARRAY_SIZE(ab->nss.stats_events); i++) {
++        long long value = atomic64_read(&ab->nss.stats_events[i]);
++        if (value)
++            len += scnprintf(buf + len, 4096 - len, "event_%d %lld\n", i, value);
++    }
++    ret = simple_read_from_buffer(ubuf, count, ppos, buf, len);
++    kfree(buf);
++    return ret;
++}
++
++static const struct file_operations fops_nss_stats_diag = {
++    .read = ath11k_read_nss_stats_diag,
++    .open = simple_open,
++    .owner = THIS_MODULE,
++    .llseek = default_llseek,
+ };
+ 
+ int ath11k_debugfs_register(struct ath11k *ar)
+@@ -1807,10 +1860,14 @@
+ 				    &fops_reset_ps_duration);
+ 	}
+ 
+-	if (ab->nss.enabled)
++	if (ab->nss.enabled) {
+ 		debugfs_create_file("nss_peer_stats_config", 0644,
+ 				    ar->debug.debugfs_pdev, ar,
+ 				    &fops_nss_stats);
++		debugfs_create_file("nss_stats_diag", 0400,
++				    ar->debug.debugfs_pdev, ar,
++				    &fops_nss_stats_diag);
++	}
+ 
+ 	return 0;
+ }
