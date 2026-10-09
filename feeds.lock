@@ -1,5 +1,6 @@
 # Package feed revisions that build.sh pins every feed to: one line per feed
-# in OpenWrt's feeds.conf.default and nss/feeds.conf.append, "<name> <commit>".
+# in OpenWrt's feeds.conf.default and nss/feeds.conf.append, plus the
+# amneziawg feed build.sh adds, "<name> <commit>".
 #
 # OpenWrt itself is pinned in build.sh (25ee126), but its feeds follow branch
 # heads, so two builds of one commit could pull different packages. On
@@ -17,3 +18,4 @@ routing         4b9891b9136259f93294a424507ed24c5e8c1cbd
 telephony       5d68d53c160a325ea9d03fce393e051573bcc736
 video           605d768782e13fc8b8fa16e719d4a2742dafbd45
 sqm_scripts_nss 4b4ed8639229be5e70cf94b73cdf7dbc09e66d5d
+amneziawg       03b62269e2edc168504f057cffaafda11b25ed92

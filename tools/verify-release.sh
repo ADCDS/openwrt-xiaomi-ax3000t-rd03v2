@@ -86,6 +86,10 @@ check_tree() {
 	# NFC tag (docs/nfc.md) — both flavours: the tool, its service, the
 	# i2ctransfer it drives, the clear-by-default config, and the I2C
 	# controller it needs actually enabled in the DTB that went into the image
+	# AmneziaWG (#39) ships in the package archive only: no files in the image,
+	# and no distfeeds line for an amneziawg feed downloads.openwrt.org lacks
+	chk "$label no AmneziaWG files in the image" "$(find "$d/x" -iname '*amnezia*' | wc -l)" "0"
+	chk "$label distfeeds has no amneziawg feed" "$(grep -c amneziawg "$d/x/etc/apk/repositories.d/distfeeds.list" 2>/dev/null)" "0"
 	[ -x "$d/x/usr/sbin/nfc" ] && ok "$label nfc tool" || bad "$label /usr/sbin/nfc MISSING"
 	sh -n "$d/x/usr/sbin/nfc" 2>/dev/null && ok "$label nfc syntax" || bad "$label nfc syntax error"
 	[ -L "$d/x/etc/rc.d/S99nfc" ] && ok "$label S99nfc symlink" || bad "$label S99nfc symlink MISSING"
@@ -160,8 +164,15 @@ for pair in "::$PLAIN_TREE" "-nss::$NSS_TREE"; do
 	tb=$(ls "$REL"/*kmods"$sfx".tar.gz 2>/dev/null | head -1)
 	[ -n "$tb" ] || { bad "kmods$sfx tarball missing"; continue; }
 	vm=$(grep -hoE 'kernel-[0-9._]+~[0-9a-f]+-r[0-9]+' "$tree"/openwrt/bin/targets/qualcommax/ipq50xx/*.manifest 2>/dev/null | head -1)
-	n=$(tar tzf "$tb" 2>/dev/null | grep -c '\.apk$')
+	ls_tb=$(tar tzf "$tb" 2>/dev/null)
+	n=$(printf '%s\n' "$ls_tb" | grep -c '\.apk$')
 	[ "$n" -gt 900 ] && ok "kmods$sfx has $n packages" || bad "kmods$sfx has only $n packages"
+	# AmneziaWG (#39) ships only here: the module, its tool and its LuCI page
+	for p in kmod-amneziawg amneziawg-tools luci-proto-amneziawg; do
+		# a here-string, not a pipe: grep -q exits on the first match, and under
+		# pipefail the writer's SIGPIPE would turn that match into a failure
+		grep -qE "^\./$p-[0-9]" <<<"$ls_tb" && ok "kmods$sfx carries $p" || bad "kmods$sfx has no $p"
+	done
 done
 
 echo "=== 7. -wifi initramfs beacons; ordinary images stay radio-silent ==="

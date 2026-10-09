@@ -297,6 +297,9 @@ That does not mean the module is missing. The built-in feeds are OpenWrt's snaps
 which never carry modules for this port's kernel. Install the module from the release's kmod
 tarball with one of the two methods below.
 
+AmneziaWG is installed the same way, with a few more packages: see
+[`docs/amneziawg.md`](amneziawg.md).
+
 #### A few modules, straight from the router
 
 The router can pull single packages out of the tarball by itself. Each `wget` streams the whole
