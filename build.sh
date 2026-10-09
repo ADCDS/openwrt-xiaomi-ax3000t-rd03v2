@@ -190,6 +190,14 @@ if [ -n "$PROFILE" ]; then
 	[ -f files/etc/dropbear/authorized_keys ] && chmod 600 files/etc/dropbear/authorized_keys
 fi
 
+# AmneziaWG (#39): WireGuard with traffic obfuscation, for networks whose DPI
+# blocks plain WireGuard. Its kernel module has to be built against this
+# port's kernel, so the release package archive carries it, with the `awg`
+# tool, its netifd protocol and the LuCI page. Packaging from the community
+# feed that tracks Amnezia's releases (the official amneziawg-openwrt stopped
+# at AWG 1.0 in 2024); pinned below like every other feed.
+echo 'src-git amneziawg https://github.com/Slava-Shchipunov/awg-openwrt.git' >> feeds.conf.default
+
 # Pin the package feeds to ../feeds.lock. OpenWrt's feed list follows branch
 # heads, so without this two builds of one commit can pull different packages,
 # and a moving feed can break the build outright: the Kconfig cycles that
@@ -379,6 +387,14 @@ CONFIG_PACKAGE_ethtool=y
 # i2c-tools: /usr/sbin/nfc (base-files) talks to the NFC tag with i2ctransfer,
 # as the stock firmware does. Asked for in #18; see docs/nfc.md.
 CONFIG_PACKAGE_i2c-tools=y
+# AmneziaWG (#39), packaged but not installed (`m`): it lands in the release
+# package archive, signed, and installs from there; see docs/amneziawg.md.
+# The tools pull in kmod-amneziawg, whose dependencies are kmod-wireguard's.
+CONFIG_PACKAGE_amneziawg-tools=m
+CONFIG_PACKAGE_luci-proto-amneziawg=m
+# ...and kept out of the image's /etc/apk/repositories.d/distfeeds.list, which
+# would otherwise point at an amneziawg feed downloads.openwrt.org never had.
+# CONFIG_FEED_amneziawg is not set
 EOF
 
 # NSS firmware MUST match the driver ABI. The nss feed branch (NSS-12.5-K6.x)
