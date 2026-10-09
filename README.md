@@ -14,8 +14,8 @@ Treat it as beta.
 
 **Recommended: [xiaomi-openwrt-install](https://github.com/ADCDS/xiaomi-openwrt-install).**
 Its `rd03v2` profile installs OpenWrt over Ethernet or Wi-Fi **without opening
-the case or connecting UART**. It integrates the hardware-tested V1 → V2
-stock-root chain, validates the board and NAND, downloads and verifies this
+the case or connecting UART**. It integrates the hardware-tested [V1 → V2
+stock-root chain](https://github.com/ADCDS/xiaomi-ax3000t-cabmeshd-disclosure#combined-v1--v2-capuci-exploit), validates the board and NAND, downloads and verifies this
 port's release images, pivots through the RAM initramfs, and runs the supported
 NAND installation. Follow
 the installer's README and run `python3 install.py standard`.
