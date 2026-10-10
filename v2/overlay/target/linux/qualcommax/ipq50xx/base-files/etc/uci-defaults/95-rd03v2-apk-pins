@@ -1,0 +1,29 @@
+#!/bin/sh
+# Pin, in /etc/apk/world, the packages this image builds with changes that OpenWrt's snapshot
+# feeds do not have. Their versions do not tell them apart from the official builds (most of
+# the changes come without a release bump), so `apk upgrade` would replace them with the
+# official ones and drop the changes:
+#   netifd            a dotted name that already exists is used as a plain device (DSA tag_8021q)
+#   wifi-scripts      Wi-Fi setup that does not fail while ath11k has no PHY yet (NSS loads it late)
+#   tc-full           tc for the NSS qdiscs and the nssmirred action (SQM in the NSS firmware)
+#   dnsmasq           no signal to an instance that a reload has just restarted
+#   uboot-envtools    this board's U-Boot environment
+#   ath11k-firmware-ipq5018-qcn6122, ipq-wifi-xiaomi_mi-router-ax3000t-v2
+#                     Wi-Fi firmware layout and board data of this tree
+# The package repository of this release carries these exact versions. `apk add <name>` with
+# the plain name lifts a pin. Runs after every flash, so the pins follow the installed image.
+PINS='netifd wifi-scripts tc-full dnsmasq uboot-envtools ath11k-firmware-ipq5018-qcn6122 ipq-wifi-xiaomi_mi-router-ax3000t-v2'
+W=/etc/apk/world
+DB=/lib/apk/db/installed
+[ -f "$W" ] && [ -f "$DB" ] || exit 0
+
+cp "$W" "$W.rd03v2" || exit 1
+for p in $PINS; do
+	v=$(awk -v p="$p" '/^P:/ { n = substr($0, 3) } /^V:/ && n == p { print substr($0, 3); exit }' "$DB")
+	[ -n "$v" ] || continue		# not installed
+	grep -v -x -E "$p([<>=~].*)?" "$W.rd03v2" > "$W.rd03v2.new"
+	echo "$p=$v" >> "$W.rd03v2.new"
+	mv "$W.rd03v2.new" "$W.rd03v2"
+done
+sort -u "$W.rd03v2" > "$W.rd03v2.new" && mv "$W.rd03v2.new" "$W" && rm -f "$W.rd03v2"
+exit 0
