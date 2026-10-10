@@ -1,0 +1,79 @@
+From ca755790f5810d036142c64e1776d2f84d5c2e20 Mon Sep 17 00:00:00 2001
+From: Adriel Santos <adriel@adriel.eu>
+Date: Sat, 10 Oct 2026 16:11:32 -0300
+Subject: [PATCH] nss-tools: nss-dwmac-up: make every PPPoE session again, not
+ just the default WAN
+
+The PPPoE manager only learns sessions created after it loads, so
+nss-dwmac-up brings the WAN up again once the manager is resident. It
+picked that WAN with network_find_wan, which names the interface with
+the default route. A PPPoE session that does not hold the default route
+(a second WAN under mwan3, a backup line, PPPoE next to a DHCP uplink)
+was never made again and stayed on the host path for as long as it was
+up, while the unrelated WAN was brought up again and the log said the
+PPPoE WAN had been re-created.
+
+Measured on a Xiaomi AX3000T v2 with pppoe-wanp (on wan.20) next to a
+DHCP wan holding the default route: 80/93 Mbit/s with 13k
+retransmissions, router load 1.0, no PPPoE packet in the firmware and
+no flow accelerated by ECM; 200/200 Mbit/s at load 0.06, with ECM
+accelerating, once the session was made again.
+
+Bring up every PPPoE interface that is up, and wait for each.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ package/nss/nss-tools/files/nss-dwmac-up | 33 ++++++++++++++++--------
+ 1 file changed, 22 insertions(+), 11 deletions(-)
+
+diff --git a/package/nss/nss-tools/files/nss-dwmac-up b/package/nss/nss-tools/files/nss-dwmac-up
+index 348fc7a05a..5902ea88c7 100644
+--- a/package/nss/nss-tools/files/nss-dwmac-up
++++ b/package/nss/nss-tools/files/nss-dwmac-up
+@@ -277,21 +277,32 @@ poll_until 15 ecm_ready &&
+ # image and client). So make it again with the manager resident, which is
+ # what the 'ifup wan' in nss-up does on ipq807x. Only for a PPPoE WAN: no
+ # other WAN type has anything to re-register.
++#
++# Every PPPoE interface that is up, not just the one network_find_wan names:
++# that is the interface with the default route, and a PPPoE session that does
++# not hold it (a second WAN under mwan3, a backup line, PPPoE next to a DHCP
++# uplink) stayed on the host path while an unrelated WAN was brought up again
++# (measured on an AX3000T v2 with pppoe-wanp next to a DHCP wan: 80/93 Mbit/s,
++# 13k retransmissions and no PPPoE packet in the firmware; 200/200 at load
++# 0.06 once the session was made again).
+ if [ -n "$(ls -d /sys/class/net/pppoe-* 2>/dev/null)" ]; then
+-	. /lib/functions/network.sh
+-	network_find_wan wan_iface
+-	[ -n "$wan_iface" ] || wan_iface=wan
+-	ifup "$wan_iface"
+-	wan_has_addr() {
+-		_d="$(ifstatus "$wan_iface" 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)"
++	pppoe_ifaces="$(ubus call network.interface dump 2>/dev/null |
++		jsonfilter -e '@.interface[@.proto="pppoe" && @.up=true].interface' 2>/dev/null)"
++	iface_has_addr() {
++		_d="$(ifstatus "$1" 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)"
+ 		[ -n "$_d" ] || return 1
+ 		ip -4 addr show dev "$_d" 2>/dev/null | grep -q "inet "
+ 	}
+-	if poll_until 30 wan_has_addr; then
+-		echo "PPPoE: $wan_iface re-created with the NSS manager resident"
+-	else
+-		echo "WARN: $wan_iface has no address 30s after the PPPoE re-up - WAN flows will stay on the host path"
+-	fi
++	for wan_iface in $pppoe_ifaces; do
++		ifup "$wan_iface"
++	done
++	for wan_iface in $pppoe_ifaces; do
++		if poll_until 30 iface_has_addr "$wan_iface"; then
++			echo "PPPoE: $wan_iface re-created with the NSS manager resident"
++		else
++			echo "WARN: $wan_iface has no address 30s after the PPPoE re-up - its flows will stay on the host path"
++		fi
++	done
+ fi
+ 
+ # Drop any connections tracked before ECM loaded so they re-classify
+-- 
+2.47.3
+
