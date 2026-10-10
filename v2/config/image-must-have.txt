@@ -1,0 +1,28 @@
+# Packages the v2 image must contain (verify-v2.sh checks the image manifest).
+# One name per line; a leading "!" means the image must NOT contain it.
+# his NSS plane and Wi-Fi offload
+nss-tools-dwmac
+kmod-qca-nss-ecm
+kmod-qca-nss-drv-pppoe
+kmod-ath11k-ahb
+ath11k-firmware-ipq5018-qcn6122
+ipq-wifi-xiaomi_mi-router-ax3000t-v2
+sqm-scripts-nss
+tc-full
+ip-full
+# what v1.x ships (v2/config/rd03v2.config)
+luci
+uhttpd
+rpcd
+luci-app-nss
+wpad-mbedtls
+!wpad-basic-mbedtls
+i2c-tools
+ethtool
+kmod-tun
+kmod-inet-diag
+kmod-nft-tproxy
+# in our repository only, never in the image
+!kmod-amneziawg
+!amneziawg-tools
+!luci-proto-amneziawg
