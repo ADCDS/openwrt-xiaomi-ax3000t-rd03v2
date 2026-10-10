@@ -1,0 +1,30 @@
+From 49eb47111c8e64f295509ea7cb42ba4d954fa9d0 Mon Sep 17 00:00:00 2001
+From: Adriel Santos <adriel@adriel.eu>
+Date: Sat, 10 Oct 2026 15:08:48 -0300
+Subject: [PATCH] qualcommax: ipq50xx: drop the NSS bring-up debug aids
+
+Revert 5d86c24df4 ("qualcommax: ipq50xx: debug aids for NSS bring-up
+work") for the RD03v2 v2 build, as its own message asks for a build
+meant to be deployed: no serial sysrq, no /dev/mem, and STRICT_DEVMEM
+back to the default.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ target/linux/qualcommax/ipq50xx/config-default | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/target/linux/qualcommax/ipq50xx/config-default b/target/linux/qualcommax/ipq50xx/config-default
+index 0517c1beb5..9485b2bf88 100644
+--- a/target/linux/qualcommax/ipq50xx/config-default
++++ b/target/linux/qualcommax/ipq50xx/config-default
+@@ -34,7 +34,3 @@ CONFIG_QCOM_TMEL_QMP_MAILBOX=y
+ CONFIG_SPI_QPIC_SNAND=y
+ CONFIG_STMMAC_ETH=y
+ CONFIG_STMMAC_PLATFORM=y
+-CONFIG_MAGIC_SYSRQ_SERIAL=y
+-CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE=0x1b6
+-CONFIG_DEVMEM=y
+-# CONFIG_STRICT_DEVMEM is not set
+-- 
+2.47.3
+
