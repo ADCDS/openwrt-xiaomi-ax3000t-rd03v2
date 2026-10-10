@@ -5,7 +5,7 @@
 # what his build compiled. Feed repos are cached bare (blob-less) in $FEED_CACHE.
 set -euo pipefail
 CONF=${1:?feeds.conf}; TS=${2:?timestamp}
-FEED_CACHE=${FEED_CACHE:-/home/agiu/dev/routers/rd03v2/mirrors/feeds}
+FEED_CACHE=${FEED_CACHE:-${RD03V2_WS:-$(cd "$(dirname "$0")/../../.." && pwd)}/mirrors/feeds}
 mkdir -p "$FEED_CACHE"
 grep -E '^src-git(-full)? ' "$CONF" | while read -r _ name spec; do
 	url=${spec%%;*}; branch=; [ "$spec" != "$url" ] && branch=${spec#*;}

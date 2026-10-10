@@ -29,8 +29,9 @@ set -euo pipefail
 NEW=${1:?usage: $0 <release tag, e.g. ipq50xx-2026.10.09>}
 cd "$(dirname "$0")/../.."
 REPO=$PWD V2=$PWD/v2
+WS=${RD03V2_WS:-$(dirname "$REPO")}
 . "$V2/upstream.lock"
-NSS_MIRROR=${V2_NSS_MIRROR:-/home/agiu/dev/routers/rd03v2/mirrors/nss-packages.git}
+NSS_MIRROR=${V2_NSS_MIRROR:-$WS/mirrors/nss-packages.git}
 NSS_URL=https://github.com/kuncy7/nss-packages.git
 die() { echo "bump-upstream: $*" >&2; exit 1; }
 [ -z "$(git -C "$REPO" status --porcelain -- v2/upstream.lock v2/feeds.lock)" ] ||
@@ -94,7 +95,7 @@ echo "NOTE: update the release/commit times in the comment of v2/upstream.lock b
 git -C "$REPO" --no-pager diff --stat -- v2/upstream.lock v2/feeds.lock
 
 # 3. prepare a scratch tree, on disk: a prepared kernel does not fit the tmpfs /tmp
-SCRATCH=${V2_SCRATCH:-/home/agiu/dev/routers/rd03v2/v2-builds}
+SCRATCH=${V2_SCRATCH:-$WS/v2-builds}
 mkdir -p "$SCRATCH"
 W=$(mktemp -d -p "$SCRATCH" bump-"$NEW".XXXX); TREE=$W/openwrt-v2
 echo "scratch tree: $TREE (kept on failure)"
@@ -103,7 +104,7 @@ TAG=DEV-bump PREPARE_ONLY=1 TREE="$TREE" "$V2/build.sh"
 # 4a. mac80211, strict
 "$V2/tools/check-mac80211-series.sh" "$TREE" "$W/mac80211"
 # 4b. kernel, with OpenWrt's patching; ours must apply without fuzz
-ln -s "${V2_DL:-/home/agiu/dev/routers/rd03v2/dl-v2}" "$TREE/dl"
+ln -s "${V2_DL:-$WS/dl-v2}" "$TREE/dl"
 (cd "$TREE" && make target/linux/prepare V=s > "$W/kernel-prepare.log" 2>&1) ||
 	die "kernel prepare failed: $W/kernel-prepare.log"
 ours=$(cd "$V2/overlay/target/linux/qualcommax" 2>/dev/null && ls patches-*/*.patch 2>/dev/null | xargs -r -n1 basename || true)

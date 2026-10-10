@@ -2,7 +2,7 @@
 # MIRROR is our local mirror of his tree (his CI keeps only 3 releases and rebases branches,
 # so the public tag and commit can disappear); URL is where it came from.
 URL=https://github.com/kuncy7/openwrt-nss-edma.git
-MIRROR=${V2_UPSTREAM_MIRROR:-/home/agiu/dev/routers/rd03v2/mirrors/openwrt-nss-edma.git}
+MIRROR=${V2_UPSTREAM_MIRROR:-${RD03V2_WS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/mirrors/openwrt-nss-edma.git}
 RELEASE=ipq50xx-2026.10.09
 COMMIT=2c3a4b347c2ba6ea0e2d153b5c59dc21c1e1cf89
 # His release was published 2026-10-09T21:45:42Z from this commit (19:47:30Z); his CI does

@@ -132,7 +132,10 @@ It then sets `rd03v2.v2.migrated`, so later v2 upgrades skip it. The radio paths
 TAG=DEV-<name> v2/build.sh            # or a release tag; PREPARE_ONLY=1 stops before make
 ```
 
-- `upstream.lock`: his release and commit, built from a local mirror (his CI keeps only
+- The workspace is this repository plus, next to it: `mirrors/` (his tree and his nss feed,
+  never pruned, with reflogs), `keys/v2/` (the signing key) and `dl-v2/` (the download
+  cache). `RD03V2_WS` points elsewhere; each path also has its own variable.
+- `upstream.lock`: his release and commit, built from the local mirror (his CI keeps only
   three releases, and his branches get rebased).
 - `feeds.lock`: every feed pinned to a commit. `tools/freeze-feeds.sh` picks the commits as
   of his release time.

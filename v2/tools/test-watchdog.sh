@@ -23,7 +23,7 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 WD=$HERE/../overlay/target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
 CONF=$HERE/../overlay/target/linux/qualcommax/ipq50xx/base-files/etc/config/rd03v2-watchdog
-RFS=${WD_ROOTFS:-/home/agiu/dev/routers/rd03v2/kuncy-gate/ipq50xx-2026.10.09/inspect/rootfs}
+RFS=${WD_ROOTFS:-${RD03V2_WS:-$(cd "$HERE/../../.." && pwd)}/kuncy-gate/ipq50xx-2026.10.09/inspect/rootfs}
 ENVS=both KEEP=0 ONLY=""
 while [ $# -gt 0 ]; do
 	case $1 in

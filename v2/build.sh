@@ -19,14 +19,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO=$PWD V2=$PWD/v2
+# the workspace: this repository, plus mirrors/, keys/ and dl-v2/ next to it
+WS=${RD03V2_WS:-$(dirname "$REPO")}
 . "$V2/upstream.lock"
 TAG=${TAG:?set TAG: a release name, or DEV-<something> for a local test build}
 TREE=${TREE:-$REPO/openwrt-v2}
 JOBS=${JOBS:-$(nproc)}
-KEYDIR=${V2_KEY_DIR:-/home/agiu/dev/routers/rd03v2/keys/v2}
-DLDIR=${V2_DL:-/home/agiu/dev/routers/rd03v2/dl-v2}
+KEYDIR=${V2_KEY_DIR:-$WS/keys/v2}
+DLDIR=${V2_DL:-$WS/dl-v2}
 REPO_URL=${V2_REPO_URL:-https://adcds.github.io/openwrt-xiaomi-ax3000t-rd03v2/v2/$TAG/packages.adb}
-NSS_MIRROR=${V2_NSS_MIRROR:-/home/agiu/dev/routers/rd03v2/mirrors/nss-packages.git}
+NSS_MIRROR=${V2_NSS_MIRROR:-$WS/mirrors/nss-packages.git}
 die() { echo "build.sh: $*" >&2; exit 1; }
 lines() { grep -vE '^\s*(#|$)' "$1" || true; }  # a list file without comments; empty is fine
 # anchor <count> <ERE> <file>: the pattern must match exactly <count> lines, so an edit fails

@@ -21,7 +21,7 @@ hash=$(sed -n 's/^PKG_HASH:=//p' "$MK")
 src=$(sed -n 's/^PKG_SOURCE:=//p' "$MK" | sed "s/\$(PKG_VERSION)/$ver/")
 [ -n "$ver" ] && [ -n "$hash" ] && [ -n "$src" ] || die "cannot read PKG_VERSION/PKG_HASH/PKG_SOURCE from $MK"
 tarball=$(readlink -f "$TREE/dl/$src" 2>/dev/null || true)
-[ -f "$tarball" ] || tarball=${V2_DL:-/home/agiu/dev/routers/rd03v2/dl-v2}/$src
+[ -f "$tarball" ] || tarball=${V2_DL:-${RD03V2_WS:-$(cd "$(dirname "$0")/../../.." && pwd)}/dl-v2}/$src
 [ -f "$tarball" ] || die "$src is not downloaded (make package/kernel/mac80211/download)"
 echo "$hash  $tarball" | sha256sum -c --quiet - || die "$src does not match PKG_HASH"
 
