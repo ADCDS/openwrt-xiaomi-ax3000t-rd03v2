@@ -1,0 +1,65 @@
+From 53dae73dcd605ccfdb25d22998fbfcae10a2e2ea Mon Sep 17 00:00:00 2001
+From: Adriel Santos <adriel@adriel.eu>
+Date: Sat, 10 Oct 2026 15:11:25 -0300
+Subject: [PATCH] qualcommax: ipq50xx: ax3000t-v2: enable the NFC tag's I2C bus
+
+The AX3000T v2 has an NFC Forum Type 2 tag at 0x57 on blsp1_i2c3
+(gpio25/26, function blsp2_i2c1). Enable the bus with the stock
+settings (100 kHz, BAM pipes 8 tx / 9 rx) so /usr/sbin/nfc can program
+the tag through i2c-dev.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../dts/ipq5018-mi-router-ax3000t-v2.dts      | 29 +++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts b/target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
+index e2466fdb8d..b6f4f5ddae 100644
+--- a/target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
++++ b/target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
+@@ -97,6 +97,28 @@
+ 	clock-mult = <1>;
+ };
+ 
++/*
++ * The NFC tag: a dual-interface NFC Forum Type 2 tag (Fudan FM11NT08x
++ * class) at 0x57, the only device on this bus. There is no kernel driver for
++ * it; /usr/sbin/nfc programs it through i2c-dev, as the stock firmware does.
++ * Bus settings are the stock ones (100 kHz, external pull-ups).
++ */
++&blsp1_i2c3 {
++	status = "okay";
++
++	pinctrl-0 = <&i2c_nfc_pins>;
++	pinctrl-names = "default";
++	clock-frequency = <100000>;
++	/*
++	 * ipq5018.dtsi names BAM pipe 9 tx and 8 rx for this QUP. Stock names
++	 * them the other way round, which is also the even-tx/odd-rx order of
++	 * blsp1_spi1 (pipes 4/5). The driver uses DMA for transfers larger than
++	 * its FIFO.
++	 */
++	dmas = <&blsp_dma 8>, <&blsp_dma 9>;
++	dma-names = "tx", "rx";
++};
++
+ &blsp1_uart1 {
+ 	status = "okay";
+ 
+@@ -571,6 +593,13 @@
+ 		bias-pull-up;
+ 	};
+ 
++	i2c_nfc_pins: i2c-nfc-state {
++		pins = "gpio25", "gpio26";
++		function = "blsp2_i2c1";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
+ 	mdio1_pins: mdio-state {
+ 		mdc-pins {
+ 			pins = "gpio36";
+-- 
+2.47.3
+

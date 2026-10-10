@@ -1,1 +1,5 @@
 # <source in this repo> <destination in the v2 tree>: files shared with the v1.x build
+# The NFC tag (#18): tool, procd service and its config (docs/nfc.md). The I2C node is tree patch 0002.
+files/target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc	target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc
+files/target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nfc	target/linux/qualcommax/ipq50xx/base-files/etc/init.d/nfc
+files/target/linux/qualcommax/ipq50xx/base-files/etc/config/nfc	target/linux/qualcommax/ipq50xx/base-files/etc/config/nfc
