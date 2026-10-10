@@ -1,0 +1,90 @@
+#!/bin/sh
+# Settings kept from a v1.x install (sysupgrade without -n) that do not fit this tree's NSS
+# stack. Runs before every other uci-defaults script, after every flash; once the settings are
+# migrated, rd03v2.v2.migrated marks them, so an upgrade from v2 to v2 changes nothing.
+#
+# - /etc/uci-defaults/10_disable_services (v1.x -nss images ship it, and their config backups
+#   carry it) disables the qca-nss-drv and qca-nss-ecm init scripts. This tree loads ECM from
+#   qca-nss-ecm's init script, so it would leave every flow unaccelerated. Defused here: it is
+#   emptied, runs, and is removed.
+# - nss.general.topology: v1.x sets the same nss options as this tree's 99-nss-topology, which
+#   returns early when topology is set and so would skip the rest of its setup (disabling
+#   qca-nss-drv's init script, which writes an IRQ layout for other SoCs, and moving all DSA
+#   ports onto the one CPU link the NSS firmware arms). Unset, it runs as on a fresh install
+#   and keeps the other options.
+# - /etc/modules.conf: v1.x's "options ecm front_end_selection=0". This tree's qca-nss-ecm init
+#   script derives that from ecm.global.acceleration_engine.
+# - /etc/rc.local: v1.x's two blocks, removed if unchanged. The U-Boot boot flags are kept by
+#   this tree's /etc/init.d/bootcount; the NSS runtime knobs (redirect, IPv4/IPv6 accel_mode)
+#   are v1.x's driver setup, which this stack does not use.
+[ "$(uci -q get rd03v2.v2.migrated)" = 1 ] && exit 0
+log() { logger -t rd03v2-migrate "$*"; }
+
+f=/etc/uci-defaults/10_disable_services
+if [ -f "$f" ]; then
+	if [ -z "$(grep -v -x -E '[[:space:]]*(#.*)?|/etc/init\.d/qca-nss-(drv|ecm) disable|exit 0' "$f")" ]; then
+		echo 'exit 0' > "$f"
+		log "defused v1.x $f (it disables qca-nss-ecm, which loads ECM on this stack)"
+	else
+		log "left $f alone: it is not v1.x's; check that it does not disable qca-nss-ecm"
+	fi
+fi
+
+if [ -n "$(uci -q get nss.general.topology)" ]; then
+	uci -q delete nss.general.topology
+	uci commit nss
+	log "unset the v1.x nss.general.topology so that 99-nss-topology sets up this stack"
+fi
+
+f=/etc/modules.conf
+if grep -q -x 'options ecm front_end_selection=0' "$f" 2>/dev/null; then
+	grep -v -x 'options ecm front_end_selection=0' "$f" > "$f.rd03v2" && mv "$f.rd03v2" "$f"
+	log "removed v1.x's ecm front_end_selection from $f"
+fi
+
+# The v1.x blocks, verbatim (the NSS one, and the blank line after it, only on -nss images).
+v1_nss='# NSS hardware offload runtime knobs. rc.local runs late in boot, after the
+# qca-nss modules are autoloaded, so the /proc/sys/dev/nss tree exists here.
+#  - general/redirect: hand exception/accelerated traffic to the NSS data plane
+#  - ipv{4,6}cfg/*_accel_mode: enable the connection-manager fast path
+echo 1 > /proc/sys/dev/nss/general/redirect 2>/dev/null
+echo 1 > /proc/sys/dev/nss/ipv4cfg/ipv4_accel_mode 2>/dev/null
+echo 1 > /proc/sys/dev/nss/ipv6cfg/ipv6_accel_mode 2>/dev/null
+
+'
+v1_flags='# Confirm boot success to U-Boot'"'"'s dual-boot failsafe so it never switches away
+# from this rootfs. The stock miwifi bootloader tracks per-system boot failures;
+# with no reset the counter eventually trips "boot failure on both systems" and
+# the box stops booting the image you installed. sysupgrade arms these flags once
+# at flash time (lib/upgrade/platform.sh), but nothing re-arms them afterwards —
+# so they have to be re-asserted on every boot, not just after an upgrade.
+# uboot-envtools generates fw_env.config for this board, so fw_setenv works.
+#
+# This file is the ONLY rc.local for both builds. build.sh (NSS=1) prepends the
+# NSS runtime knobs above this block at build time — do not add a second copy
+# under nss/overlay/.
+if [ -e /etc/fw_env.config ]; then
+	fw_setenv flag_boot_success 1 2>/dev/null
+	fw_setenv flag_last_success 1 2>/dev/null
+	fw_setenv flag_try_sys1_failed 8 2>/dev/null
+	fw_setenv flag_try_sys2_failed 8 2>/dev/null
+fi
+'
+f=/etc/rc.local
+for name in nss flags; do
+	[ -f "$f" ] || break
+	eval "block=\$v1_$name"
+	# awk index() on the whole file: an exact match or nothing
+	awk -v b="$block" 'BEGIN { RS = "\001" } { i = index($0, b); if (!i) exit 1; printf "%s%s", substr($0, 1, i - 1), substr($0, i + length(b)) }' \
+		"$f" > "$f.rd03v2" && mv "$f.rd03v2" "$f" && log "removed v1.x's $name block from $f"
+	rm -f "$f.rd03v2"
+done
+
+f=/etc/config/rd03v2
+[ -f "$f" ] || touch "$f"
+uci -q batch <<-EOF
+	set rd03v2.v2=v2
+	set rd03v2.v2.migrated='1'
+	commit rd03v2
+EOF
+exit 0
