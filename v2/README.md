@@ -136,7 +136,12 @@ TAG=DEV-<name> v2/build.sh            # or a release tag; PREPARE_ONLY=1 stops b
   never pruned, with reflogs), `keys/v2/` (the signing key) and `dl-v2/` (the download
   cache). `RD03V2_WS` points elsewhere; each path also has its own variable.
 - `upstream.lock`: his release and commit, built from the local mirror (his CI keeps only
-  three releases, and his branches get rebased).
+  three releases, and his branches get rebased). The commits a release of ours builds on
+  are also tagged `rd03v2/<his release>` in our forks
+  [ADCDS/openwrt](https://github.com/ADCDS/openwrt) (his tree) and
+  [ADCDS/nss-packages](https://github.com/ADCDS/nss-packages) (his nss feed). His
+  `ipq50xx-rebase` branch no longer contains the nss commit of `ipq50xx-2026.10.09`.
+  `bump-upstream.sh` tags new pins in the mirrors; pushing those tags is a separate step.
 - `feeds.lock`: every feed pinned to a commit. `tools/freeze-feeds.sh` picks the commits as
   of his release time.
 - `tree-patches/`: our changes to his files, applied with `git am` (no fuzz).
