@@ -1,0 +1,7 @@
+# <feed> <commit>: v2/tools/freeze-feeds.sh <his feeds.conf.default> 2026-10-09T19:52:00Z
+packages dbd1a89a059fb3a92cbfebc66bd2f1c0f084fe22
+luci 37e6a6bb654984bfaaeff18bcd7cfa8d9c568a52
+routing 4b9891b9136259f93294a424507ed24c5e8c1cbd
+telephony 5d68d53c160a325ea9d03fce393e051573bcc736
+video 8d4551ceb287527f6a2ba99f9e86ded782a937bb
+nss 94f44cc3bd4259b9b49f186f157e90e06b5ab003

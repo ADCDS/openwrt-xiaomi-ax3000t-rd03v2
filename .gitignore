@@ -6,3 +6,4 @@ images/*.ubi
 # Python bytecode from tooling runs
 __pycache__/
 *.pyc
+/openwrt-v2/
