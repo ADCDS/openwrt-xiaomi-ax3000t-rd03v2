@@ -172,7 +172,11 @@ echo "build: $(( $(date +%s) - start )) s"
 # 9. the repository: packages of feeds outside the official ones land outside the target dir
 # (his CI copies luci-app-nss the same way); the target dir is what gets indexed and published
 T=$TREE/bin/targets/qualcommax/ipq50xx
-for p in luci-app-nss amneziawg-tools luci-proto-amneziawg; do
+# The packages 95-rd03v2-apk-pins pins (his changes without a version bump) go in as well, so
+# the exact pinned versions stay installable from our repository.
+PINS=$(sed -n "s/^PINS='\(.*\)'\$/\1/p" "$V2/overlay/target/linux/qualcommax/ipq50xx/base-files/etc/uci-defaults/95-rd03v2-apk-pins")
+[ -n "$PINS" ] || die "cannot read PINS from 95-rd03v2-apk-pins"
+for p in luci-app-nss amneziawg-tools luci-proto-amneziawg $PINS; do
 	a=("$T"/packages/"$p"-[0-9]*.apk)
 	[ ${#a[@]} = 0 ] || continue		# a target package already
 	a=("$TREE"/bin/packages/*/*/"$p"-[0-9]*.apk)
