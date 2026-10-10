@@ -1,0 +1,55 @@
+From: openwrt-xiaomi-ax3000t-rd03v2 port
+Subject: [PATCH] wifi: ath11k: compensate the management frame signal on IPQ5018+QCN6122
+
+The WLAN.HK.2.7.0.1 firmware used with the multi-PD IPQ5018+QCN6122
+combination reports the SNR of received management frames on an
+uncalibrated scale: v1.x measured scan results ~31 dB (2.4 GHz) / ~24 dB
+(5 GHz) below the level an independent receiver reads for the same
+beacons. Add those offsets where the WMI mgmt rx event is converted to
+dBm, which is what scan results and the probe request signal that
+hostapd and steering daemons see come from.
+
+This is the management-frame half of the v1.x port's 952. Its station
+signal offsets are not carried: with NSS Wi-Fi offload the station signal
+is already reported in dBm.
+
+CANDIDATE: not applied. Moves into v2/overlay only if phase C (C5) shows
+this tree's scan results reading low against an independent receiver.
+---
+--- a/drivers/net/wireless/ath/ath11k/core.h
++++ b/drivers/net/wireless/ath/ath11k/core.h
+@@ -1514,4 +1514,22 @@ static inline struct ath11k_peer *ath11k_peer_find_by_id(struct ath11k *ar,
+ 	return peer;
+ }
+ 
++/* WLAN.HK.2.7.0.1 on IPQ5018/QCN6122 reports the SNR of received management
++ * frames on an uncalibrated scale (measured ~31 dB low on 2.4 GHz, ~24 dB low
++ * on 5 GHz against external references). Compensate where the WMI mgmt rx
++ * event is converted to dBm. Station signal with NSS Wi-Fi offload is already
++ * in dBm and is not touched.
++ */
++static inline s8 ath11k_hw_mgmt_rssi_offset(struct ath11k_base *ab)
++{
++	switch (ab->hw_rev) {
++	case ATH11K_HW_IPQ5018_HW10:
++		return 31;
++	case ATH11K_HW_QCN6122_HW10:
++		return 24;
++	default:
++		return 0;
++	}
++}
++
+ #endif /* _CORE_H_ */
+--- a/drivers/net/wireless/ath/ath11k/wmi.c
++++ b/drivers/net/wireless/ath/ath11k/wmi.c
+@@ -7865,7 +7865,8 @@ static void ath11k_mgmt_rx_event(struct ath11k_base *ab, struct sk_buff *skb)
+ 		status->freq = ieee80211_channel_to_frequency(rx_ev.channel,
+ 							      status->band);
+ 
+-	status->signal = rx_ev.snr + ATH11K_DEFAULT_NOISE_FLOOR;
++	status->signal = rx_ev.snr + ATH11K_DEFAULT_NOISE_FLOOR +
++			 ath11k_hw_mgmt_rssi_offset(ab);
+ 	status->rate_idx = ath11k_mac_bitrate_to_idx(sband, rx_ev.rate / 100);
+ 
+ 	hdr = (struct ieee80211_hdr *)skb->data;
