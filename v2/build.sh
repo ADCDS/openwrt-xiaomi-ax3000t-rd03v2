@@ -78,6 +78,8 @@ anchor 1 '^src-git routing https://git.openwrt.org/feed/routing.git$' "$F"
 anchor 1 '^src-git telephony https://git.openwrt.org/feed/telephony.git$' "$F"
 anchor 1 '^src-git video https://github.com/openwrt/video.git$' "$F"
 anchor 1 '^src-git nss https://github.com/kuncy7/nss-packages.git;ipq50xx-rebase$' "$F"
+# AmneziaWG (#39): not one of his feeds. Same community feed and pin as v1.x (../build.sh).
+echo 'src-git amneziawg https://github.com/Slava-Shchipunov/awg-openwrt.git' >>"$F"
 # his nss feed branch gets rebased: build it from our mirror
 sed -i "s#^src-git nss https://github.com/kuncy7/nss-packages.git;ipq50xx-rebase\$#src-git nss $NSS_MIRROR;ipq50xx-rebase#" "$F"
 lines "$V2/feeds.lock" | while read -r name rev; do
@@ -92,6 +94,23 @@ lines "$V2/feeds.lock" | while read -r name rev; do
 	[ "$(git -C "$TREE/feeds/$name" rev-parse HEAD)" = "$rev" ] || die "feeds/$name is not at $rev"
 done
 echo "feeds: $(grep -cE '^src-' "$F") pinned"
+
+# AmneziaWG sources, pinned to commits, as in ../build.sh: the feed names Amnezia's kernel module
+# and tools by git tag only, so build them from the commits those tags pointed to, with the hash
+# of OpenWrt's source tarball of that commit. Update with ../build.sh and docs/amneziawg.md.
+awg_pin() {  # awg_pin <package> <PKG_VERSION> <commit> <source tarball sha256>
+	local mk=$TREE/feeds/amneziawg/$1/Makefile
+	anchor 1 "^PKG_VERSION:=$2\$" "$mk"
+	anchor 1 '^PKG_SOURCE_VERSION:=v\$\(PKG_VERSION\)$' "$mk"	# ERE, unlike ../build.sh
+	grep -q '^PKG_MIRROR_HASH:=' "$mk" && die "$mk already sets PKG_MIRROR_HASH; review the pin"
+	sed -i "s#^PKG_SOURCE_VERSION:=v\$(PKG_VERSION)\$#PKG_SOURCE_VERSION:=$3\nPKG_MIRROR_HASH:=$4#" "$mk"
+	anchor 1 "^PKG_SOURCE_VERSION:=$3\$" "$mk"
+	anchor 1 "^PKG_MIRROR_HASH:=$4\$" "$mk"
+}
+awg_pin kmod-amneziawg  3.1.20260906 4569c4c67f3a57414969260cafbbd04694fbaae0 \
+	25a91c7492221291ec8d4ad5672f20c2ed49ec11f0e61478280bf0a37c89b37f
+awg_pin amneziawg-tools 3.1.20260812 ee0f0a9aa34ff0a0da4b3433b9512781cfe02843 \
+	0c27841a3b4860c7fd085cd627c5b0f9c25653afdaef1e73fd3e350fb3445dab
 
 # 5. package repositories baked into the image, and a release stamp
 mkdir -p "$TREE/files/etc/apk/repositories.d"
@@ -150,10 +169,15 @@ start=$(date +%s)
 (cd "$TREE" && nice make -j"$JOBS" BUILD_LOG=1 >"$TREE/build.log" 2>&1) || die "make failed (see $TREE/build.log, logs/)"
 echo "build: $(( $(date +%s) - start )) s"
 
-# 9. the repository: PKGARCH all packages land outside the target dir (his CI does the same)
+# 9. the repository: packages of feeds outside the official ones land outside the target dir
+# (his CI copies luci-app-nss the same way); the target dir is what gets indexed and published
 T=$TREE/bin/targets/qualcommax/ipq50xx
-for p in luci-app-nss; do
-	for a in "$TREE"/bin/packages/*/*/"$p"-[0-9]*.apk; do cp -p "$a" "$T/packages/"; done
+for p in luci-app-nss amneziawg-tools luci-proto-amneziawg; do
+	a=("$T"/packages/"$p"-[0-9]*.apk)
+	[ ${#a[@]} = 0 ] || continue		# a target package already
+	a=("$TREE"/bin/packages/*/*/"$p"-[0-9]*.apk)
+	[ ${#a[@]} = 1 ] || die "expected one $p package, found ${#a[@]}"
+	cp -p "${a[0]}" "$T/packages/"
 done
 (cd "$TREE" && make package/index >"$TREE/index.log" 2>&1) || die "make package/index failed"
 

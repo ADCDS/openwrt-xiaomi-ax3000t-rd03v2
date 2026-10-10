@@ -5,3 +5,6 @@ routing 4b9891b9136259f93294a424507ed24c5e8c1cbd
 telephony 5d68d53c160a325ea9d03fce393e051573bcc736
 video 8d4551ceb287527f6a2ba99f9e86ded782a937bb
 nss 94f44cc3bd4259b9b49f186f157e90e06b5ab003
+# Not one of his feeds: v2/build.sh adds it. Same pin as v1.x (../feeds.lock); its sources are
+# pinned to commits by awg_pin in v2/build.sh.
+amneziawg 03b62269e2edc168504f057cffaafda11b25ed92
