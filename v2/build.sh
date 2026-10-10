@@ -125,7 +125,8 @@ echo "CONFIG_CCACHE_DIR=\"$DLDIR/../ccache-v2\"" >>"$TREE/.config"
 (cd "$TREE" && make defconfig >"$TREE/defconfig.log" 2>&1) || die "make defconfig failed"
 # like his CI: defconfig must not drop anything we asked for
 # (later fragments override earlier ones, so only the last setting of each symbol counts)
-dropped=$(grep -E '^(CONFIG_[A-Za-z0-9_]+=|# CONFIG_[A-Za-z0-9_]+ is not set)' "$TREE/.config.v2-wanted" |
+# (package symbols carry the package name: hyphens, dots and pluses too)
+dropped=$(grep -E '^(CONFIG_[A-Za-z0-9_.+-]+=|# CONFIG_[A-Za-z0-9_.+-]+ is not set)' "$TREE/.config.v2-wanted" |
 	awk '{ s = ($1 == "#") ? $2 : substr($0, 1, index($0, "=") - 1); last[s] = $0; if (!(s in seen)) { seen[s] = 1; order[++n] = s } }
 	     END { for (i = 1; i <= n; i++) print last[order[i]] }' |
 	while read -r l; do grep -qxF "$l" "$TREE/.config" || echo "$l"; done)
