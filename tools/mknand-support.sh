@@ -125,7 +125,11 @@ INFO_RE = re.compile(
 
 parts = []            # (mfr_byte, dev_byte, part_name, vendor_label)
 for obj in built:
-    src = open(os.path.join(spi, obj + '.c')).read()
+    # Comments out first: 6.18 puts one between a part's name and its ID
+    # (SPINAND_INFO("W25N512GW", /* 1.8V */ SPINAND_ID(...)), which INFO_RE
+    # does not expect, and a commented-out entry is not a part.
+    src = re.sub(r'/\*.*?\*/|//[^\n]*', '',
+                 open(os.path.join(spi, obj + '.c')).read(), flags=re.S)
     tables = {name: body for name, body in TABLE_RE.findall(src)}
     seen = 0
     for body in MANUF_RE.findall(src):
