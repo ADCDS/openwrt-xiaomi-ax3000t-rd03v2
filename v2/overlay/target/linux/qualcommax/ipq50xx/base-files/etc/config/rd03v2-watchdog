@@ -1,0 +1,13 @@
+# The WiFi watchdog, /usr/sbin/rd03v2-watchdog (docs/q6-firmware-crash.md).
+config watchdog 'main'
+	# 0 stops it (as does touching /etc/rd03v2-watchdog.disable).
+	option enabled '1'
+	# 1: detect, write the evidence to /overlay/rd03v2-watchdog and log what
+	# would be done (logread -e rd03v2-watchdog), but touch nothing. v2.0
+	# ships in dry run until a long soak on this tree has shown it right.
+	option dryrun '1'
+	# Before a driver reload, ath11k's own reset (hw-restart) of the affected
+	# radio: '1' or '0'. Unset, only without NSS Wi-Fi offload, as on v1.x.
+	#option inplace '0'
+	# Unload and load ath11k again before giving up and rebooting: '1' or '0'.
+	option reload '1'
