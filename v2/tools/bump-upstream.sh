@@ -6,7 +6,13 @@
 #     (his CI deletes old releases and the feed branch gets rebased), and tag the pinned
 #     commits rd03v2/<release> in both mirrors so they stay reachable;
 #  2. freeze his feeds as of his CI run for that commit (tools/freeze-feeds.sh) and rewrite
-#     upstream.lock and feeds.lock in place, for review with git diff;
+#     upstream.lock and feeds.lock in place, for review with git diff. His nss feed is the
+#     exception: its branch gets rebased, which rewrites commit dates and brings in commits
+#     that were not on it at release time, so a freeze by date picks the wrong commit (a
+#     no-op bump of ipq50xx-2026.10.09 on 10-10 got c30fbbff instead of 94f44cc). Its
+#     commit is the branch head at his CI run's time, read from our mirror's reflog
+#     (core.logAllRefUpdates=always since 10-10), so the mirror must be fetched before he
+#     rebases again; or NSS_COMMIT_OVERRIDE=<commit>;
 #  3. PREPARE_ONLY build into a scratch tree: our tree patches apply (git am), the overlay
 #     overwrites nothing of his, every feed pins, defconfig drops nothing we asked for;
 #  4. his mac80211 series plus ours without fuzz (tools/check-mac80211-series.sh), and the
@@ -52,8 +58,21 @@ fi
 conf=$(mktemp); trap 'rm -f "$conf"' EXIT
 git -C "$MIRROR" show "$C:feeds.conf.default" > "$conf"
 new_feeds=$("$V2/tools/freeze-feeds.sh" "$conf" "$FEEDS_FROZEN_AT")
-nss=$(awk '$1 == "nss" { print $2 }' <<<"$new_feeds")
-[ -n "$nss" ] || die "his feeds.conf.default has no nss feed"
+grep -q '^nss ' <<<"$new_feeds" || die "his feeds.conf.default has no nss feed"
+# nss: not by date (see the top); the branch head at his CI run's time, from our reflog
+nss_branch=$(sed -n 's#^src-git nss [^;]*;\(.*\)$#\1#p' "$conf")
+[ -n "$nss_branch" ] || die "cannot read the nss feed branch from his feeds.conf.default"
+if [ -n "${NSS_COMMIT_OVERRIDE:-}" ]; then
+	nss=$NSS_COMMIT_OVERRIDE
+elif nss=$(git -C "$NSS_MIRROR" rev-parse -q --verify "refs/heads/$nss_branch@{$FEEDS_FROZEN_AT}" 2>/dev/null); then
+	echo "nss: $nss_branch was at $nss at $FEEDS_FROZEN_AT (mirror reflog)"
+elif [ "$NEW" = "$RELEASE" ]; then
+	nss=$(awk '$1 == "nss" { print $2 }' "$V2/feeds.lock")
+	echo "nss: no reflog for $FEEDS_FROZEN_AT; keeping the locked $nss for the same release"
+else
+	die "no reflog of $nss_branch at $FEEDS_FROZEN_AT in $NSS_MIRROR; set NSS_COMMIT_OVERRIDE (the head his CI built)"
+fi
+new_feeds=$(awk -v c="$nss" '$1 == "nss" { $2 = c } { print }' <<<"$new_feeds")
 git -C "$NSS_MIRROR" cat-file -e "$nss^{commit}" 2>/dev/null ||
 	die "nss feed commit $nss is not in $NSS_MIRROR (rebased away before we fetched?)"
 git -C "$MIRROR" tag -f "rd03v2/$NEW" "$C" >/dev/null
@@ -74,9 +93,11 @@ echo "NOTE: update the release/commit times in the comment of v2/upstream.lock b
 } > "$V2/feeds.lock.new" && mv "$V2/feeds.lock.new" "$V2/feeds.lock"
 git -C "$REPO" --no-pager diff --stat -- v2/upstream.lock v2/feeds.lock
 
-# 3. prepare a scratch tree
-W=$(mktemp -d); TREE=$W/openwrt-v2
-echo "scratch tree: $TREE"
+# 3. prepare a scratch tree, on disk: a prepared kernel does not fit the tmpfs /tmp
+SCRATCH=${V2_SCRATCH:-/home/agiu/dev/routers/rd03v2/v2-builds}
+mkdir -p "$SCRATCH"
+W=$(mktemp -d -p "$SCRATCH" bump-"$NEW".XXXX); TREE=$W/openwrt-v2
+echo "scratch tree: $TREE (kept on failure)"
 TAG=DEV-bump PREPARE_ONLY=1 TREE="$TREE" "$V2/build.sh"
 
 # 4a. mac80211, strict
@@ -91,5 +112,10 @@ bad=$(awk -v ours=" $(echo $ours) " '
 	/with fuzz|FAILED|Reversed/ && index(ours, " " p " ") { print p ": " $0 }' "$W/kernel-prepare.log")
 [ -z "$bad" ] || die "our kernel patches do not apply cleanly:
 $bad"
+for p in $ours; do  # not vacuous: each must show up as applied
+	grep -qE "^Applying .*/$p using" "$W/kernel-prepare.log" ||
+		die "$p is not in the kernel prepare log ($W/kernel-prepare.log)"
+done
 echo "kernel: our patches ($(echo $ours)) apply without fuzz"
+rm -rf "$W"
 echo "bump-upstream: $NEW prepared; next: a full build (TAG=DEV-<name> v2/build.sh), verify, bench smoke test"
