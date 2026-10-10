@@ -1,0 +1,124 @@
+From: Claude <noreply@anthropic.com>
+Subject: [PATCH] wifi: ath11k: add the UK 5.8 GHz band missing from the fw regdb
+
+ath11k is a self-managed wiphy: the channels it offers come from the
+regulatory rules the firmware sends for the configured country. On
+IPQ5018/QCN6122 those rules come from the regulatory database compiled
+into WLAN.HK.2.7.0.1-01744 (2022), the newest firmware for the platform.
+It maps GB to the EU ETSI domain:
+
+  5170-5250 23 dBm indoor, 5250-5330 23 dBm DFS indoor, 5490-5710 30 dBm DFS
+
+so with country GB channels 144-165 are disabled and hostapd refuses
+channel 149 ("Frequency 5745 (primary) not allowed for AP mode"), even
+though Ofcom (IR 2030) permits RLANs in 5725-5850 MHz indoors at
+200 mW EIRP and wireless-regdb carries that rule for GB (issue #34).
+
+Add a table of such firmware-regdb gaps and apply it on top of the rules
+the firmware sends, only for the matching country, only on a pdev that
+has 5 GHz rules, and never over a band the firmware already covers. The
+only entry is GB 5725-5850 MHz, 80 MHz, 23 dBm, NO-OUTDOOR, the
+wireless-regdb rule.
+---
+--- a/drivers/net/wireless/ath/ath11k/reg.c
++++ b/drivers/net/wireless/ath/ath11k/reg.c
+@@ -19,6 +19,27 @@
+ #define ETSI_WEATHER_RADAR_BAND_HIGH		5650
+ #define ETSI_WEATHER_RADAR_BAND_CAC_TIMEOUT	600000
+ 
++/* Bands that a regulator permits but the firmware's built-in regulatory
++ * database leaves out. The database is compiled into the Q6 image, so it
++ * lags rule changes; WLAN.HK.2.7.0.1-01744 (2022), the newest IPQ5018/
++ * QCN6122 build, maps GB to the EU ETSI domain, which ends at 5710 MHz.
++ * Each entry adds its band on top of the firmware's rules for that country.
++ * It never replaces a band the firmware reports.
++ */
++static const struct ath11k_reg_fw_gap {
++	char alpha2[3];
++	u16 start_freq;
++	u16 end_freq;
++	u16 max_bw;
++	u8 reg_power;
++	u32 flags;
++} ath11k_reg_fw_gaps[] = {
++	/* Ofcom IR 2030: RLANs in 5725-5850 MHz, indoors, 200 mW EIRP, no
++	 * DFS. wireless-regdb has carried the same rule for GB since 2021.
++	 */
++	{ "GB", 5725, 5850, 80, 23, NL80211_RRF_NO_OUTDOOR },
++};
++
+ static const struct ieee80211_regdomain ath11k_world_regd = {
+ 	.n_reg_rules = 3,
+ 	.alpha2 =  "00",
+@@ -512,6 +533,53 @@ ath11k_reg_ap_pwr_convert(enum ieee80211_ap_reg_power power_type)
+ 	}
+ }
+ 
++static u8 ath11k_reg_add_fw_gaps(struct ath11k_base *ab,
++				 struct cur_regulatory_info *reg_info,
++				 struct ieee80211_regdomain *regd, u8 n_rules)
++{
++	const struct ath11k_reg_fw_gap *gap;
++	const struct ieee80211_freq_range *range;
++	u32 start, end;
++	bool covered;
++	int g, r;
++
++	/* A pdev without 5 GHz rules has no 5 GHz band to extend */
++	if (!reg_info->num_5ghz_reg_rules)
++		return n_rules;
++
++	for (g = 0; g < ARRAY_SIZE(ath11k_reg_fw_gaps); g++) {
++		gap = &ath11k_reg_fw_gaps[g];
++		if (memcmp(gap->alpha2, reg_info->alpha2, 2))
++			continue;
++
++		start = MHZ_TO_KHZ(gap->start_freq);
++		end = MHZ_TO_KHZ(gap->end_freq);
++		covered = false;
++		for (r = 0; r < n_rules; r++) {
++			range = &regd->reg_rules[r].freq_range;
++			if (start < range->end_freq_khz &&
++			    end > range->start_freq_khz)
++				covered = true;
++		}
++		if (covered)
++			continue;
++
++		ath11k_reg_update_rule(regd->reg_rules + n_rules,
++				       gap->start_freq, gap->end_freq,
++				       gap->max_bw, 0, gap->reg_power, 0,
++				       NL80211_RRF_AUTO_BW | gap->flags |
++				       ath11k_map_fw_phy_flags(reg_info->phybitmap));
++		n_rules++;
++
++		ath11k_dbg(ab, ATH11K_DBG_REG,
++			   "added %d-%d MHz for %c%c, missing from fw regdb\n",
++			   gap->start_freq, gap->end_freq,
++			   gap->alpha2[0], gap->alpha2[1]);
++	}
++
++	return n_rules;
++}
++
+ struct ieee80211_regdomain *
+ ath11k_reg_build_regd(struct ath11k_base *ab,
+ 		      struct cur_regulatory_info *reg_info,
+@@ -567,6 +635,8 @@ ath11k_reg_build_regd(struct ath11k_base *ab,
+ 	if (reg_info->dfs_region == ATH11K_DFS_REG_ETSI)
+ 		num_rules += 2;
+ 
++	num_rules += ARRAY_SIZE(ath11k_reg_fw_gaps);
++
+ 	new_regd =  kzalloc(sizeof(*new_regd) +
+ 			(num_rules * sizeof(struct ieee80211_reg_rule)),
+ 			GFP_ATOMIC);
+@@ -657,7 +727,7 @@ ath11k_reg_build_regd(struct ath11k_base *ab,
+ 		}
+ 	}
+ 
+-	new_regd->n_reg_rules = i;
++	new_regd->n_reg_rules = ath11k_reg_add_fw_gaps(ab, reg_info, new_regd, i);
+ 
+ 	return new_regd;
+ }
