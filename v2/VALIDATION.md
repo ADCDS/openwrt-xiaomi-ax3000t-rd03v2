@@ -313,6 +313,27 @@ kept every pinned package of his tree (b9).
 with an unknown key, and an index that is incomplete or does not match (8
 checks, b9).
 
+## Closed-issue regression pass (rc1)
+
+Every closed GitHub issue, re-checked against v2 on the bench. Passing or not
+applicable to v2's stack: #3, #5, #7 (roam, downstream unicast immediate), #8,
+#9, #10, #11 (vlan_filtering on/off and a reboot with it on, host path kept;
+reserved-VID guard in 0959d), #12, #15, #22, #23, #25, #26, #34 (GB channel 149,
+kept through a hw-restart and an assert), #37 (kmods from our repository). #18
+(slow receiver on 5 GHz under full WAN load, NSS and host): no stall, no OOM,
+memory recovered. Three findings:
+
+- **#21**: 802.11s mesh does not come up with NSS offload (his tree does not
+  build it for this firmware); it works in host mode. A regression from v1.11's
+  NSS mesh. See Known issues in the README.
+- **#24**: `ath11k.frame_mode=1` set by hand stops clients associating; the
+  default (2) is unaffected and nothing sets it to 1. v1.x's guard is not carried.
+- **#36** (ECM/mwan3 IPv6 stall) was not reproduced on the bench; v2's ECM has
+  no FIB-rule notifier, so the full mwan3 + PPPoE rig would be needed to settle it.
+
+#1 (LAN<->LAN) was not run (one wired client; it would bridge the WAN to the
+upstream LAN).
+
 ## Not carried over from v1.x checks
 
 C7: the calibration payloads the firmware

@@ -150,6 +150,14 @@ usteer or DAWN settings, scripts) need the same amount taken off.
   client within 3 dB (C5), but the test client's own 2.4 GHz readings jump by about 20 dB
   (its Wi-Fi and Bluetooth share one chip). A small 2.4 GHz correction is neither
   established nor excluded; v1.x's 31 dB is excluded.
+- **802.11s mesh needs host Wi-Fi mode.** v2 does not build NSS mesh offload (his tree ties
+  it to a firmware version this release does not run), so a mesh interface does not come up
+  with NSS Wi-Fi offload on, and the AP on that radio goes down while one is configured. In
+  host mode (`nss.general.wifi_offload='0'`) a mesh starts and the AP stays up. v1.x's NSS
+  mesh (#21) is not carried.
+- **`ath11k.frame_mode` must stay at its default (2).** Set to 1 by hand, no client can
+  associate under NSS offload. v1.x forced it to 2 (999-995); that guard is not carried, so
+  nothing stops a manual change. Nothing on v2 sets it to 1.
 - `n2h_rx_queue[0]_drops` rise during offloaded PPPoE uploads. That queue is still 256 on
   256 MB boards; his 10-09 release raised it only for 512 MB and 1 GB boards.
 - Fixed here, open in his release: a PPPoE session that does not hold the default route
