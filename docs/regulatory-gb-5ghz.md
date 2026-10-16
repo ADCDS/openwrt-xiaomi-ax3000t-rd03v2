@@ -68,7 +68,7 @@ Setting 66 countries in turn on the bench (`iw reg set XX`, reading the
 | no 5.8 GHz | JP, EG |
 
 GB gets nothing the EU does not. The firmware's tables can be listed without a
-router: [`tools/ath11k-fw-regdb.py`](../tools/ath11k-fw-regdb.py) finds the
+router: [`tools/ath11k-fw-regdb.py`](https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/blob/v1.14/tools/ath11k-fw-regdb.py) finds the
 5 GHz rule and domain tables in the Q6 image (they sit in each user PD's data
 segment, `q6_fw.b10`/`b17`/`b22`) and decodes them. GB's rules are domain
 `0x0e`:
@@ -100,7 +100,7 @@ Nothing in this tree can change what the firmware returns:
 
 ## The fix: patch 964
 
-[`964-wifi-ath11k-add-the-UK-5.8-GHz-band-missing-from-the-fw-regdb.patch`](../files/package/kernel/mac80211/patches/ath11k/964-wifi-ath11k-add-the-UK-5.8-GHz-band-missing-from-the-fw-regdb.patch)
+[`964-wifi-ath11k-add-the-UK-5.8-GHz-band-missing-from-the-fw-regdb.patch`](../v2/overlay/package/kernel/mac80211/patches/nss/ath11k/999-999-rd03v2-964-wifi-ath11k-add-the-UK-5.8-GHz-band-missing-from-the-fw-regdb.patch)
 adds a small table of bands a regulator permits and the firmware database
 omits, and appends a matching entry to the rules ath11k builds from the
 firmware event. The entry applies only:

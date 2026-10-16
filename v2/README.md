@@ -9,7 +9,7 @@ repository's own OpenWrt tree. On top of that release it adds what v1.x has and 
 not. Nothing depends on kuncy7 merging or rebuilding anything: his tree is pinned to a
 commit, and our changes are applied on top of it at build time.
 
-| | v1.x (`main`) | v2 |
+| | v1.x (branch `v1`) | v2 |
 |---|---|---|
 | Kernel | 6.12 | 6.18 (his release) |
 | NSS | qosmio's stack, 12.5 firmware, maintained here | his stack on mainline stmmac, 12.2 firmware |
@@ -22,7 +22,7 @@ commit, and our changes are applied on top of it at build time.
 | | How | Source |
 |---|---|---|
 | His NSS bring-up debug options reverted (serial sysrq, sysrq mask) | tree patch 0001 | his commit `5d86c24df4` asks for it in deployed builds |
-| NFC tag: I2C bus, `/usr/sbin/nfc`, its service and config | tree patch 0002, `shared.list` | [docs/nfc.md](../docs/nfc.md) |
+| NFC tag: I2C bus, `/usr/sbin/nfc`, its service and config | tree patch 0002, `overlay/.../usr/sbin/nfc`, `etc/init.d/nfc`, `etc/config/nfc` | [docs/nfc.md](../docs/nfc.md) |
 | Every PPPoE session made again once the NSS PPPoE manager is resident, not only the default-route WAN's (otherwise a second PPPoE WAN stays on the host path after every boot) | tree patch 0003 | gate soak, 2026-10-10; kuncy7/openwrt-nss-edma#25 |
 | cfg80211 keeps the DFS state of the channels when ath11k applies its domain again after a firmware restart. Without it an AP on a DFS channel (52-144, or 36 at 160 MHz) lost its carrier and channel 60 s after every in-place recovery, with hostapd still reporting it enabled | tree patch 0006 | kuncy7 238d307610 (10.15-2), kuncy7/openwrt-nss-edma#28 |
 | A radio that netifd gave up on while ath11k loaded is set up again once every radio has its phy (with NSS offload the 5 GHz QCN6122 probes about 4 s after the 2.4 GHz radio) | tree patch 0007 | kuncy7 dff118f852 (10.15-2), kuncy7/openwrt-nss-edma#29 |
@@ -199,6 +199,6 @@ TAG=DEV-<name> v2/build.sh            # or a release tag; PREPARE_ONLY=1 stops b
 - `feeds.lock`: every feed pinned to a commit. `tools/freeze-feeds.sh` picks the commits as
   of his release time.
 - `tree-patches/`: our changes to his files, applied with `git am` (no fuzz).
-- `overlay/` and `shared.list`: new files only; the build refuses to overwrite his.
+- `overlay/`: new files only; the build refuses to overwrite his.
 - `config/`: his CI fragments for the 256 MB group are used as they are; ours follow.
 - `tools/verify-v2.sh --tree` checks the result; the build fails on any FAIL.

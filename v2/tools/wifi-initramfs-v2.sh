@@ -21,4 +21,4 @@ if [ "${V2_HEAVY_LOCK_HELD:-0}" != 1 ]; then
 fi
 available=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
 [ "$available" -ge 4194304 ] || { echo 'wifi-initramfs-v2: less than 4 GiB available' >&2; exit 1; }
-exec "$REPO/tools/wifi-initramfs.sh" "$TREE"
+exec "$REPO/v2/tools/wifi-initramfs.sh" "$TREE"

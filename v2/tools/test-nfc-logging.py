@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 
-SOURCE = Path(__file__).resolve().parents[2] / 'files/target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc'
+SOURCE = Path(__file__).resolve().parents[1] / 'overlay/target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc'
 TRANSFER = re.search(r'^xfer\(\) \{\n.*?^\}', SOURCE.read_text(), re.M | re.S).group()
 
 

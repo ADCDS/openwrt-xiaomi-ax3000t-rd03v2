@@ -1,3 +1,0 @@
-69a53506464d02eefc708e03550c28d4776600bd0e19022a812be77c0df5d186  openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2-squashfs-sysupgrade.bin
-2cf83a3fd91e4c2da4ba429092fb47b16fec531a2cd0fdd59c72e84c8341797f  openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2-squashfs-factory.ubi
-06feac8b42fd00719a3ee26794c8e5cc895b21b97120f93e08bae92cf6bedc0a  openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2-initramfs-uImage.itb

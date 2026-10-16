@@ -53,7 +53,7 @@ mkdir -p "$(dirname "$OUT")"
 STAGE=$(mktemp -d "$(dirname "$OUT")/.v2-assets.XXXXXX")
 for f in "$P-squashfs-sysupgrade.bin" "$P-initramfs-factory.ubi" "$P-initramfs-uImage.itb" "$P-initramfs-factory-wifi.ubi" "$P-initramfs-uImage-wifi.itb" config.buildinfo feeds.buildinfo version.buildinfo; do cp -p "$T/$f" "$STAGE/"; done
 awk '/^P:/ {n=substr($0,3)} /^V:/ {print n " - " substr($0,3)}' "$X/r/lib/apk/db/installed" | LC_ALL=C sort > "$STAGE/$P.manifest"
-"$REPO/tools/mknand-support.sh" "$TREE" > "$STAGE/nand-support.txt"
+"$V2/tools/mknand-support.sh" "$TREE" > "$STAGE/nand-support.txt"
 tar -C "$T" -czf "$STAGE/$P-packages-$TAG.tar.gz" --transform "s#^packages#packages-$TAG#" packages
 (cd "$STAGE" && sha256sum -- * > sha256sums.txt)
 "$V2/tools/verify-v2.sh" --release "$STAGE" --apk "$TREE/staging_dir/host/bin/apk" || die 'assembled artifacts failed verification'

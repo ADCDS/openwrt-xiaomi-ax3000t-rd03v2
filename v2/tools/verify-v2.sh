@@ -92,7 +92,7 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 	n=0; for k in "$X"/etc/apk/keys/*; do cmp -s "$k" "$V2/keys/public-key.pem" && n=$((n + 1)); done
 	chk "our key in /etc/apk/keys" "$n" 1
 	chk "no AmneziaWG files in the image" "$(find "$X" -iname '*amnezia*' | wc -l)" 0
-	# NFC (tree patch 0002 + shared.list), as tools/verify-release.sh checks it on v1.x
+	# NFC (tree patch 0002 and the overlay's nfc tool, service and config)
 	chk "nfc tool" "$(yes_ test -x "$X/usr/sbin/nfc")" yes
 	chk "nfc syntax" "$(yes_ sh -n "$X/usr/sbin/nfc")" yes
 	chk "S99nfc symlink" "$(yes_ test -L "$X/etc/rc.d/S99nfc")" yes

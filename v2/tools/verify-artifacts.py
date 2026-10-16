@@ -115,7 +115,7 @@ def verify_packages(directory, apk, keys, expected_kernel=None):
 
 
 def initramfs_file(image, name):
-    return run([REPO / 'tools/initramfs-extract.sh', image, name]).decode()
+    return run([REPO / 'v2/tools/initramfs-extract.sh', image, name]).decode()
 
 
 def verify_release(directory, apk, keys):
@@ -161,7 +161,7 @@ def verify_release(directory, apk, keys):
                 os.access(root / 'usr/sbin/i2ctransfer', os.X_OK) and
                 (root / 'etc/rc.d/S99nfc').is_symlink(), 'NFC tools and service present')
         require((root / 'usr/sbin/nfc').read_bytes() ==
-                (REPO / 'files/target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc').read_bytes(),
+                (REPO / 'v2/overlay/target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc').read_bytes(),
                 'NFC tool matches the reviewed source including private transfer errors')
         keep = root / 'lib/upgrade/keep.d/rd03v2-watchdog'
         require(keep.is_file() and keep.read_text().splitlines() == ['/etc/rd03v2-watchdog.disable'],
@@ -259,8 +259,8 @@ def verify_release(directory, apk, keys):
                 b'rd03v2_rx_diag_samples' not in modules[0].read_bytes() and
                 b'rd03v2-mon' not in modules[0].read_bytes(),
                 'permanent module excludes temporary receive diagnostics')
-        # b10d1-b10d6 were built with the private user-PD experiments in place
-        # (v2/candidates/private-userpd); their trace lines mark such a build.
+        # Diagnostic builds of an earlier round carried private user-PD experiments
+        # (never part of v2); their trace lines mark such a build.
         ahb = list((root / 'lib/modules').glob('*/ath11k_ahb.ko'))
         require(len(ahb) == 1 and b'rd03v2 userpd trace' not in ahb[0].read_bytes(),
                 'permanent module excludes the private user-PD experiments')

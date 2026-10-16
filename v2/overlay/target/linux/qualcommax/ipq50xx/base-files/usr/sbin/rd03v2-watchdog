@@ -52,7 +52,7 @@
 # (patch 960) reports them as lost and hostapd disassociates them, so they
 # rejoin with fresh keys. That needs hostapd's disassoc_low_ack, which is on
 # by default; with it off they stay associated, and a client that enforces
-# replay protection stays deaf (docs/q6-firmware-crash.md). An encrypted 802.11s
+# replay protection stays deaf. An encrypted 802.11s
 # mesh on such a radio is re-joined here instead (its wpa_supplicant interface
 # is reloaded): 960 does not cover mesh peers, and they keep the link up while
 # dropping what the radio sends.

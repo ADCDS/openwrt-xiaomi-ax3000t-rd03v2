@@ -3,8 +3,7 @@
 #
 #   v2 = kuncy7's openwrt-nss-edma release (v2/upstream.lock)
 #      + our changes to his files   (v2/tree-patches/*.patch, git am: no fuzz, fails loudly)
-#      + our new files               (v2/overlay/, copied without overwriting anything of his;
-#                                     v2/shared.list: files shared with the v1.x tree)
+#      + our new files               (v2/overlay/, copied without overwriting anything of his)
 #      + feeds pinned to commits     (v2/feeds.lock)
 #      + his CI config fragments plus ours (v2/config/), signed with our own key.
 #
@@ -34,7 +33,7 @@ NSS_MIRROR=${V2_NSS_MIRROR:-$WS/mirrors/nss-packages.git}
 die() { echo "build.sh: $*" >&2; exit 1; }
 lines() { grep -vE '^\s*(#|$)' "$1" || true; }  # a list file without comments; empty is fine
 # anchor <count> <ERE> <file>: the pattern must match exactly <count> lines, so an edit fails
-# loudly when his tree moves instead of silently doing nothing (same as ../build.sh).
+# loudly when his tree moves instead of silently doing nothing.
 anchor() {
 	local n; n=$(grep -cE -- "$2" "$3" || true)
 	[ "$n" = "$1" ] || die "anchor: '$2' matches $n lines in $3, expected $1"
@@ -69,9 +68,6 @@ copy_new() {  # copy_new <src> <dst relative to TREE>
 	mkdir -p "$(dirname "$TREE/$2")"; cp -p "$1" "$TREE/$2"
 }
 (cd "$V2/overlay" && find . -type f -printf '%P\n') | while read -r f; do copy_new "$V2/overlay/$f" "$f"; done
-lines "$V2/shared.list" | while read -r src dst; do
-	copy_new "$REPO/$src" "$dst"
-done
 if [ -n "$($G status --porcelain)" ]; then $G add -A; $G commit -q -m "rd03v2 v2 overlay"; fi
 
 # 4. feeds: his feed list, every feed pinned to a commit
@@ -82,7 +78,7 @@ anchor 1 '^src-git routing https://git.openwrt.org/feed/routing.git$' "$F"
 anchor 1 '^src-git telephony https://git.openwrt.org/feed/telephony.git$' "$F"
 anchor 1 '^src-git video https://github.com/openwrt/video.git$' "$F"
 anchor 1 '^src-git nss https://github.com/kuncy7/nss-packages.git;ipq50xx-rebase$' "$F"
-# AmneziaWG (#39): not one of his feeds. Same community feed and pin as v1.x (../build.sh).
+# AmneziaWG (#39): not one of his feeds. The same community feed and pins as v1.x.
 echo 'src-git amneziawg https://github.com/Slava-Shchipunov/awg-openwrt.git' >>"$F"
 # his nss feed branch gets rebased: build it from our mirror
 sed -i "s#^src-git nss https://github.com/kuncy7/nss-packages.git;ipq50xx-rebase\$#src-git nss $NSS_MIRROR;ipq50xx-rebase#" "$F"
@@ -100,13 +96,13 @@ done
 echo "feeds: $(grep -cE '^src-' "$F") pinned"
 python3 "$V2/tools/feed-overlay-v2.py" "$TREE"
 
-# AmneziaWG sources, pinned to commits, as in ../build.sh: the feed names Amnezia's kernel module
-# and tools by git tag only, so build them from the commits those tags pointed to, with the hash
-# of OpenWrt's source tarball of that commit. Update with ../build.sh and docs/amneziawg.md.
+# AmneziaWG sources, pinned to commits: the feed names Amnezia's kernel module and tools by git
+# tag only, so build them from the commits those tags pointed to, with the hash of OpenWrt's
+# source tarball of that commit. Update both pins together.
 awg_pin() {  # awg_pin <package> <PKG_VERSION> <commit> <source tarball sha256>
 	local mk=$TREE/feeds/amneziawg/$1/Makefile
 	anchor 1 "^PKG_VERSION:=$2\$" "$mk"
-	anchor 1 '^PKG_SOURCE_VERSION:=v\$\(PKG_VERSION\)$' "$mk"	# ERE, unlike ../build.sh
+	anchor 1 '^PKG_SOURCE_VERSION:=v\$\(PKG_VERSION\)$' "$mk"	# ERE
 	grep -q '^PKG_MIRROR_HASH:=' "$mk" && die "$mk already sets PKG_MIRROR_HASH; review the pin"
 	sed -i "s#^PKG_SOURCE_VERSION:=v\$(PKG_VERSION)\$#PKG_SOURCE_VERSION:=$3\nPKG_MIRROR_HASH:=$4#" "$mk"
 	anchor 1 "^PKG_SOURCE_VERSION:=$3\$" "$mk"

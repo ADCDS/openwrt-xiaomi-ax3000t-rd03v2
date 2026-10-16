@@ -1,4 +1,4 @@
-# The WiFi watchdog, /usr/sbin/rd03v2-watchdog (docs/q6-firmware-crash.md).
+# The WiFi watchdog, /usr/sbin/rd03v2-watchdog (v2/README.md, Wi-Fi watchdog).
 config watchdog 'main'
 	# 0 stops it (as does touching /etc/rd03v2-watchdog.disable).
 	option enabled '1'
