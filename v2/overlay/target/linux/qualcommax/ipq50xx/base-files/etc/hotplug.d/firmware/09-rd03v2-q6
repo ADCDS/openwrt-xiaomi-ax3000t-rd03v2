@@ -1,0 +1,3 @@
+#!/bin/sh
+# Firmware hotplug is dispatched by hotplug.json; remoteproc hotplug is not.
+case "${FIRMWARE:-}" in ath11k/*) timeout 10 /usr/sbin/rd03v2-q6-policy ;; esac

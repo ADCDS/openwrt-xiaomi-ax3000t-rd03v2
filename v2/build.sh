@@ -24,7 +24,9 @@ WS=${RD03V2_WS:-$(dirname "$REPO")}
 . "$V2/upstream.lock"
 TAG=${TAG:?set TAG: a release name, or DEV-<something> for a local test build}
 TREE=${TREE:-$REPO/openwrt-v2}
-JOBS=${JOBS:-$(nproc)}
+JOBS=${JOBS:-2}
+export TMPDIR=${TMPDIR:-$WS/v2-tmp}
+mkdir -p "$TMPDIR"
 KEYDIR=${V2_KEY_DIR:-$WS/keys/v2}
 DLDIR=${V2_DL:-$WS/dl-v2}
 REPO_URL=${V2_REPO_URL:-https://adcds.github.io/openwrt-xiaomi-ax3000t-rd03v2/v2/$TAG/packages.adb}
@@ -96,6 +98,7 @@ lines "$V2/feeds.lock" | while read -r name rev; do
 	[ "$(git -C "$TREE/feeds/$name" rev-parse HEAD)" = "$rev" ] || die "feeds/$name is not at $rev"
 done
 echo "feeds: $(grep -cE '^src-' "$F") pinned"
+python3 "$V2/tools/feed-overlay-v2.py" "$TREE"
 
 # AmneziaWG sources, pinned to commits, as in ../build.sh: the feed names Amnezia's kernel module
 # and tools by git tag only, so build them from the commits those tags pointed to, with the hash
@@ -115,19 +118,7 @@ awg_pin amneziawg-tools 3.1.20260812 ee0f0a9aa34ff0a0da4b3433b9512781cfe02843 \
 	0c27841a3b4860c7fd085cd627c5b0f9c25653afdaef1e73fd3e350fb3445dab
 
 # 5. package repositories baked into the image, and a release stamp
-mkdir -p "$TREE/files/etc/apk/repositories.d"
-{
-	echo "$REPO_URL"
-	for f in base luci packages routing telephony video; do
-		echo "https://downloads.openwrt.org/snapshots/packages/aarch64_cortex-a53/$f/packages.adb"
-	done
-} >"$TREE/files/etc/apk/repositories.d/distfeeds.list"
-cat >"$TREE/files/etc/rd03v2-release" <<EOF
-RD03V2_TAG='$TAG'
-RD03V2_BASE='kuncy7/openwrt-nss-edma $RELEASE $COMMIT'
-RD03V2_FEEDS_LOCK='$(sha256sum "$V2/feeds.lock" | cut -c1-16)'
-RD03V2_REPO='$REPO_URL'
-EOF
+"$V2/tools/stamp-release-v2.sh" "$TREE" "$TAG" "$REPO_URL"
 
 # 6. our signing key (package/Makefile only generates one when the file is missing)
 install -m 600 "$KEYDIR/private-key.pem" "$TREE/private-key.pem"
@@ -153,7 +144,7 @@ dropped=$(grep -E '^(CONFIG_[A-Za-z0-9_.+-]+=|# CONFIG_[A-Za-z0-9_.+-]+ is not s
 	while read -r l; do grep -qxF "$l" "$TREE/.config" || echo "$l"; done)
 [ -z "$dropped" ] || die "defconfig dropped: $dropped"
 for must in CONFIG_TARGET_DEVICE_qualcommax_ipq50xx_DEVICE_xiaomi_mi-router-ax3000t-v2=y \
-	CONFIG_ATH11K_MEM_PROFILE_256M=y CONFIG_NSS_MEM_PROFILE_LOW=y CONFIG_ATH11K_NSS_SUPPORT=y \
+	CONFIG_ATH11K_MEM_PROFILE_256M=y CONFIG_NSS_MEM_PROFILE_LOW=y CONFIG_ATH11K_NSS_SUPPORT=y CONFIG_ATH11K_NSS_MEM_PROFILE_256M=y \
 	CONFIG_NSS_FIRMWARE_VERSION_12_2=y; do
 	grep -qxF "$must" "$TREE/.config" || die ".config lacks $must"
 done
@@ -163,29 +154,5 @@ echo "config: $(wc -l <"$TREE/diffconfig.txt") diffconfig lines"
 
 [ "${PREPARE_ONLY:-0}" = 1 ] && { echo "PREPARE_ONLY: stopping before make"; exit 0; }
 
-# 8. build
-rm -rf "$TREE/dl"; mkdir -p "$DLDIR"; ln -s "$DLDIR" "$TREE/dl"
-for i in 1 2 3; do (cd "$TREE" && make download -j8 >"$TREE/download.log" 2>&1) && break; done ||
-	die "make download failed (see $TREE/download.log)"
-start=$(date +%s)
-(cd "$TREE" && nice make -j"$JOBS" BUILD_LOG=1 >"$TREE/build.log" 2>&1) || die "make failed (see $TREE/build.log, logs/)"
-echo "build: $(( $(date +%s) - start )) s"
-
-# 9. the repository: packages of feeds outside the official ones land outside the target dir
-# (his CI copies luci-app-nss the same way); the target dir is what gets indexed and published
-T=$TREE/bin/targets/qualcommax/ipq50xx
-# The packages 95-rd03v2-apk-pins pins (his changes without a version bump) go in as well, so
-# the exact pinned versions stay installable from our repository.
-PINS=$(sed -n "s/^PINS='\(.*\)'\$/\1/p" "$V2/overlay/target/linux/qualcommax/ipq50xx/base-files/etc/uci-defaults/95-rd03v2-apk-pins")
-[ -n "$PINS" ] || die "cannot read PINS from 95-rd03v2-apk-pins"
-for p in luci-app-nss amneziawg-tools luci-proto-amneziawg $PINS; do
-	a=("$T"/packages/"$p"-[0-9]*.apk)
-	[ ${#a[@]} = 0 ] || continue		# a target package already
-	a=("$TREE"/bin/packages/*/*/"$p"-[0-9]*.apk)
-	[ ${#a[@]} = 1 ] || die "expected one $p package, found ${#a[@]}"
-	cp -p "${a[0]}" "$T/packages/"
-done
-(cd "$TREE" && make package/index >"$TREE/index.log" 2>&1) || die "make package/index failed"
-
-# 10. check what we built
-"$V2/tools/verify-v2.sh" --tree "$TREE"
+# 8-10. This helper also resumes a PREPARE_ONLY tree without destroying it.
+exec "$V2/tools/finish-build-v2.sh" "$TREE"

@@ -1,0 +1,95 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: trace direct user-PD power transitions
+
+Diagnostic only. Record the direct AHB user-PD handshake and SCM boundary so
+the IPQ5018 root-Q6 fatal caused by simulate_fw_crash=hw-restart can be placed
+before or after the stop acknowledgement and internal-radio power calls.
+This patch is not part of the sealed image series.
+---
+--- a/drivers/net/wireless/ath/ath11k/ahb.c
++++ b/drivers/net/wireless/ath/ath11k/ahb.c
+@@ -451,16 +451,24 @@
+ 	unsigned long time_left;
+ 	int ret;
+ 
++	ath11k_info(ab, "rd03v2 userpd trace: power-up begin id=%d spawn_done=%d ready_done=%d\n",
++		    ab_ahb->userpd_id, completion_done(&ab_ahb->userpd_spawned),
++		    completion_done(&ab_ahb->userpd_ready));
++
+ 	if (ab->hw_rev == ATH11K_HW_IPQ5018_HW10) {
++		ath11k_info(ab, "rd03v2 userpd trace: SCM power-on begin\n");
+ 		ret = qcom_scm_pas_set_wifi_power_mode(MPD_WCNSS_PAS_ID, true);
++		ath11k_info(ab, "rd03v2 userpd trace: SCM power-on end ret=%d\n", ret);
+ 		if (ret) {
+ 			ath11k_err(ab, "failed to power up wifi: %d\n", ret);
+ 			return ret;
+ 		}
+ 	}
+ 
++	ath11k_info(ab, "rd03v2 userpd trace: spawn request assert\n");
+ 	ret = qcom_smem_state_update_bits(ab_ahb->spawn_state, BIT(ab_ahb->spawn_bit),
+ 					  BIT(ab_ahb->spawn_bit));
++	ath11k_info(ab, "rd03v2 userpd trace: spawn request result=%d\n", ret);
+ 	if (ret) {
+ 		ath11k_err(ab, "Failed to update spawn state %d\n", ret);
+ 		return ret;
+@@ -468,6 +476,8 @@
+ 
+ 	time_left = wait_for_completion_timeout(&ab_ahb->userpd_spawned,
+ 						ATH11K_USERPD_SPAWN_TIMEOUT);
++	ath11k_info(ab, "rd03v2 userpd trace: spawn wait end remaining=%lu\n",
++		    time_left);
+ 	if (!time_left) {
+ 		ath11k_err(ab, "UserPD spawn wait timed out\n");
+ 		return -ETIMEDOUT;
+@@ -475,6 +485,8 @@
+ 
+ 	time_left = wait_for_completion_timeout(&ab_ahb->userpd_ready,
+ 						ATH11K_USERPD_READY_TIMEOUT);
++	ath11k_info(ab, "rd03v2 userpd trace: ready wait end remaining=%lu\n",
++		    time_left);
+ 	if (!time_left) {
+ 		ath11k_err(ab, "UserPD ready wait timed out\n");
+ 		return -ETIMEDOUT;
+@@ -483,6 +495,7 @@
+ 	qcom_smem_state_update_bits(ab_ahb->spawn_state, BIT(ab_ahb->spawn_bit), 0);
+ 
+ 	ath11k_dbg(ab, ATH11K_DBG_AHB, "UserPD%d is now UP\n", ab_ahb->userpd_id);
++	ath11k_info(ab, "rd03v2 userpd trace: power-up complete id=%d\n", ab_ahb->userpd_id);
+ 
+ 	return 0;
+ }
+@@ -509,19 +522,31 @@
+ {
+ 	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+ 	unsigned long time_left;
++	int ret;
+ 
++	ath11k_info(ab, "rd03v2 userpd trace: power-down begin id=%d stop_done=%d\n",
++		    ab_ahb->userpd_id, completion_done(&ab_ahb->userpd_stopped));
++	ath11k_info(ab, "rd03v2 userpd trace: stop request assert\n");
+ 	qcom_smem_state_update_bits(ab_ahb->stop_state, BIT(ab_ahb->stop_bit),
+ 				    BIT(ab_ahb->stop_bit));
+ 
+ 	time_left = wait_for_completion_timeout(&ab_ahb->userpd_stopped,
+ 						ATH11K_USERPD_STOP_TIMEOUT);
++	ath11k_info(ab, "rd03v2 userpd trace: stop wait end remaining=%lu\n",
++		    time_left);
+ 	if (!time_left)
+ 		ath11k_warn(ab, "UserPD stop wait timed out\n");
+ 
+ 	qcom_smem_state_update_bits(ab_ahb->stop_state, BIT(ab_ahb->stop_bit), 0);
++	ath11k_info(ab, "rd03v2 userpd trace: stop request cleared\n");
+ 
+-	if (ab->hw_rev == ATH11K_HW_IPQ5018_HW10)
+-		qcom_scm_pas_set_wifi_power_mode(MPD_WCNSS_PAS_ID, false);
++	if (ab->hw_rev == ATH11K_HW_IPQ5018_HW10) {
++		ath11k_info(ab, "rd03v2 userpd trace: SCM power-off begin\n");
++		ret = qcom_scm_pas_set_wifi_power_mode(MPD_WCNSS_PAS_ID, false);
++		ath11k_info(ab, "rd03v2 userpd trace: SCM power-off end ret=%d\n", ret);
++	}
++	ath11k_info(ab, "rd03v2 userpd trace: power-down complete id=%d\n",
++		    ab_ahb->userpd_id);
+ }
+ 
+ static void ath11k_ahb_power_down(struct ath11k_base *ab, bool is_suspend)

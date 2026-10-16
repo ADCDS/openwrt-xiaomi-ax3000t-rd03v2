@@ -1,0 +1,4 @@
+#!/bin/sh /etc/rc.common
+START=18
+start() { /usr/sbin/rd03v2-q6-policy; }
+reload() { start; }

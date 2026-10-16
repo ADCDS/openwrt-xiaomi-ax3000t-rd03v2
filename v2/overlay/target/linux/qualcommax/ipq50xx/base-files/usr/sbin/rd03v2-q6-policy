@@ -1,0 +1,26 @@
+#!/bin/sh
+# Apply the Q6 dump policy before ath11k probes. ROOT is for the test harness.
+set -u
+R=${ROOT:-}
+SYS=$R/sys
+STATE=$R/tmp/rd03v2-watchdog
+log() { logger -t rd03v2-q6 "$*"; }
+policy=$(uci -q get rd03v2-q6.main.coredump 2>/dev/null) || policy=disabled
+case "$policy" in disabled|inline) ;; *) log "invalid coredump policy: $policy"; exit 2 ;; esac
+rproc=''
+for p in "$SYS"/class/remoteproc/remoteproc*; do
+	[ "$(cat "$p/name" 2>/dev/null)" = q6wcss ] && { rproc=$p; break; }
+done
+[ -n "$rproc" ] || { log 'q6wcss not registered yet'; exit 1; }
+mkdir -p "$STATE" || exit 1
+# Seed before the first ath11k probe, once per boot, not at watchdog arm.
+if [ ! -e "$STATE/q6-cursor" ]; then
+	cut -d' ' -f1 "$R/proc/uptime" > "$STATE/q6-cursor"
+fi
+current=$(cat "$rproc/coredump" 2>/dev/null) || exit 1
+[ "$current" = "$policy" ] && exit 0
+printf '%s\n' "$policy" > "$rproc/coredump" 2>/dev/null || {
+	log "cannot set $rproc/coredump (state=$(cat "$rproc/state" 2>/dev/null))"; exit 1;
+}
+[ "$(cat "$rproc/coredump")" = "$policy" ] || { log 'coredump policy readback failed'; exit 1; }
+log "q6wcss coredump=$policy"

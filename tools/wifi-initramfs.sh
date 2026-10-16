@@ -38,7 +38,8 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FRAGMENT="$REPO/tools/installer-wifi.rc.local"
+FRAGMENT=${WIFI_FRAGMENT:-$REPO/tools/installer-wifi.rc.local}
+JOBS=${JOBS:-2}
 EXTRACT="$REPO/tools/initramfs-extract.sh"
 
 TREE="${1:-${TREE:-}}"
@@ -47,7 +48,7 @@ TREE="$(cd "$TREE" && pwd)"
 
 T=bin/targets/qualcommax/ipq50xx
 PREFIX=openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2
-RCL=target/linux/qualcommax/ipq50xx/base-files/etc/rc.local
+RCL=${WIFI_RCL:-target/linux/qualcommax/ipq50xx/base-files/etc/rc.local}
 STASH="$TREE/.wifi-pass-stash"
 
 # The functional payload of the fragment, not one of its comments: if someone
@@ -58,6 +59,8 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 [ -f "$FRAGMENT" ] || die "missing $FRAGMENT"
 [ -x "$EXTRACT" ]  || die "missing or non-executable $EXTRACT"
+case "$JOBS" in 1|2) ;; *) die "JOBS must be 1 or 2" ;; esac
+case "$RCL" in /*|../*|*/../*|*/..) die "WIFI_RCL must name a file within the tree" ;; esac
 [ -f "$TREE/$RCL" ] || die "$TREE: no $RCL — is this a tree built by build.sh?"
 for i in initramfs-uImage.itb initramfs-factory.ubi; do
 	[ -f "$TREE/$T/$PREFIX-$i" ] || die "$TREE: missing $PREFIX-$i — build the tree first"
@@ -68,7 +71,19 @@ done
 
 # ---------------------------------------------------------------- 0. baseline
 echo ">>> baseline: reading /etc/rc.local out of the non-wifi initramfs"
-BEFORE_RCL=$(mktemp); trap 'rm -f "$BEFORE_RCL"' EXIT
+BEFORE_RCL=$(mktemp)
+AFTER_RCL= WIFI_TMP= RESTORE_NEEDED=0
+cleanup() {
+	local status=$?
+	trap - EXIT
+	if [ "$RESTORE_NEEDED" = 1 ]; then
+		restore || status=1
+	fi
+	rm -f "$BEFORE_RCL" "${AFTER_RCL:-}"
+	[ -z "$WIFI_TMP" ] || rm -rf "$WIFI_TMP"
+	exit "$status"
+}
+trap cleanup EXIT
 "$EXTRACT" "$TREE/$T/$PREFIX-initramfs-uImage.itb" etc/rc.local > "$BEFORE_RCL" \
 	|| die "could not read etc/rc.local out of the existing initramfs"
 if grep -q "$MARKER" "$BEFORE_RCL"; then
@@ -85,28 +100,29 @@ echo "    kernel $BEFORE_KVER"
 # the non-wifi build by exactly the two extra artifacts and nothing else.
 echo ">>> stashing the non-wifi artifacts"
 mkdir -p "$STASH/top" "$STASH/pkgs"
-find "$TREE/$T" -maxdepth 1 -type f -exec cp -a {} "$STASH/top/" \;
-find "$TREE/$T/packages" -maxdepth 1 -type f ! -name '*.apk' -exec cp -a {} "$STASH/pkgs/" \; 2>/dev/null || true
-cp -a "$TREE/$T/packages/"base-files-*.apk "$STASH/pkgs/" 2>/dev/null || true
+find "$TREE/$T" -maxdepth 1 -type f -exec cp -a -t "$STASH/top" {} +
+find "$TREE/$T/packages" -maxdepth 1 -type f \( ! -name '*.apk' -o -name 'base-files-*.apk' -o -name 'kernel-*.apk' \) -exec cp -a -t "$STASH/pkgs" {} +
+(cd "$TREE/$T/packages" && find . -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum) > "$STASH/packages.sha256"
 if [ -d "$TREE/staging_dir/packages/qualcommax" ]; then
 	cp -a "$TREE/staging_dir/packages/qualcommax" "$STASH/merged"
 fi
 cp -a "$TREE/$RCL" "$STASH/rc.local.orig"
+RESTORE_NEEDED=1
 
-# Must always succeed: every caller is "restore; die <why>", and a restore that
-# returned non-zero under set -e would swallow the message explaining what went
-# wrong.
+# Keep the stash on any error, including an incomplete restoration.
 restore() {
 	echo ">>> restoring the tree to its non-wifi state"
-	cp -a "$STASH/rc.local.orig" "$TREE/$RCL"
-	cp -a "$STASH/top/." "$TREE/$T/"
+	cp -a "$STASH/rc.local.orig" "$TREE/$RCL" || return 1
+	cp -a "$STASH/top/." "$TREE/$T/" || return 1
+	find "$TREE/$T/packages" -maxdepth 1 -type f \( -name 'base-files-*.apk' -o -name 'kernel-*.apk' \) -delete || return 1
 	if [ -n "$(ls -A "$STASH/pkgs" 2>/dev/null)" ]; then
-		cp -a "$STASH/pkgs/." "$TREE/$T/packages/"
+		cp -a "$STASH/pkgs/." "$TREE/$T/packages/" || return 1
 	fi
 	if [ -d "$STASH/merged" ]; then
-		rm -rf "$TREE/staging_dir/packages/qualcommax"
-		cp -a "$STASH/merged" "$TREE/staging_dir/packages/qualcommax"
+		rm -rf "$TREE/staging_dir/packages/qualcommax" || return 1
+		cp -a "$STASH/merged" "$TREE/staging_dir/packages/qualcommax" || return 1
 	fi
+	RESTORE_NEEDED=0
 	return 0
 }
 
@@ -157,9 +173,9 @@ echo ">>> re-running the image step (base-files -> rootfs -> images)"
 	cd "$TREE" || exit 1
 	rm -f staging_dir/target-*/stamp/.package_install staging_dir/target-*/stamp/.target_install
 	make package/base-files/clean          || exit 1
-	make -j"$(nproc)" package/base-files/compile || exit 1
-	make -j"$(nproc)" package/install      || exit 1
-	make -j"$(nproc)" target/install       || exit 1
+	make -j"$JOBS" package/base-files/compile || exit 1
+	make -j"$JOBS" package/install      || exit 1
+	make -j"$JOBS" target/install       || exit 1
 ) || { restore; die "the image step failed"; }
 
 # ------------------------------------------------------------------ 4. verify
@@ -200,6 +216,10 @@ rmdir "$WIFI_TMP"
 # now holds a squashfs from one pass and an initramfs from another.
 NOW_SUM=$(sha256sum <"$TREE/$T/$PREFIX-initramfs-uImage.itb" | cut -d' ' -f1)
 [ "$NOW_SUM" = "$BEFORE_SUM" ] || die "restore did not put the non-wifi initramfs back (stash left at $STASH)"
+(cd "$TREE/$T/packages" && find . -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum) > "$STASH/packages-restored.sha256"
+cmp -s "$STASH/packages.sha256" "$STASH/packages-restored.sha256" \
+	|| die "package/index bytes changed after restore (stash left at $STASH)"
+cmp -s "$STASH/rc.local.orig" "$TREE/$RCL" || die "rc.local restoration failed (stash left at $STASH)"
 rm -rf "$STASH"
 
 echo

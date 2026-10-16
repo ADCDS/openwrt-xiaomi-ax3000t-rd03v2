@@ -9,6 +9,10 @@
 # the image pins (95-rd03v2-apk-pins). Userspace otherwise comes from OpenWrt's snapshot feeds.
 # GitHub Pages sites are limited to 1 GB; `du` below shows what each release costs.
 set -euo pipefail
+LOCAL_DIR=''
+if [ "${1:-}" = --local-dir ]; then
+	LOCAL_DIR=$(realpath -m "${2:?set a local web root}"); shift 2
+fi
 TREE=$(cd "${1:?usage: $0 <finished v2 build tree> [pages worktree]}" && pwd)
 cd "$(dirname "$0")/../.."
 REPO=$PWD V2=$PWD/v2
@@ -17,15 +21,30 @@ T=$TREE/bin/targets/qualcommax/ipq50xx
 P=openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2
 die() { echo "publish-repo: $*" >&2; exit 1; }
 
-X=$(mktemp -d); trap 'rm -rf "$X"' EXIT
+X=$(mktemp -d); STAGE=''
+cleanup() { rm -rf "$X"; [ -z "$STAGE" ] || rm -rf "$STAGE"; }
+trap cleanup EXIT
 tar -xOf "$T/$P-squashfs-sysupgrade.bin" --wildcards 'sysupgrade-*/root' > "$X/root.sqfs"
 unsquashfs -q -d "$X/r" "$X/root.sqfs" etc/rd03v2-release >/dev/null 2>&1 || :
 [ -f "$X/r/etc/rd03v2-release" ] || die "no /etc/rd03v2-release in the sysupgrade image"
 . "$X/r/etc/rd03v2-release"
 TAG=$RD03V2_TAG
-case "$TAG" in DEV-*|'') die "the image is a development build ($TAG)";; esac
+case "$TAG" in '') die 'empty release tag';; DEV-*) [ -n "$LOCAL_DIR" ] || die "development build ($TAG)";; esac
 "$TREE/staging_dir/host/bin/apk" verify --keys-dir "$V2/keys" "$T/packages/packages.adb" >/dev/null 2>&1 ||
 	die "the package index does not verify against v2/keys/public-key.pem"
+if [ -n "$LOCAL_DIR" ]; then
+	python3 "$V2/tools/verify-artifacts.py" --packages "$T/packages" --apk "$TREE/staging_dir/host/bin/apk" > "$X/packages-check.txt" ||
+		die 'package verification failed'
+	case "$TAG" in *[!A-Za-z0-9._-]*) die 'unsafe tag';; esac
+	mkdir -p "$LOCAL_DIR/v2"
+	D=$LOCAL_DIR/v2/$TAG
+	[ ! -e "$D" ] || die "$D exists; repositories are immutable"
+	STAGE=$(mktemp -d "$LOCAL_DIR/v2/.stage.XXXXXX")
+	cp -p "$T"/packages/*.apk "$T/packages/packages.adb" "$STAGE/"
+	mv -T "$STAGE" "$D"; STAGE=''
+	echo "publish-repo: local files staged in $D; no git operation or publication"
+	exit 0
+fi
 
 # a local gh-pages worktree; the branch is created (orphan) the first time, locally only
 if [ ! -d "$WT" ]; then

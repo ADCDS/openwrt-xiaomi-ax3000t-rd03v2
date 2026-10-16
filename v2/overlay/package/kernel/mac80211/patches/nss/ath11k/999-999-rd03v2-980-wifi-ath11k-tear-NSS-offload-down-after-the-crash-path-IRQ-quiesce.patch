@@ -1,0 +1,41 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: tear NSS offload down after the crash-path IRQ quiesce
+
+The NSS series inserts ath11k_nss_teardown() at the top of
+ath11k_core_reconfigure_on_crash(). The same function disables the host
+datapath/CE interrupts on the firmware crash path further down, so the
+offload was released while ring and CE handlers could still run. Move
+the teardown after the quiesce.
+
+From v1.x of this port (999-998-rd03v2-nss-teardown-after-irq-quiesce);
+kuncy7/openwrt-nss-edma carries it as 999-977 since ipq50xx-2026.10.12.
+
+Signed-off-by: Adriel Santos <adriel@adriel.eu>
+---
+--- a/drivers/net/wireless/ath/ath11k/core.c
++++ b/drivers/net/wireless/ath/ath11k/core.c
+@@ -2458,9 +2458,6 @@ static int ath11k_core_reconfigure_on_crash(struct ath11k_base *ab)
+ 
+ 	mutex_lock(&ab->core_lock);
+ 
+-	ath11k_nss_teardown(ab);
+-	ab->nss.enabled = false;
+-
+ 	ath11k_thermal_unregister(ab);
+ 
+ 	/*
+@@ -2472,6 +2469,14 @@ static int ath11k_core_reconfigure_on_crash(struct ath11k_base *ab)
+ 		ath11k_hif_ce_irq_disable(ab);
+ 	}
+ 
++	/*
++	 * Tear the NSS offload down only once the host datapath interrupts are
++	 * quiesced (above), so no ring/CE handler can run against state the
++	 * teardown is releasing.
++	 */
++	ath11k_nss_teardown(ab);
++	ab->nss.enabled = false;
++
+ 	ath11k_dp_pdev_free(ab);
+ 	ath11k_spectral_deinit(ab);
+ 	ath11k_ce_cleanup_pipes(ab);

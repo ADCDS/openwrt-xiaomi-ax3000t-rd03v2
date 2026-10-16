@@ -1,0 +1,54 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: report in-flight TX frames when the datapath is freed
+
+ath11k_dp_free() releases the frames still queued on the host TX rings with
+dev_kfree_skb_any(). mac80211 never hears about them, so a frame whose sender
+waits for its TX status (control-port or nl80211 TX with a wait,
+SO_WIFI_STATUS) keeps its entry in local->ack_status_frames, and the driver
+unload after a firmware crash ends in
+
+  Have pending ack frames!
+  WARNING: ... at net/mac80211/main.c:1716 ieee80211_free_ack_frame
+    ieee80211_free_hw <- ath11k_mac_destroy <- ath11k_core_deinit
+    <- ath11k_ahb_remove
+
+Report them with ieee80211_free_txskb() instead, as the TX completion path
+already does for the frames it drops. ath11k_dp_free() runs before
+ath11k_mac_destroy(), so the hw is still allocated, and on the crash-recovery
+path it is still registered.
+
+Measured on the RD03v2 bench (IPQ5018 + QCN6122, host-mode Wi-Fi): a Q6
+assert followed by the watchdog's driver reload produced the warning on every
+run; a healthy wifi down plus rmmod/modprobe produced none. This replaces an
+earlier candidate that released the entries in mac80211 itself
+(v2/candidates/private-userpd/).
+
+Signed-off-by: Adriel Santos <adriel@adriel.eu>
+---
+--- a/drivers/net/wireless/ath/ath11k/dp.c
++++ b/drivers/net/wireless/ath/ath11k/dp.c
+@@ -1067,11 +1067,21 @@ void ath11k_dp_vdev_tx_attach(struct ath11k *ar, struct ath11k_vif *arvif)
+ static int ath11k_dp_tx_pending_cleanup(struct ath11k_base *ab, void *skb)
+ {
+ 	struct sk_buff *msdu = skb;
++	struct ath11k_skb_cb *skb_cb = ATH11K_SKB_CB(msdu);
+ 
+-	dma_unmap_single(ab->dev, ATH11K_SKB_CB(msdu)->paddr, msdu->len,
+-			 DMA_TO_DEVICE);
++	dma_unmap_single(ab->dev, skb_cb->paddr, msdu->len, DMA_TO_DEVICE);
+ 
+-	dev_kfree_skb_any(msdu);
++	/*
++	 * These frames were still in flight when the firmware went away. Hand
++	 * them back to mac80211 as dropped instead of freeing them here: a
++	 * frame whose sender waits for its TX status stays in mac80211's
++	 * ack_status_frames until it is reported, and ieee80211_free_hw()
++	 * warns about every one left ("Have pending ack frames!").
++	 */
++	if (skb_cb->ar)
++		ieee80211_free_txskb(skb_cb->ar->hw, msdu);
++	else
++		dev_kfree_skb_any(msdu);
+ 
+ 	return 0;
+ }

@@ -6,6 +6,10 @@
 # a staging directory of the tree: that is what gets flashed.
 set -u
 MODE=${1:-}; TREE=${2:-}
+case "$MODE" in
+	--release|--published|--device|--packages)
+		exec python3 "$(dirname "$0")/verify-artifacts.py" "$@" ;;
+esac
 [ "$MODE" = --tree ] && [ -d "$TREE" ] || { echo "usage: verify-v2.sh --tree <dir>"; exit 2; }
 TREE=$(cd "$TREE" && pwd)
 V2=$(cd "$(dirname "$0")/.." && pwd); . "$V2/upstream.lock"
@@ -31,10 +35,11 @@ done
 grep -vE '^\s*(#|$)' "$V2/feeds.lock" | while read -r name rev; do
 	[ "$(git -C "$TREE/feeds/$name" rev-parse HEAD 2>/dev/null)" = "$rev" ] && echo "PASS feed $name" || echo "FAIL feed $name"
 done > "$W/feeds"; cat "$W/feeds"; fail=$((fail + $(grep -c '^FAIL' "$W/feeds")))
+chk "pinned NSS feed overlay and package release" "$(yes_ python3 "$V2/tools/feed-overlay-v2.py" --check "$TREE")" yes
 
 echo "=== configuration"
 chk "one device in .config" "$(grep -c '^CONFIG_TARGET_DEVICE_.*=y' "$TREE/.config")" 1
-for c in CONFIG_ATH11K_MEM_PROFILE_256M=y CONFIG_NSS_MEM_PROFILE_LOW=y CONFIG_ATH11K_NSS_SUPPORT=y \
+for c in CONFIG_ATH11K_MEM_PROFILE_256M=y CONFIG_NSS_MEM_PROFILE_LOW=y CONFIG_ATH11K_NSS_SUPPORT=y CONFIG_ATH11K_NSS_MEM_PROFILE_256M=y \
 	CONFIG_NSS_FIRMWARE_VERSION_12_2=y; do
 	chk "$c" "$(grep -cxF "$c" "$TREE/.config")" 1
 done
@@ -95,7 +100,15 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 	chk "nfc default mode" "$(grep -hE '^[[:space:]]*option mode' "$X/etc/config/nfc" 2>/dev/null)" "	option mode 'clear'"
 	# tree patch 0003: every PPPoE session made again once the NSS PPPoE manager is resident
 	chk "nss-dwmac-up re-dials every PPPoE interface (0003)" \
-		"$(grep -cF '@.interface[@.proto="pppoe" && @.up=true]' "$X/usr/sbin/nss-dwmac-up" 2>/dev/null)" 1
+		"$(grep -cF '@.interface[@.proto="pppoe"].interface' "$X/usr/sbin/nss-dwmac-up" 2>/dev/null)" 1
+	chk "PPPoE re-dial honors pppname" "$(grep -cF 'network.$_i.pppname' "$X/usr/sbin/nss-dwmac-up")" 1
+	chk "Q6 policy before NSS probe" "$(grep -cF '/usr/sbin/rd03v2-q6-policy' "$X/usr/sbin/nss-dwmac-up")" 1
+	chk "RD03v2 keeps basic station statistics by default (0005)" \
+		"$(grep -cF 'stats_disable_default=0' "$X/etc/init.d/qca-nss-pbuf")" 1
+	chk "statistics policy preserves explicit UCI override" \
+		"$(grep -cF 'config_get stats_disable opt stats_disable "$stats_disable_default"' "$X/etc/init.d/qca-nss-pbuf")" 1
+	chk "early Q6 policy service" "$(yes_ test -L "$X/etc/rc.d/S18rd03v2-q6")" yes
+	chk "early RAM installer service" "$(yes_ test -L "$X/etc/rc.d/S17rd03v2-installer")" yes
 	# B10/B11 first-boot scripts
 	for u in 00-rd03v2-migrate-v1x 95-rd03v2-apk-pins; do
 		chk "uci-defaults $u" "$(yes_ sh -n "$X/etc/uci-defaults/$u")" yes
@@ -109,9 +122,15 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 	done
 	# the Wi-Fi watchdog (B9): its --check scenarios, with this image's uci and jsonfilter
 	# (the image's copy is the overlay's, checked above), and dry run on by default
-	chk "watchdog ships in dry run" "$(grep -cE "^[[:space:]]*option dryrun '1'" "$X/etc/config/rd03v2-watchdog" 2>/dev/null)" 1
+	chk "watchdog default matches the reviewed overlay" \
+		"$(yes_ cmp "$X/etc/config/rd03v2-watchdog" "$OV/target/linux/qualcommax/ipq50xx/base-files/etc/config/rd03v2-watchdog")" yes
 	"$V2/tools/test-watchdog.sh" --env host --rootfs "$X" > "$W/watchdog-tests" 2>&1
+	cp "$W/watchdog-tests" "$TREE/watchdog-host-tests.log"
 	chk "watchdog --check scenarios" "$(tail -1 "$W/watchdog-tests" | grep -cE '^ *[0-9]+ passed, 0 failed$')" 1
+	python3 "$V2/tools/test-watchdog-init.py" --init "$X/etc/init.d/rd03v2-watchdog" > "$W/watchdog-init-tests" 2>&1
+	init_status=$?
+	cp "$W/watchdog-init-tests" "$TREE/watchdog-init-host-tests.log"
+	chk "watchdog init lifecycle scenarios" "$init_status" 0
 	# UK 5.8 GHz band (964): its one-entry table compiles to immediates, the "GB" compare
 	# (0x4247) and the low half of 5725000 kHz (0x5b48)
 	od=$(ls "$TREE"/staging_dir/toolchain-*/bin/*-linux-musl-objdump 2>/dev/null | head -1)
@@ -166,6 +185,11 @@ for p in "$OV"/target/linux/qualcommax/patches-6.18/*.patch; do
 	[ -e "$p" ] || continue
 	chk "kernel $(basename "$p")" "$([ -n "$LX" ] && fp "$p" "$LX/drivers" || echo no)" yes
 done
+if [ -n "$BP" ]; then
+	python3 "$V2/tools/check-host-rx.py" "$BP/drivers/net/wireless/ath/ath11k" > "$W/host-rx" 2>&1
+	cat "$W/host-rx"
+	chk "host RX buffer byte semantics" "$(grep -c '^FAIL' "$W/host-rx")" 0
+fi
 
 echo "=== package repository"
 chk "package index" "$(ls "$T/packages/packages.adb" 2>/dev/null | wc -l)" 1
@@ -173,7 +197,8 @@ chk "package index" "$(ls "$T/packages/packages.adb" 2>/dev/null | wc -l)" 1
 # reads --keys-dir relative to its root, so both paths are absolute
 chk "package index signed with our key" \
 	"$("$TREE/staging_dir/host/bin/apk" verify --keys-dir "$V2/keys" "$T/packages/packages.adb" 2>&1 | sed 's/.*: //')" OK
-for n in kmod-wireguard luci-app-nss kmod-amneziawg amneziawg-tools luci-proto-amneziawg; do
+for n in kmod-wireguard luci-app-nss kmod-amneziawg amneziawg-tools luci-proto-amneziawg \
+         wireguard-tools luci-proto-wireguard luci-app-sqm luci-lib-uqr resolveip; do
 	chk "repo has $n" "$(ls "$T/packages/$n"-[0-9]*.apk 2>/dev/null | wc -l)" 1
 done
 # the pinned packages, in exactly the image's versions
@@ -182,5 +207,8 @@ for n in $(sed -n "s/^PINS='\(.*\)'\$/\1/p" "$OV/target/linux/qualcommax/ipq50xx
 	chk "repo has pinned $n $v" "$(ls "$T/packages/$n-$v.apk" 2>/dev/null | wc -l)" 1
 done
 k=$(ls "$T"/packages/kernel-*.apk 2>/dev/null | head -1); echo "INFO kernel package: $(basename "${k:-none}")"
+python3 "$V2/tools/verify-artifacts.py" --packages "$T/packages" --apk "$TREE/staging_dir/host/bin/apk" > "$W/package-deps" 2>&1
+chk "all package signatures and exact kmod kernel dependencies" "$?" 0
+if grep -q '^FAIL' "$W/package-deps"; then tail -5 "$W/package-deps"; fi
 echo "verify-v2: $fail failure(s)"
 exit $fail

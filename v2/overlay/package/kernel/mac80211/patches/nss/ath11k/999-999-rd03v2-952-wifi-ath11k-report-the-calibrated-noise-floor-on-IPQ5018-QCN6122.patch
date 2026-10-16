@@ -2,23 +2,32 @@ From: openwrt-xiaomi-ax3000t-rd03v2 port
 Subject: [PATCH] wifi: ath11k: report the calibrated noise floor on IPQ5018+QCN6122
 
 The WLAN.HK.2.7.0.1 firmware used with the multi-PD IPQ5018+QCN6122
-combination reports a raw, uncalibrated runtime noise floor: the survey
-of the Xiaomi AX3000T v2's 5 GHz radio reads -114 dBm, which is
-physically impossible.
+combination puts a raw noise floor in its BSS channel info event, which
+ath11k reports as the survey noise: the Xiaomi AX3000T v2's 5 GHz radio
+reads -111 to -114 dBm there, which is physically impossible (the
+firmware's own channel noise floor in its pdev statistics reads -92).
 
 Implement the WMI_PDEV_GET_NFCAL_POWER_CMDID exchange (the command and
 the NFCAL_POWER_ALL_CHANNELS event were already enumerated but unused;
 the firmware answers with per-frequency calibrated nfdBr/nfdBm pairs),
-and report the calibrated per-channel NF dBm (-99 on 2.4, ~-90 on 5 GHz
-on this board) as the survey noise floor instead of the firmware's raw
-runtime value. The query is refreshed opportunistically (rate-limited)
-from get_survey/sta_statistics.
+and report the calibrated per-channel NF dBm (-98/-96 on 2.4, -91 on
+5 GHz on this board) as the survey noise floor instead of the firmware's
+raw value. The query is refreshed opportunistically (rate-limited) from
+get_survey/sta_statistics.
 
 This is the noise-floor half of the v1.x port's 952. Its rx signal
-offsets (+31 dB IPQ5018, +24 dB QCN6122) are left out: with NSS Wi-Fi
-offload the station signal is already reported in dBm (AP -47 vs client
--49 dBm on 5 GHz, -34 vs -26 dBm on 2.4 GHz, bench 2026-10-10), and the
-offset made it read +1..+11 dBm.
+offsets (+31 dB IPQ5018, +24 dB QCN6122) are not carried. They were
+measured with the generic IPQ5018 board-id 255 board file and a QCN6122
+board file from another device, which put the firmware's RSSI that far
+below dBm. With this board's own calibration (the native board files v1.x
+ships since v1.2 for QCN6122 and v1.10 for IPQ5018, byte-identical to the
+payloads this tree loads), ath11k's conversion (rssi + -95, the firmware
+does not offer DB2DBM) already gives dBm: for the same client and frame
+rate the station signal and the management-frame signal (probe, auth and
+assoc, as hostapd sees them; scan results come from the same event) agree
+within 2 dB, the same in host and NSS Wi-Fi modes, and 5 GHz is
+reciprocal with an independent receiver within 3 dB. The offsets made
+v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
 ---
 --- a/drivers/net/wireless/ath/ath11k/core.h
 +++ b/drivers/net/wireless/ath/ath11k/core.h

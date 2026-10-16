@@ -1,6 +1,7 @@
 # RD03v2 v2: kuncy7's NSS tree plus this port's extras
 
-**Status: in development, not released.** Nothing here is published yet.
+**Status: release candidate, not published.** What was tested on hardware, and what was
+not, is in [VALIDATION.md](VALIDATION.md).
 
 v2 builds the Xiaomi AX3000T v2 (RD03v2) image from a pinned release of
 [kuncy7/openwrt-nss-edma](https://github.com/kuncy7/openwrt-nss-edma) instead of this
@@ -14,7 +15,7 @@ commit, and our changes are applied on top of it at build time.
 | NSS | qosmio's stack, 12.5 firmware, maintained here | his stack on mainline stmmac, 12.2 firmware |
 | Userspace packages | built here from a 2025 snapshot; drifts from OpenWrt's feeds | OpenWrt's snapshot feeds, like his images |
 | Kernel modules | release archive | our package repository for each release (`v2/<tag>/`) |
-| Wi-Fi | NSS offload or host | NSS offload (host mode is broken on his tree, see below) |
+| Wi-Fi | NSS offload or host | NSS offload (default) or host; host mode is fixed here (965-967, tree patch 0005) |
 
 ## What v2 adds to his release
 
@@ -22,7 +23,18 @@ commit, and our changes are applied on top of it at build time.
 |---|---|---|
 | His NSS bring-up debug options reverted (serial sysrq, sysrq mask) | tree patch 0001 | his commit `5d86c24df4` asks for it in deployed builds |
 | NFC tag: I2C bus, `/usr/sbin/nfc`, its service and config | tree patch 0002, `shared.list` | [docs/nfc.md](../docs/nfc.md) |
-| Every PPPoE session made again once the NSS PPPoE manager is resident, not only the default-route WAN's (otherwise a second PPPoE WAN stays on the host path after every boot) | tree patch 0003 | gate soak, 2026-10-10 |
+| Every PPPoE session made again once the NSS PPPoE manager is resident, not only the default-route WAN's (otherwise a second PPPoE WAN stays on the host path after every boot) | tree patch 0003 | gate soak, 2026-10-10; kuncy7/openwrt-nss-edma#25 |
+| Q6 crash-dump policy applied before every ath11k probe: `coredump=disabled` by default, so a root-PD crash restarts the Q6 in seconds instead of waiting 5 min for a dump to be read | tree patch 0004, `overlay/.../rd03v2-q6` (service, config, hotplug, `rd03v2-q6-policy`) | gate A5 |
+| ath11k statistics kept on by default on this board (`qca-nss-pbuf` turned them off after the 2.4 GHz AP started: zero station signal) | tree patch 0005 | phase C, B7-B9 |
+| Host-mode Wi-Fi: RX filter sizes in bytes (965), peer RX statistics (966) and monitor metadata (967) requested, so host mode receives correctly and reports station signal | `overlay/.../nss/ath11k/999-999-rd03v2-965..967-*` | phase C, B5-B9 |
+| ath11k: after a Q6 crash, skip the user-PD stop handshake nobody can answer (973), and report in-flight TX frames to mac80211 when the datapath is freed (974; ends the "Have pending ack frames!" warning on reload) | `overlay/.../nss/ath11k/999-999-rd03v2-973-*`, `-974-*` | phase C, C9 |
+| ath11k_ahb: in-place recovery after a Q6 root-PD crash. When the root PD restarts, its user PDs are spawned again and ath11k rebuilds both radios in a second or two, as v1.x did with its user-PD remoteprocs; a hw-restart of one radio restarts the root PD first, because a user PD spawned again on the root that ran it crashes the root. At most 6 respawns an hour (`respawn_max_per_hour`); `respawn_userpds=0` turns it off (975) | `overlay/.../nss/ath11k/999-999-rd03v2-975-*` | C9 |
+| ath11k with NSS Wi-Fi offload: what makes an in-place recovery work with the offload on. The shared ring-pointer state is cleared on restart (979, upstream f51e4b3b5574: the restarted firmware read the old head pointer of the NSS-filled RXDMA ring, a NOC error once traffic came), NSS is torn down after the crash-path IRQ quiesce (980), and the NSS VAP nodes and peers of the old instance are released before the recovery (981: without it the radios beaconed but no station completed a 4-way handshake, and unloading ath11k afterwards reset the board). From v1.x, as carried in kuncy7's ipq50xx-2026.10.12 | `overlay/.../nss/ath11k/999-999-rd03v2-979..981-*` | C9 |
+| ath11k: a restarted firmware gets the user's country again (982, kuncy7) | `overlay/.../nss/ath11k/999-999-rd03v2-982-*` | his 9966 |
+| Memory, NSS Wi-Fi offload on this 256 MB board: kuncy7's optional NSS 256 MiB ath11k profile switched on (`CONFIG_ATH11K_NSS_MEM_PROFILE_256M`, his PR #21, off for every board in his releases: no host TX arrays NSS does not use, 4096 TX descriptors and completions per radio, private RXDMA page-frag caches), a private page-frag cache per CE RX pipe (984), and the per-CPU free page lists capped (`vm.percpu_pagelist_high_fraction=100`; 6-18 MB of free pages were parked there, uncounted). MemAvailable idle with both radios up: 42 MB, against 13-21 MB before and 34-35 MB on v1.14-nss | `config/rd03v2.config`, `overlay/.../nss/ath11k/999-999-rd03v2-984-*`, `overlay/.../etc/sysctl.d/13-rd03v2-pcp.conf` | memory deep dive |
+| ath11k: "pdev N successfully recovered" is logged outside ath11k's shared warning rate limit, which a crash's failed commands often use up; the watchdog's mesh rejoin reads that line (977) | `overlay/.../nss/ath11k/999-999-rd03v2-977-*` | C9 |
+| AN8855: room for a second 802.1Q tag in the switch's RX length (0959e). A VLAN on a WAN VLAN (QinQ, `wan.20.30`) is `[20][30]` on the wire, 1526 bytes at MTU 1500; the switch dropped every such frame in both directions, offloaded or not, so QinQ carried no full-size packets | `overlay/target/linux/qualcommax/patches-6.18/0959e-*` | C3 (QinQ) |
+| ECM package release 3: his sources as they are. Release 2 (rc1) carried our 0053, which kept QinQ off the NSS firmware; it is gone, QinQ is offloaded since 0959e | `tools/feed-overlay-v2.py` | C3 (QinQ) |
 | LuCI, full `wpad-mbedtls`, `i2c-tools`, `kmod-tun`/`-inet-diag`/`-nft-tproxy` | `config/rd03v2.config` | as v1.x |
 | `luci-app-nss` in the image | `config/rd03v2.config` | his package; his image has no LuCI |
 | AmneziaWG (kmod, tools, LuCI) in our repository | `build.sh` (feed, `awg_pin`) | as v1.x, #39 |
@@ -30,7 +42,7 @@ commit, and our changes are applied on top of it at build time.
 | ath11k: crash-recovery fixes 955, 956, 960, 961, 962, 963 | `overlay/.../nss/ath11k/999-999-rd03v2-9xx-*` | v1.x, #15 |
 | ath11k: UK 5.8 GHz band (964) | `overlay/.../nss/ath11k/999-999-rd03v2-964-*` | v1.x, #34 |
 | smp2p: clear cached inbound bits across a Q6 restart (0918), so `rmmod`/`insmod` and crash recovery can start the Q6 again | `overlay/target/linux/qualcommax/patches-6.18/0918-*` | v1.x 0918, moved into his `wcss_sec_start()` |
-| Wi-Fi watchdog, ported to his single `q6wcss` remoteproc, **dry-run by default** | `overlay/.../usr/sbin/rd03v2-watchdog` | v1.x, #15 |
+| Wi-Fi watchdog, ported to his single `q6wcss` remoteproc, **acting by default** (`dryrun=0`, `reload=1`, `inplace` unset = off: it reloads ath11k rather than resetting one radio). It leaves a root-PD crash to the kernel's respawn (both Wi-Fi modes) and steps in when the radios are not back 120 s later, or the respawn was suppressed. An upgrade from an earlier candidate is migrated to `dryrun=0` | `overlay/.../usr/sbin/rd03v2-watchdog`, `overlay/.../uci-defaults/96-rd03v2-watchdog-defaults` | v1.x, #15 |
 | apk pins for the packages he changes without a version bump | `overlay/.../uci-defaults/95-rd03v2-apk-pins` | see [Packages](#packages) |
 | Migration of v1.x settings | `overlay/.../uci-defaults/00-rd03v2-migrate-v1x` | see [Upgrading from v1.x](#upgrading-from-v1x) |
 | Our signing key, our repository first in `distfeeds.list` | `build.sh`, `keys/` | |
@@ -53,17 +65,22 @@ OpenWrt itself would accept a fuzzy hunk.
 - Winbond W25N01KW NAND (v1.x 0413; his 0415), the gpio12 `pwm2` pinctrl function (his
   0306, the patch we sent upstream), the gpio-button-hotplug IRQ fix (now upstream) and this
   board's `uboot-envtools` entry.
-- Still open: our board data files (v1.x `ipq-wifi`) against his, decided by the phase C
-  A/B test (C7).
+- Board data: the calibration payloads the firmware loads are byte-identical in our v1.x
+  `ipq-wifi` files, his tree and his image (both radios; ours only adds an alias without
+  the variant), so his files are used as they are (C7).
 
 ### Not carried
 
-- **952's rx signal offset** (+31 dB IPQ5018, +24 dB QCN6122). With NSS Wi-Fi offload the
-  station signal is already in dBm (gate: AP -47 vs client -49 dBm on 5 GHz, -34 vs -26 on
-  2.4 GHz); v1.14-nss, which adds the offset, reads +1..+11 dBm. Management frames (scan
-  results, the probe request signal hostapd and steering daemons see) come from a WMI event
-  on the same firmware, which v1.x measured 31 dB low: `candidates/…-952b-…` compensates
-  only those. It joins the overlay if phase C (C5) shows the same on this tree.
+- **952's rx signal offsets** (+31 dB IPQ5018, +24 dB QCN6122). v1.x measured them with the
+  generic IPQ5018 board file and a QCN6122 board file from another device. The board files
+  built from this board's own calibration (QCN6122 in v1.2, IPQ5018 in v1.10; the same
+  payloads this tree loads, C7) moved the firmware's RSSI up by about as much, so v1.x has
+  read 24-31 dB high since (+9..+12 dBm for a client about 1 m away). Without the offsets,
+  ath11k's own conversion gives dBm in both Wi-Fi modes, and the station signal and the
+  management-frame signal (scan results, the probe, auth and assoc signal hostapd and
+  steering daemons see) agree within 2 dB for the same client (C5). A candidate that offset
+  the management frames alone (952b) was dropped: it would have put them 24-31 dB above
+  the station signal of the same client.
 - v1.x's multi-PD remoteproc patches, 951 (smallbuffers), 957, 999-994/995: his tree has its
   own driver and memory profiles.
 
@@ -107,24 +124,49 @@ boot, `00-rd03v2-migrate-v1x` runs before every other first-boot script:
 It then sets `rd03v2.v2.migrated`, so later v2 upgrades skip it. The radio paths
 (`platform/soc@0/c000000.wifi`, `.../b00a040.wifi`) and port names are the same in both trees.
 
-## Known issues (phase A gate, 2026-10-10)
+Signal readings drop by 31 dB on 2.4 GHz and 24 dB on 5 GHz against v1.x, for stations,
+scan results and the probe signal alike: v1.x reads high (see [Not carried](#not-carried)).
+Thresholds set against v1.x numbers (`rssi_reject_assoc_rssi`, `rssi_ignore_probe_request`,
+usteer or DAWN settings, scripts) need the same amount taken off.
 
-- Fixed in v2 by tree patch 0003; affects his release: a PPPoE session that does not hold
-  the default route (mwan3, a backup line, PPPoE next to a DHCP uplink) is never offloaded
-  after a boot. It connects before the NSS PPPoE manager loads, and his re-dial only covers
-  `network_find_wan`. Measured: 80/93 Mbit/s with 13k retransmissions, then 200/200 after
-  `ifup` of that interface.
+## Known issues
 
-- **Host-mode Wi-Fi is broken on his tree** (`nss.general.wifi_offload=0`): "invalid msdu
-  len" and PSK mismatches. Offload mode works (5 GHz 254/341 Mbit/s, 2.4 GHz 12/32,
-  downloads intact).
-- **Less free memory:** MemAvailable is 17-24 MB with both radios up, against 33-35 MB on
-  v1.14-nss. The 24 h soak decides whether that is stable.
+- **A multi-day soak of v2 was not run.** MemAvailable is 42 MB idle with both radios up and
+  NSS offload, and settles at 34-36 MB once Wi-Fi clients have carried traffic; repeated
+  client sessions, in-place recoveries and driver reloads did not make it drift (VALIDATION).
+- **Signal on 2.4 GHz is checked to about ±10 dB only.** 5 GHz is reciprocal with the test
+  client within 3 dB (C5), but the test client's own 2.4 GHz readings jump by about 20 dB, and
+  one earlier comparison with Xiaomi's firmware on the same unit read 6 dB higher than this
+  tree would. A small 2.4 GHz correction is neither established nor excluded; v1.x's 31 dB is
+  excluded.
 - `n2h_rx_queue[0]_drops` rise during offloaded PPPoE uploads. That queue is still 256 on
   256 MB boards; his 10-09 release raised it only for 512 MB and 1 GB boards.
-- A v2→v2 upgrade that keeps settings skips his `99-nss-topology`, because the topology is
-  already set, so `qca-nss-drv`'s init script stays enabled. His own comment says its IRQ
-  writes just fail on this SoC. To check in phase C (C1b).
+- Fixed here, open in his release: a PPPoE session that does not hold the default route
+  (mwan3, a backup line, PPPoE next to a DHCP uplink) is never offloaded after a boot
+  (tree patch 0003; kuncy7/openwrt-nss-edma#25).
+
+## Installing
+
+v2 is published as a GitHub **pre-release**: tools that look for the latest release, like
+`xiaomi-openwrt-install` without `--release`, keep installing v1.x.
+
+- **From stock firmware:** `python3 install.py nss-v2 --release <v2 tag>` with
+  [xiaomi-openwrt-install](https://github.com/ADCDS/xiaomi-openwrt-install). It roots stock,
+  boots the v2 RAM installer and writes v2 to NAND, over a cable or (with the `-wifi`
+  installer pair) over Wi-Fi.
+- **From v1.x or another OpenWrt build:** as for any release of this port, boot the v2 RAM
+  installer (`…-initramfs-factory.ubi` into `ubi_kernel`, see
+  [docs/no-uart-reflash.md](../docs/no-uart-reflash.md)) and run `sysupgrade` with the
+  `…-squashfs-sysupgrade.bin` from there; never in place. Keep settings to carry a v1.x
+  configuration over: the first boot migrates it (below).
+- **Back to v1.x:** the same RAM-installer route with a v1.x `-nss` image. Restore a v1.x
+  configuration backup, not one taken on v2.
+- **Back to stock:** `revert.py` from xiaomi-openwrt-install.
+
+After installing, kernel modules come from our repository for that release (`apk add
+kmod-…`); see [Packages](#packages). A sysupgrade keeps the configuration, not added
+packages: add them again after an upgrade, and restart the network
+(`/etc/init.d/network restart`) after adding a protocol such as WireGuard or AmneziaWG.
 
 ## Building
 

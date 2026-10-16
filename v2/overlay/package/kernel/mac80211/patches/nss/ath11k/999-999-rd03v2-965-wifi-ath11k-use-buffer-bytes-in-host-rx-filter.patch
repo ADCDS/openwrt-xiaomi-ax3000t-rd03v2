@@ -1,0 +1,43 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: advertise buffer bytes in host RX filters
+
+The 256M profile has 512 refill-ring entries and 2048-byte host buffers.
+HTT rx_buf_size is a byte count. Correct host and monitor filters without
+changing ring entries, the compact NSS branch, or memory profiles.
+
+---
+diff --git a/drivers/net/wireless/ath/ath11k/dp_rx.c b/drivers/net/wireless/ath/ath11k/dp_rx.c
+index a96914b..15484d2 100644
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c
+@@ -5514,7 +5514,7 @@ static int ath11k_dp_rxdma_ring_sel_config(struct ath11k *ar)
+ 	if (!ar->ab->nss.enabled)
+ 		ret = ath11k_dp_tx_htt_rx_filter_setup(ar->ab, ring_id, dp->mac_id,
+ 						       HAL_RXDMA_BUF,
+-						       DP_RXDMA_REFILL_RING_SIZE,
++						       DP_RX_BUFFER_SIZE,
+ 						       &tlv_filter);
+ 	else
+ 		ret = ath11k_dp_tx_htt_rx_filter_setup(ar->ab, ring_id, dp->mac_id,
+diff --git a/drivers/net/wireless/ath/ath11k/dp_tx.c b/drivers/net/wireless/ath/ath11k/dp_tx.c
+index 024b4ed..7d83366 100644
+--- a/drivers/net/wireless/ath/ath11k/dp_tx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_tx.c
+@@ -1422,7 +1422,7 @@ int ath11k_dp_tx_htt_monitor_mode_ring_config(struct ath11k *ar, bool reset)
+ 	if (ab->hw_params.rxdma1_enable) {
+ 		ret = ath11k_dp_tx_htt_rx_filter_setup(ar->ab, ring_id, dp->mac_id,
+ 						       HAL_RXDMA_MONITOR_BUF,
+-						       DP_RXDMA_REFILL_RING_SIZE,
++						       DP_RX_BUFFER_SIZE,
+ 						       &tlv_filter);
+ 	} else if (!reset) {
+ 		/* set in monitor mode only */
+@@ -1454,7 +1454,7 @@ int ath11k_dp_tx_htt_monitor_mode_ring_config(struct ath11k *ar, bool reset)
+ 		ret = ath11k_dp_tx_htt_rx_filter_setup(ab, ring_id,
+ 						       dp->mac_id + i,
+ 						       HAL_RXDMA_MONITOR_STATUS,
+-						       DP_RXDMA_REFILL_RING_SIZE,
++						       DP_RX_BUFFER_SIZE,
+ 						       &tlv_filter);
+ 	}
+ 

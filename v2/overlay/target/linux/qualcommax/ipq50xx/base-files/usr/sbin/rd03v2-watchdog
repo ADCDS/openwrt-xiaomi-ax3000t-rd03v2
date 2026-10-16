@@ -23,15 +23,24 @@
 #
 # It then tries, stopping at the first step after which every expected radio
 # is healthy again:
-#   1. ath11k reset (hw-restart) of the affected radio - only when the uci
-#      option inplace says so; unset, only without NSS Wi-Fi offload, as on
-#      v1.x (with offload, in-driver recovery took the root PD down or left a
-#      zombie radio on the v1.x bench, and it is untested on this tree);
+#   1. ath11k reset (hw-restart) of the affected radio - only with the uci
+#      option inplace 1 (with ath11k_ahb's respawn, 975, the reset restarts
+#      the root PD and both radios come back in a few seconds; see
+#      inplace_on() for why it is not the default);
 #   2. ath11k driver reload, both radios, as nss-dwmac-up loads it at boot -
 #      unless the uci option reload is 0. It needs smp2p patch 0918: without
 #      it the Q6 restart times out, which is why nss-dwmac-up calls a reload
 #      of ath11k on IPQ5018 "not an option";
 #   3. reboot.
+#
+# A root PD crash ("crash detected in q6wcss") is the kernel's to recover when
+# ath11k_ahb respawns the user PDs (patch 975, parameter respawn_userpds, on by
+# default): the remoteproc core restarts the root PD, ath11k_ahb spawns the
+# user PDs on it again and ath11k rebuilds both radios in place, NSS Wi-Fi
+# offload included. The watchdog then only records it, and steps in when the
+# radios are not healthy RESPAWN_WAIT after the crash, or when ath11k_ahb logs
+# that it left the user PDs down after repeated crashes ("respawn suppressed
+# ...").
 #
 # What no step can do is boot a Q6 that is left "crashed": ath11k_ahb shuts it
 # down with its last radio only from "running", so it keeps the power
@@ -60,7 +69,7 @@
 # with a deadline, and interfaces are listed from sysfs rather than through
 # nl80211. The reboot request itself, sync and logger are not bounded.
 #
-# Dry run (uci option dryrun, on by default in v2.0): every incident is
+# Dry run (uci option dryrun, off by default in v2.0): every incident is
 # detected and its evidence written, and the log says what would be done, but
 # nothing is touched.
 #
@@ -78,6 +87,7 @@ FREEZE_LIMIT=4         # consecutive frozen survey samples before acting (~2min)
 MIN_UPTIME=600         # do nothing at all in the first 10 min after boot
 HOLD_SECS=3600         # uptime before a second watchdog reboot in a row
 DEAD_REBOOT_MAX=3      # ...waived this many times in a row when no radio serves
+RESPAWN_WAIT=120       # after a root PD crash, how long the kernel's respawn may take
 QUIET_RESET=3600       # incident-free uptime that ends such a run
 INPLACE_MAX=3          # incidents handled in place per INPLACE_WINDOW of uptime
 INPLACE_WINDOW=3600
@@ -92,7 +102,7 @@ EVID_KEEP=20
 
 # R prefixes every path the watchdog reads or writes; it is only set by --check.
 R=""; CHECK=""
-if [ "$1" = --check ]; then
+if [ "${1:-}" = --check ]; then
 	CHECK=1
 	R=${ROOT:?--check needs ROOT, the fake tree to run against}
 fi
@@ -101,6 +111,11 @@ EVID_DIR=$R/overlay/rd03v2-watchdog
 STATE_DIR=$R/tmp/rd03v2-watchdog
 DISABLE_FILE=$R/etc/rd03v2-watchdog.disable
 NSSOFF=$SYS/module/ath11k/parameters/nss_offload
+RESPAWN=$SYS/module/ath11k_ahb/parameters/respawn_userpds
+ROOT_CRASH=0
+RELOADING=0
+RESTORING=0
+HEALTH_REASON='not checked'
 
 log() {
 	if [ -n "$CHECK" ]; then
@@ -205,6 +220,90 @@ load_config() {
 	CFG_RELOAD=$(cfg reload 1)
 }
 
+# All radios definitely stopped, not an absent/failed netifd reply. During
+# our own wifi down, check UCI disablement instead of our temporary teardown.
+radios_intentionally_down() {
+	ri_seen=0
+	if [ "$RELOADING" = 1 ]; then
+		for ri_n in $(uci -q show wireless | sed -n 's/^wireless\.\([A-Za-z0-9_]*\)=wifi-device$/\1/p'); do
+			ri_seen=1
+			[ "$(uci -q get "wireless.$ri_n.disabled")" = 1 ] || return 1
+		done
+	else
+		for ri_d in $(expected phys); do
+			radio_configured "$ri_d" || return 1
+			ri_seen=1
+			radio_wanted "$ri_d"; [ $? = 1 ] || return 1
+		done
+	fi
+	[ "$ri_seen" = 1 ]
+}
+
+cancel_actions() {
+	if [ -f "$STATE_DIR/reboot-pending" ] || [ -f "$STATE_DIR/reboot-issued" ]; then
+		log 'intervention canceled by configuration or intentional shutdown'
+	fi
+	rm -f "$STATE_DIR/reboot-pending" "$STATE_DIR/hold-reason" \
+		"$STATE_DIR/reboot-issued" "$EVID_DIR/rebooted"
+}
+
+# Check immediately before mutations as well as each sample. 3 means canceled,
+# distinct from a recovery failure that permits escalation.
+actions_allowed() {
+	load_config
+	[ "$CFG_ENABLED" = 1 ] && [ "$CFG_DRYRUN" = 0 ] && \
+		[ ! -e "$DISABLE_FILE" ] && ! radios_intentionally_down && return 0
+	cancel_actions
+	return 1
+}
+
+# Does ath11k_ahb spawn the user PDs again when the root PD restarts (patch
+# 975, parameter respawn_userpds)? Then a root PD crash is the kernel's to
+# recover, in place, and the watchdog only steps in when the radios are not
+# back after RESPAWN_WAIT, with or without NSS Wi-Fi offload (979-981 make the
+# NSS Wi-Fi data path survive the restart). Remembered for when ath11k_ahb is
+# not loaded.
+respawn_kernel() {
+	if [ -r "$RESPAWN" ]; then
+		case "$(cat "$RESPAWN" 2>/dev/null)" in 1|Y|y) echo 1 ;; *) echo 0 ;; esac \
+			> "$STATE_DIR/respawn"
+	fi
+	[ "$(cat "$STATE_DIR/respawn" 2>/dev/null)" = 1 ]
+}
+
+# How often ath11k_ahb has logged that it left the user PDs down after repeated
+# root PD crashes. rproc_bad cannot see that: q6wcss is running.
+suppressions() {
+	dmesg 2>/dev/null | grep -c "respawn suppressed after repeated root PD crashes"
+}
+
+# Take the suppression count as it is now, without acting on it.
+suppressions_baseline() {
+	suppressions > "$STATE_DIR/suppressed"
+}
+
+# Has the kernel suppressed a user PD respawn since the last sample? A count
+# that went down is the kernel log wrapping: taken as the new baseline.
+respawn_suppressed() {
+	rs_now=$(suppressions)
+	rs_old=$(cat "$STATE_DIR/suppressed" 2>/dev/null)
+	echo "$rs_now" > "$STATE_DIR/suppressed"
+	[ -n "$rs_old" ] && [ "$rs_now" -gt "$rs_old" ]
+}
+
+q6_crash_events() {
+	qe_cursor=$(cat "$STATE_DIR/q6-cursor" 2>/dev/null || echo 0)
+	qe_new=$(dmesg 2>/dev/null | awk -F'[][]' -v c="$qe_cursor" '
+		/crash detected in q6wcss(:|[[:space:]])/ {
+			if ($2 ~ /^[[:space:]]*[0-9]+[.][0-9]+$/ && $2+0 > c+0) {
+				if ($2+0 > newest+0) newest=$2
+			}
+		} END { if (newest != "") { gsub(/^[[:space:]]+/, "", newest); print newest } }')
+	[ -n "$qe_new" ] || return 0
+	printf '%s\n' "$qe_new" > "$STATE_DIR/q6-cursor"
+	printf '%s\n' "$qe_new" > "$STATE_DIR/q6-pending"
+}
+
 # --- observation -------------------------------------------------------------
 
 # The Q6, by name: its remoteproc index is not fixed.
@@ -215,6 +314,7 @@ q6_rproc() {
 	return 1
 }
 q6_state() { qs_r=$(q6_rproc) && cat "$qs_r/state" 2>/dev/null; }
+q6_running() { [ "$(q6_state)" = running ]; }
 
 # Prints "q6wcss=<state>" and succeeds when the Q6 is not running, once it has
 # been seen running in this boot. Until ath11k_ahb's probe boots it, it is
@@ -407,12 +507,15 @@ radios_stopped() {
 
 # `wifi up` for every radio but those in RL_STOPPED.
 wifi_up() {
+	[ "$RESTORING" = 1 ] || actions_allowed || return 3
 	if [ -z "$RL_STOPPED" ]; then
 		bounded 60 wifi up
 		return
 	fi
 	for wu_n in $RL_NAMES; do
 		case " $RL_STOPPED " in *" $wu_n "*) continue ;; esac
+		[ "$(uci -q get "wireless.$wu_n.disabled")" = 1 ] && continue
+		[ "$RESTORING" = 1 ] || actions_allowed || return 3
 		bounded 60 wifi up "$wu_n"
 	done
 }
@@ -439,13 +542,15 @@ offload_now() {
 	fi
 }
 
-# Step 1 allowed? uci inplace 1 or 0; unset, only without NSS Wi-Fi offload.
+# Step 1 allowed? Only with uci inplace 1. With 975 the reset restarts the root
+# PD and both radios come back in place, but not reliably enough to be the
+# default: on the RD03v2 bench (b16, host mode, before 979-981) the third of
+# three resets in one boot left the 2.4 GHz radio beaconing and deaf to
+# authentication. The reload is the default step instead. Never after a root
+# PD crash: that one is the kernel's (see sample()).
 inplace_on() {
-	case "$CFG_INPLACE" in
-		1) return 0 ;;
-		0) return 1 ;;
-	esac
-	[ "$(offload_now)" != 1 ]
+	[ "$ROOT_CRASH" = 1 ] && return 1
+	[ "$CFG_INPLACE" = 1 ]
 }
 
 # --- the expected radio set --------------------------------------------------
@@ -536,14 +641,15 @@ ifaces_due() {
 # least one, and each of those interfaces moving. Nothing expected at all is
 # not healthy: there is nothing to judge by.
 healthy() {
-	rproc_bad >/dev/null && return 1
-	[ -n "$(expected phys)" ] || return 1
-	phys_back || return 1
+	HEALTH_REASON='healthy'
+	if rproc_bad >/dev/null; then HEALTH_REASON="q6wcss=$(q6_state)"; return 1; fi
+	[ -n "$(expected phys)" ] || { HEALTH_REASON='no expected radios'; return 1; }
+	phys_back || { HEALTH_REASON='expected PHY missing'; return 1; }
 	for h_d in $(ifaces_due); do
 		h_ifs=$(dev_ifaces "$h_d")
 		if [ -z "$h_ifs" ]; then
 			radio_wanted "$h_d"
-			[ $? = 1 ] || return 1
+			[ $? = 1 ] || { HEALTH_REASON="$h_d has no interface"; return 1; }
 			continue
 		fi
 		# The survey is per radio; stations are per interface. One interface
@@ -552,7 +658,7 @@ healthy() {
 		for h_ifc in $h_ifs; do
 			iface_moving "$h_ifc" && { h_ok=1; break; }
 		done
-		[ "$h_ok" = 1 ] || return 1
+		[ "$h_ok" = 1 ] || { HEALTH_REASON="$h_d has no moving survey or station RX"; return 1; }
 	done
 	return 0
 }
@@ -583,6 +689,10 @@ dump_evidence() {
 	{
 		echo "=== rd03v2-watchdog (v2) incident $seq ==="
 		echo "reason: $reason"
+		echo "radio mapping (device phy interface):"
+		for dm_if in $(wifi_ifaces); do
+			printf "  %s %s %s\n" "$(iface_dev "$dm_if")" "$(basename "$(readlink -f "$SYS/class/net/$dm_if/phy80211")")" "$dm_if"
+		done
 		echo "date (not trustworthy, no RTC): $(date)"
 		echo "uptime: $(cat "$R/proc/uptime")"
 		[ -f "$STATE_DIR/watchdog-boot" ] && echo "this boot followed a watchdog reboot: $(cat "$STATE_DIR/watchdog-boot")"
@@ -663,6 +773,14 @@ try_ath_reset() {
 	for d in $1; do
 		dd=$(dev_debugfs "$d") || continue
 		[ -w "$dd/simulate_fw_crash" ] || continue
+		actions_allowed || return 3
+		if respawn_kernel; then
+			# 975: the reset restarts the root PD, and with it every radio;
+			# a second one would only cut the first one's recovery short.
+			log "in-place: ath11k reset of $d (restarts the root PD and both radios)"
+			write_bounded 10 hw-restart "$dd/simulate_fw_crash" && did=1
+			break
+		fi
 		log "in-place: ath11k reset of $d"
 		write_bounded 10 hw-restart "$dd/simulate_fw_crash" && did=1
 	done
@@ -680,9 +798,16 @@ try_ath_reset() {
 # changed once allocated), and the script ends with a `wifi up` of every
 # radio, which would also start those stopped on purpose.
 wifi_load() {
+	[ "$RESTORING" = 1 ] || actions_allowed || return 3
 	bounded 90 modprobe ath11k
+	[ "$RESTORING" = 1 ] || actions_allowed || return 3
 	[ -w "$NSSOFF" ] && write_bounded 10 "$1" "$NSSOFF"
+	if [ -x "$R/usr/sbin/rd03v2-q6-policy" ]; then
+		ROOT="$R" bounded 10 sh "$R/usr/sbin/rd03v2-q6-policy" || log 'Q6 dump policy unavailable before probe'
+	fi
+	[ "$RESTORING" = 1 ] || actions_allowed || return 3
 	bounded 90 modprobe ath11k_ahb
+	[ "$RESTORING" = 1 ] || actions_allowed || return 3
 	bounded 90 modprobe ath11k_pci
 	[ -d "$SYS/module/ath11k_ahb" ]
 }
@@ -690,10 +815,12 @@ wifi_load() {
 # Put ath11k back if it is not loaded, and ask netifd to bring the radios up.
 # Used when a reload has to be abandoned half-way. $1 = nss_offload.
 restore_driver() {
+	RESTORING=1
 	if [ ! -d "$SYS/module/ath11k_ahb" ]; then
 		wifi_load "$1" || log "in-place: loading ath11k_ahb failed"
 	fi
 	wifi_up
+	RESTORING=0
 }
 
 # Step 2: unload and reload the whole driver with the offload setting the box
@@ -702,24 +829,29 @@ restore_driver() {
 # Returns 0 when every expected radio is healthy again, 2 when the Q6 did not
 # go offline with the unload (ath11k then stays unloaded; the caller decides),
 # 1 otherwise.
-try_driver_reload() {
+driver_reload_steps() {
 	rl_off=$(offload_now)
 	RL_OFF=$rl_off
 	rl_mods=$(ls "$SYS/module/ath11k/holders" 2>/dev/null)
 	rl_loaded=0
 	[ -n "$rl_mods" ] && rl_loaded=1
 	log "in-place: reloading ath11k (nss_offload=$rl_off)"
+	actions_allowed || return 3
 
 	# `wifi up` would restart every radio, including one stopped on purpose.
 	radios_stopped && [ -n "$RL_STOPPED" ] && \
 		log "in-place: leaving${RL_STOPPED} down after the reload, as it is now"
+	actions_allowed || return 3
+	RELOADING=1
 	bounded 30 wifi down
 	wait_until 15 no_wifi_ifaces
 	for m in $rl_mods; do
 		[ -d "$SYS/module/$m" ] || continue
+		actions_allowed || { restore_driver "$rl_off"; return 3; }
 		bounded 60 rmmod "$m" || log "in-place: rmmod $m failed ($?)"
 	done
 	if [ -d "$SYS/module/ath11k" ]; then
+		actions_allowed || { restore_driver "$rl_off"; return 3; }
 		bounded 60 rmmod ath11k || log "in-place: rmmod ath11k failed ($?)"
 	fi
 	if [ -d "$SYS/module/ath11k" ]; then
@@ -738,13 +870,17 @@ try_driver_reload() {
 		return 2
 	fi
 
-	if ! wifi_load "$rl_off"; then
+	actions_allowed || { restore_driver "$rl_off"; return 3; }
+	wifi_load "$rl_off"; rl_rc=$?
+	if [ "$rl_rc" = 3 ]; then restore_driver "$rl_off"; return 3; fi
+	if [ "$rl_rc" != 0 ]; then
 		log "in-place: loading ath11k_ahb failed"
 		return 1
 	fi
 	wait_until 90 phys_back || log "in-place: not every expected radio re-registered after reload"
 	nap 10
-	wifi_up
+	wifi_up; rl_rc=$?
+	[ "$rl_rc" = 3 ] && { restore_driver "$rl_off"; return 3; }
 	rl_due=$(ifaces_due)
 	# shellcheck disable=SC2086 # one device per word
 	[ -z "$rl_due" ] || wait_until 60 devs_present radio_devs $rl_due || \
@@ -754,10 +890,16 @@ try_driver_reload() {
 	# Interface names may have changed (phy numbering shifts on a reload);
 	# healthy() goes by radio. Give a slow radio a couple more chances.
 	for rl_try in 1 2 3; do
+		actions_allowed || return 3
 		healthy && return 0
 		[ "$rl_try" = 3 ] || nap 10
 	done
 	return 1
+}
+
+try_driver_reload() {
+	actions_allowed || return 3
+	driver_reload_steps
 }
 
 # Sets HOLD to why a reboot must wait (empty when it may go ahead) and
@@ -791,10 +933,14 @@ reboot_hold() {
 
 # Reboot now. reboot_hold must have run just before (for RH_DEAD).
 do_reboot() {
+	actions_allowed || return 3
 	reason="$1"; evid="$2"
+	dr_prev=$(cat "$EVID_DIR/dead-reboots" 2>/dev/null || echo 0)
 	if [ -f "$STATE_DIR/reboot-issued" ]; then
 		log "the last reboot request did not take effect; forcing ($reason)"
-		sync; reboot -f
+		sync
+		actions_allowed || return 3
+		reboot -f
 		return
 	fi
 	if [ "$RH_DEAD" = 1 ]; then
@@ -812,6 +958,7 @@ do_reboot() {
 	log "REBOOTING: $reason (evidence: $evid)"
 	touch "$STATE_DIR/reboot-issued"
 	nap 2
+	actions_allowed || { echo "$dr_prev" > "$EVID_DIR/dead-reboots"; return 3; }
 	reboot
 	# reboot only asks init; give it time before the next sample tries again.
 	nap 180
@@ -821,14 +968,16 @@ do_reboot() {
 # note for sample() to reboot as soon as it may. $3 = "unloaded" when ath11k
 # was left unloaded; it is put back while the reboot waits.
 give_up() {
+	actions_allowed || { [ "${3:-}" = unloaded ] && restore_driver "$RL_OFF"; return 3; }
 	gu_reason="$1"; gu_evid="$2"
-	echo "in-place recovery failed: $gu_reason" >> "$gu_evid"; sync
+	echo "in-place recovery failed: $gu_reason (health: $HEALTH_REASON)" >> "$gu_evid"; sync
 	reboot_hold
+	actions_allowed || { [ "${3:-}" = unloaded ] && restore_driver "$RL_OFF"; return 3; }
 	if [ -z "$HOLD" ]; then
 		do_reboot "$gu_reason" "$gu_evid"
 		return
 	fi
-	[ "$3" = unloaded ] && restore_driver "$RL_OFF"
+	[ "${3:-}" = unloaded ] && restore_driver "$RL_OFF"
 	echo "$gu_reason" > "$STATE_DIR/reboot-pending"
 	echo "$gu_evid" >> "$STATE_DIR/reboot-pending"
 	echo "$HOLD" > "$STATE_DIR/hold-reason"
@@ -838,6 +987,7 @@ give_up() {
 recovered() {
 	log "RECOVERED in place via $1: $2"
 	echo "recovered: $1" >> "$3"; sync
+	echo "health: $HEALTH_REASON" >> "$3"
 }
 
 # Dry run: write down what would be done, and do nothing. Which step would
@@ -883,8 +1033,12 @@ handle() {
 		log "in-place: ath11k reset off (inplace=$CFG_INPLACE, nss_offload=$(offload_now))"
 	elif ! ath11k_bound; then
 		log "in-place: ath11k is not loaded; skipping the ath11k reset"
-	elif try_ath_reset "$affected"; then
-		recovered "ath11k reset" "$reason" "$evid"; return
+	else
+		try_ath_reset "$affected"; reset_rc=$?
+		case "$reset_rc" in
+			0) recovered "ath11k reset" "$reason" "$evid"; return ;;
+			3) return 3 ;;
+		esac
 	fi
 	if [ "$CFG_RELOAD" != 1 ]; then
 		give_up "$reason (driver reload off)" "$evid"
@@ -894,19 +1048,25 @@ handle() {
 	case $? in
 		0) recovered "driver reload" "$reason" "$evid" ;;
 		2) give_up "$reason (Q6 not offline after unloading ath11k)" "$evid" unloaded ;;
-		*) give_up "$reason (in-place recovery failed)" "$evid" ;;
+		3) RELOADING=0; return 3 ;;
+		*) give_up "$reason (in-place recovery failed)" "$evid" unloaded ;;
 	esac
+	handle_rc=$?
+	RELOADING=0
+	return "$handle_rc"
 }
 
 # A reboot is waiting (see give_up). Reboot once it may, unless the radios
 # have come back in the meantime.
 pending_reboot() {
+	actions_allowed || return 3
 	if healthy; then
 		log "radios healthy again; dropping the held reboot ($(head -1 "$STATE_DIR/reboot-pending"))"
 		rm -f "$STATE_DIR/reboot-pending" "$STATE_DIR/hold-reason"
 		return
 	fi
 	reboot_hold
+	actions_allowed || return 3
 	if [ -n "$HOLD" ]; then
 		if [ "$HOLD" != "$(cat "$STATE_DIR/hold-reason" 2>/dev/null)" ]; then
 			echo "$HOLD" > "$STATE_DIR/hold-reason"
@@ -961,6 +1121,8 @@ mesh_rejoin() {
 		case "$(jsonfilter -q -s "$mr_st" -e "$mr_sel.encryption")" in ''|none) continue ;; esac
 		if [ "$CFG_DRYRUN" = 1 ]; then
 			log "DRY-RUN: $1 restarted in place: would join the encrypted mesh on $mr_ifc again"
+		elif ! actions_allowed; then
+			return 3
 		elif bounded 10 ubus call "wpa_supplicant.$mr_ifc" reload > /dev/null; then
 			log "$1 restarted in place: joined the encrypted mesh on $mr_ifc again"
 		else
@@ -978,10 +1140,12 @@ rejoin_pending() {
 	for rp_f in "$STATE_DIR"/rejoin_*; do
 		[ -f "$rp_f" ] || continue
 		rp_dev=${rp_f#"$STATE_DIR"/rejoin_}
-		if mesh_rejoin "$rp_dev"; then
+		mesh_rejoin "$rp_dev"; rp_rc=$?
+		if [ "$rp_rc" = 0 ]; then
 			rm -f "$rp_f"
 			continue
 		fi
+		[ "$rp_rc" = 3 ] && continue
 		rp_left=$(( $(cat "$rp_f") - 1 ))
 		if [ "$rp_left" -gt 0 ]; then
 			echo "$rp_left" > "$rp_f"
@@ -1017,7 +1181,8 @@ after_incident() {
 # disabled, so a later boot is never mistaken for one.
 setup() {
 	mkdir -p "$STATE_DIR" "$EVID_DIR"
-	if [ -f "$EVID_DIR/rebooted" ]; then
+	if [ -f "$EVID_DIR/rebooted" ] && [ ! -e "$STATE_DIR/reboot-issued" ] && \
+	   [ ! -e "$STATE_DIR/reboot-pending" ]; then
 		mv "$EVID_DIR/rebooted" "$STATE_DIR/watchdog-boot"; sync
 	fi
 }
@@ -1053,12 +1218,28 @@ arm() {
 		log "no radio registered after boot, though netifd has radios configured; treating them as missing"
 	fi
 	q6_rproc > /dev/null || log "no q6wcss remoteproc; watching the radios only"
+	suppressions_baseline
+	respawn_kernel && ar_respawn=1 || ar_respawn=0
 	touch "$STATE_DIR/armed"
-	log "armed (interval=${INTERVAL}s, rproc_limit=$STATE_BAD_LIMIT, freeze_limit=$FREEZE_LIMIT, radios: $(expected phys | tr '\n' ' '), nss_offload=$(offload_now), dryrun=$CFG_DRYRUN, inplace=$CFG_INPLACE, reload=$CFG_RELOAD)"
+	log "armed (interval=${INTERVAL}s, rproc_limit=$STATE_BAD_LIMIT, freeze_limit=$FREEZE_LIMIT, radios: $(expected phys | tr '\n' ' '), nss_offload=$(offload_now), dryrun=$CFG_DRYRUN, inplace=$CFG_INPLACE, reload=$CFG_RELOAD, respawn=$ar_respawn)"
 }
 
 # One sample, every INTERVAL seconds once armed.
 sample() {
+	load_config
+	q6_crash_events
+	if [ "$CFG_ENABLED" != 1 ] || [ -e "$DISABLE_FILE" ] || radios_intentionally_down; then
+		cancel_actions
+		rm -f "$STATE_DIR/q6-pending"
+		if [ ! -e "$STATE_DIR/intentional-down" ] && radios_intentionally_down; then
+			for sd_d in $(expected phys); do log "$sd_d was taken down on purpose"; done
+			touch "$STATE_DIR/intentional-down"
+		fi
+		rm -f "$STATE_DIR"/frz_* "$STATE_DIR"/surv_* "$STATE_DIR"/miss_*
+		return 0
+	fi
+	rm -f "$STATE_DIR/intentional-down"
+	[ "$CFG_DRYRUN" = 0 ] || cancel_actions
 	# An hour without incidents ends a run of no-radio reboots.
 	if [ -f "$EVID_DIR/dead-reboots" ] && \
 	   [ $(($(up_secs) - $(cat "$STATE_DIR/quiet-since" 2>/dev/null || echo 0))) -ge $QUIET_RESET ]; then
@@ -1068,6 +1249,43 @@ sample() {
 
 	if [ -f "$STATE_DIR/reboot-pending" ]; then
 		pending_reboot
+		return
+	fi
+	if respawn_suppressed; then
+		handle "user PD respawn suppressed after repeated root PD crashes" ""
+		after_incident
+		return
+	fi
+	if [ -f "$STATE_DIR/q6-pending" ]; then
+		# Retain early-boot incidents until the normal quiet period ends.
+		[ "$(up_secs)" -ge "$MIN_UPTIME" ] || return 0
+		if respawn_kernel; then
+			# ath11k_ahb spawns the user PDs again on the restarted root
+			# PD and ath11k rebuilds the radios: nothing to do if they are
+			# back, as v1.x with qcom_q6v5_mpd's respawn.
+			if wait_until "$RESPAWN_WAIT" healthy; then
+				kr_evid=$(dump_evidence "Q6 crash detected; user PDs respawned by the kernel")
+				prune_evidence
+				log "Q6 crash detected; RECOVERED in place by the kernel's user-PD respawn (evidence: $kr_evid)"
+				echo "recovered: kernel user-PD respawn" >> "$kr_evid"
+				echo "health: $HEALTH_REASON" >> "$kr_evid"; sync
+				rm -f "$STATE_DIR/q6-pending"
+				after_incident
+				return
+			fi
+			log "Q6 crash: the radios are not back ${RESPAWN_WAIT}s after it ($HEALTH_REASON)"
+		fi
+		ROOT_CRASH=1
+		if [ "$CFG_DRYRUN" = 0 ]; then
+			wait_until 30 q6_running || :
+		fi
+		handle 'Q6 crash detected; driver rebuild required' ''
+		q6_rc=$?
+		ROOT_CRASH=0
+		if [ "$CFG_DRYRUN" = 0 ] && [ "$q6_rc" != 3 ]; then
+			rm -f "$STATE_DIR/q6-pending"
+		fi
+		after_incident
 		return
 	fi
 
@@ -1174,9 +1392,6 @@ sample() {
 main() {
 	setup
 	load_config
-	if disabled; then
-		while :; do sleep 3600; done
-	fi
 	arm
 	while :; do
 		nap $INTERVAL
@@ -1194,11 +1409,10 @@ check() {
 	load_config
 	if [ ! -f "$STATE_DIR/armed" ]; then
 		setup
-		disabled && return
+		disabled && { cancel_actions; rm -f "$STATE_DIR/q6-pending"; return; }
 		arm
 		return
 	fi
-	disabled && return
 	nap $INTERVAL
 	sample
 }

@@ -1,0 +1,4 @@
+# Inline dumps hold Q6 recovery until collected/released (up to five minutes).
+# Use inline only for debugging with automatic watchdog actions disabled.
+config q6 'main'
+	option coredump 'disabled'

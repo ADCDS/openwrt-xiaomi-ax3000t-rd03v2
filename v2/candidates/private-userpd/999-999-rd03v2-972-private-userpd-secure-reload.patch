@@ -1,0 +1,215 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: securely reload a stopped direct user PD
+
+Diagnostic experiment applied after the private transition and ordering
+patches. Carry stop failures into power-up, ask the root remoteproc owner to
+reload and relock only the selected ASID, and refuse to spawn across a root
+generation change. Not part of the sealed series until hardware-qualified.
+---
+--- a/drivers/net/wireless/ath/ath11k/ahb.c
++++ b/drivers/net/wireless/ath/ath11k/ahb.c
+@@ -445,6 +445,23 @@
+ 	ath11k_ce_cleanup_pipes(ab);
+ }
+ 
++static int ath11k_ahb_reload_user_pd(struct ath11k_base *ab)
++{
++	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
++	int ret;
++
++	if (!g_rproc_info || !g_rproc_info->tgt_rproc)
++		return -ENODEV;
++
++	ath11k_info(ab, "rd03v2 userpd trace: PD reload begin id=%d\n",
++		    ab_ahb->userpd_id);
++	ret = qcom_wcss_userpd_prepare(g_rproc_info->tgt_rproc,
++					    ab_ahb->userpd_id,
++					    ab_ahb->userpd_root_generation);
++	ath11k_info(ab, "rd03v2 userpd trace: PD reload end ret=%d\n", ret);
++	return ret;
++}
++
+ static int ath11k_ahb_boot_user_pd(struct ath11k_base *ab)
+ {
+ 	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+@@ -470,12 +487,21 @@
+ 						ATH11K_USERPD_SPAWN_TIMEOUT);
+ 	ath11k_info(ab, "rd03v2 userpd trace: spawn wait end remaining=%lu\n",
+ 		    time_left);
+-	qcom_smem_state_update_bits(ab_ahb->spawn_state, BIT(ab_ahb->spawn_bit), 0);
++	ret = qcom_smem_state_update_bits(ab_ahb->spawn_state,
++					 BIT(ab_ahb->spawn_bit), 0);
+ 	ath11k_info(ab, "rd03v2 userpd trace: spawn request cleared\n");
++	if (ret)
++		return ret;
+ 	if (!time_left) {
+ 		ath11k_err(ab, "UserPD spawn wait timed out\n");
+ 		return -ETIMEDOUT;
+ 	}
++	if (ab_ahb->userpd_reload_required) {
++		ret = qcom_wcss_userpd_root_alive(g_rproc_info->tgt_rproc,
++						    ab_ahb->userpd_root_generation);
++		if (ret)
++			return ret;
++	}
+ 
+ 	time_left = wait_for_completion_timeout(&ab_ahb->userpd_ready,
+ 						ATH11K_USERPD_READY_TIMEOUT);
+@@ -485,6 +511,12 @@
+ 		ath11k_err(ab, "UserPD ready wait timed out\n");
+ 		return -ETIMEDOUT;
+ 	}
++	if (ab_ahb->userpd_reload_required) {
++		ret = qcom_wcss_userpd_root_alive(g_rproc_info->tgt_rproc,
++						    ab_ahb->userpd_root_generation);
++		if (ret)
++			return ret;
++	}
+ 
+ 	if (ab->hw_rev == ATH11K_HW_IPQ5018_HW10) {
+ 		ath11k_info(ab, "rd03v2 userpd trace: SCM power-on begin\n");
+@@ -509,47 +541,85 @@
+ 
+ 	if (ab_ahb->userpd_id > 0 &&
+ 	    ab_ahb->userpd_id < ATH11K_AHB_USERPD_ID_MAX) {
++		if (ab_ahb->userpd_transition_error)
++			return ab_ahb->userpd_transition_error;
++
++		if (ab_ahb->userpd_reload_required) {
++			ret = ath11k_ahb_reload_user_pd(ab);
++			if (ret) {
++				ab_ahb->userpd_transition_error = ret;
++				ath11k_err(ab, "failed to reload userPD%d: %d\n",
++					   ab_ahb->userpd_id, ret);
++				return ret;
++			}
++		}
++
+ 		ret = ath11k_ahb_boot_user_pd(ab);
+ 		if (ret) {
++			ab_ahb->userpd_transition_error = ret;
+ 			ath11k_err(ab, "failed to boot userPD%d: %d\n",
+ 				   ab_ahb->userpd_id, ret);
+ 			return ret;
+ 		}
++		ab_ahb->userpd_reload_required = false;
++		ab_ahb->userpd_root_generation = 0;
+ 	}
+ 
+ 	return 0;
+ }
+ 
+-static void ath11k_ahb_stop_user_pd(struct ath11k_base *ab)
++static int ath11k_ahb_stop_user_pd(struct ath11k_base *ab)
+ {
+ 	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+ 	unsigned long time_left;
+ 	int ret;
+ 
++	if (!g_rproc_info || !g_rproc_info->tgt_rproc)
++		return -ENODEV;
++
+ 	ath11k_info(ab, "rd03v2 userpd trace: power-down begin id=%d stop_done=%d\n",
+ 		    ab_ahb->userpd_id, completion_done(&ab_ahb->userpd_stopped));
+ 	reinit_completion(&ab_ahb->userpd_stopped);
+ 	ath11k_info(ab, "rd03v2 userpd trace: stop request assert\n");
+-	qcom_smem_state_update_bits(ab_ahb->stop_state, BIT(ab_ahb->stop_bit),
+-				    BIT(ab_ahb->stop_bit));
++	ret = qcom_smem_state_update_bits(ab_ahb->stop_state, BIT(ab_ahb->stop_bit),
++					 BIT(ab_ahb->stop_bit));
++	if (ret)
++		return ret;
+ 
+ 	time_left = wait_for_completion_timeout(&ab_ahb->userpd_stopped,
+ 						ATH11K_USERPD_STOP_TIMEOUT);
+ 	ath11k_info(ab, "rd03v2 userpd trace: stop wait end remaining=%lu\n",
+ 		    time_left);
+-	if (!time_left)
+-		ath11k_warn(ab, "UserPD stop wait timed out\n");
+-
+-	qcom_smem_state_update_bits(ab_ahb->stop_state, BIT(ab_ahb->stop_bit), 0);
++	ret = qcom_smem_state_update_bits(ab_ahb->stop_state,
++					 BIT(ab_ahb->stop_bit), 0);
+ 	ath11k_info(ab, "rd03v2 userpd trace: stop request cleared\n");
++	if (ret)
++		return ret;
++	if (!time_left) {
++		ath11k_warn(ab, "UserPD stop wait timed out\n");
++		return -ETIMEDOUT;
++	}
+ 
+ 	if (ab->hw_rev == ATH11K_HW_IPQ5018_HW10) {
+ 		ath11k_info(ab, "rd03v2 userpd trace: SCM power-off begin\n");
+ 		ret = qcom_scm_pas_set_wifi_power_mode(MPD_WCNSS_PAS_ID, false);
+ 		ath11k_info(ab, "rd03v2 userpd trace: SCM power-off end ret=%d\n", ret);
++		if (ret)
++			return ret;
+ 	}
++
++	ath11k_info(ab, "rd03v2 userpd trace: MSA unlock begin id=%d\n",
++		    ab_ahb->userpd_id);
++	ret = qcom_wcss_userpd_unprepare(g_rproc_info->tgt_rproc,
++					      ab_ahb->userpd_id,
++					      &ab_ahb->userpd_root_generation);
++	ath11k_info(ab, "rd03v2 userpd trace: MSA unlock end ret=%d\n", ret);
++	if (ret)
++		return ret;
++
+ 	ath11k_info(ab, "rd03v2 userpd trace: power-down complete id=%d\n",
+ 		    ab_ahb->userpd_id);
++	return 0;
+ }
+ 
+ static void ath11k_ahb_power_down(struct ath11k_base *ab, bool is_suspend)
+@@ -557,8 +627,12 @@
+ 	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
+ 
+ 	if (ab_ahb->userpd_id > 0 &&
+-	    ab_ahb->userpd_id < ATH11K_AHB_USERPD_ID_MAX)
+-		ath11k_ahb_stop_user_pd(ab);
++	    ab_ahb->userpd_id < ATH11K_AHB_USERPD_ID_MAX) {
++		ab_ahb->userpd_reload_required = false;
++		ab_ahb->userpd_root_generation = 0;
++		ab_ahb->userpd_transition_error = ath11k_ahb_stop_user_pd(ab);
++		ab_ahb->userpd_reload_required = !ab_ahb->userpd_transition_error;
++	}
+ }
+ 
+ static void ath11k_ahb_init_qmi_ce_config(struct ath11k_base *ab)
+--- a/drivers/net/wireless/ath/ath11k/ahb.h
++++ b/drivers/net/wireless/ath/ath11k/ahb.h
+@@ -85,6 +85,9 @@
+ 	struct completion userpd_spawned;
+ 	struct completion userpd_ready;
+ 	struct completion userpd_stopped;
++	bool userpd_reload_required;
++	int userpd_transition_error;
++	u32 userpd_root_generation;
+ 	u32 userpd_id;
+ 	u32 spawn_bit;
+ 	u32 stop_bit;
+--- a/drivers/net/wireless/ath/ath11k/core.c
++++ b/drivers/net/wireless/ath/ath11k/core.c
+@@ -2679,7 +2679,7 @@
+ static void ath11k_core_reset(struct work_struct *work)
+ {
+ 	struct ath11k_base *ab = container_of(work, struct ath11k_base, reset_work);
+-	int reset_count, fail_cont_count;
++	int reset_count, fail_cont_count, ret;
+ 	long time_left;
+ 
+ 	if (!(test_bit(ATH11K_FLAG_REGISTERED, &ab->dev_flags))) {
+@@ -2745,7 +2745,12 @@
+ 	ath11k_hif_ce_irq_disable(ab);
+ 
+ 	ath11k_hif_power_down(ab, false);
+-	ath11k_hif_power_up(ab);
++	ret = ath11k_hif_power_up(ab);
++	if (ret) {
++		set_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags);
++		ath11k_err(ab, "failed to power up during recovery: %d\n", ret);
++		return;
++	}
+ 
+ 	ath11k_dbg(ab, ATH11K_DBG_BOOT, "reset started\n");
+ }

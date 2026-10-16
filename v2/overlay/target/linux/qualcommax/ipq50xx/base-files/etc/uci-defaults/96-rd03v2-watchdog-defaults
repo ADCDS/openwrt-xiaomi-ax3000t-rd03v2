@@ -1,0 +1,20 @@
+#!/bin/sh
+# The watchdog's shipped default changed: v2.0 candidates up to b10d4 shipped
+# dryrun 1 with inplace unset; it acts now (dryrun 0), with inplace unset
+# (automatic: on with ath11k_ahb's user-PD respawn).
+# A sysupgrade restores /etc/config, so an upgrade keeps whatever the previous
+# install had and would never pick the new default up on its own.
+#
+# Migrate only the unchanged old shipped set. A customized value, an explicit
+# inplace, a stopped watchdog or the disable file all mean someone made a
+# choice, and that choice is kept.
+[ -e /etc/rd03v2-watchdog.disable ] && exit 0
+[ "$(uci -q get rd03v2-watchdog.main.enabled)" = 1 ] || exit 0
+[ "$(uci -q get rd03v2-watchdog.main.dryrun)" = 1 ] || exit 0
+[ "$(uci -q get rd03v2-watchdog.main.reload)" = 1 ] || exit 0
+[ -z "$(uci -q get rd03v2-watchdog.main.inplace)" ] || exit 0
+
+uci set rd03v2-watchdog.main.dryrun=0
+uci commit rd03v2-watchdog
+logger -t rd03v2-watchdog "defaults migrated: dryrun=0"
+exit 0

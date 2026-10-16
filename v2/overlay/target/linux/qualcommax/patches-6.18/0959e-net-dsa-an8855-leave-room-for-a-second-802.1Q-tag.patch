@@ -1,0 +1,47 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] net: dsa: an8855: leave room for a second 802.1Q tag
+
+The switch's global RX length (GMACCR) is sized for one tag: MTU +
+ETH_HLEN + MTK_TAG_LEN + ETH_FCS_LEN, 1522 bytes at MTU 1500. The
+an8855-8021q tagger sends a VLAN upper's frame with its own tag only, so
+one tag is enough for a port or a VLAN upper of it, but a VLAN upper of
+a VLAN upper (QinQ, wan.20.30) is [20][30] on the CPU link and on the
+wire: a 1500-byte packet makes a 1526-byte frame.
+
+The switch drops such frames at the MAC RX of the port they enter, the
+CPU port included, and counts them in RxBadPktBytes. Measured on a
+Xiaomi AX3000T v2 with wan.20.30: every frame above 1522 bytes was
+dropped in both directions, so TCP over the QinQ interface moved no data
+at all, on the host path and offloaded by the NSS firmware alike.
+
+Add one VLAN_HLEN, which selects the 1536-byte setting at MTU 1500. Do it
+in either tag mode: the NSS bring-up switches the conduit from mtk to
+an8855-8021q at run time, after DSA programmed the CPU port's MTU, and
+the register is only rewritten on an MTU change. (A version that added
+the tag in 8021q mode only was measured to change nothing for exactly
+that reason.)
+
+Signed-off-by: Adriel Santos <adriel@adriel.eu>
+Assisted-by: Claude:claude-opus-5-5
+---
+--- a/drivers/net/dsa/an8855.c
++++ b/drivers/net/dsa/an8855.c
+@@ -1446,6 +1446,18 @@
+ 
+ 	/* RX length also includes Ethernet header, MTK tag, and FCS length */
+ 	length = new_mtu + ETH_HLEN + MTK_TAG_LEN + ETH_FCS_LEN;
++	/* ...and room for a second 802.1Q tag. The limit applies at the MAC
++	 * RX of every port, the CPU port included, and counts every tag in the
++	 * frame. With the an8855-8021q tagger the MTK tag's 4 bytes cover one
++	 * tag, but an MTU-sized frame can carry two: a VLAN upper of a VLAN
++	 * upper (QinQ: wan.20.30 is [20][30] on the CPU link and on the wire,
++	 * 1526 bytes at MTU 1500), or a customer-tagged frame in a VLAN-unaware
++	 * bridge. Not only in 8021q mode: the tagger can be switched at run
++	 * time (the NSS bring-up moves the conduit from mtk to an8855-8021q
++	 * after boot), and this register is only rewritten when the CPU port's
++	 * MTU changes, not when the tag protocol does.
++	 */
++	length += VLAN_HLEN;
+ 	if (length <= 1522)
+ 		val = AN8855_MAX_RX_PKT_1518_1522;
+ 	else if (length <= 1536)

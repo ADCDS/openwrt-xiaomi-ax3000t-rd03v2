@@ -1,18 +1,52 @@
 #!/bin/sh /etc/rc.common
-# WiFi Q6 firmware death watchdog - issue #15; see /etc/config/rd03v2-watchdog
+# WiFi Q6 firmware death watchdog; preserve genuine reboot history on shutdown.
 START=99
 USE_PROCD=1
 
+cancel_reboots() {
+ local state="${ROOT:-}/tmp/rd03v2-watchdog" evidence="${ROOT:-}/overlay/rd03v2-watchdog"
+ rm -f "$state/reboot-pending" "$state/hold-reason" "$state/reboot-issued" "$evidence/rebooted"
+}
+
+claim_reboot_receipt() {
+ local state="${ROOT:-}/tmp/rd03v2-watchdog" evidence="${ROOT:-}/overlay/rd03v2-watchdog"
+ # tmpfs markers are gone after a real reboot. Consume the receipt even when
+ # disabled, so a later ordinary boot cannot be mistaken for a watchdog boot.
+ if [ -f "$evidence/rebooted" ] && [ ! -e "$state/reboot-issued" ] && [ ! -e "$state/reboot-pending" ]; then
+  mkdir -p "$state"
+  mv "$evidence/rebooted" "$state/watchdog-boot"
+  sync
+ fi
+}
+
 start_service() {
-	[ "$(uci -q get rd03v2-watchdog.main.enabled)" = 0 ] && return 0
-	procd_open_instance
-	procd_set_param command /usr/sbin/rd03v2-watchdog
-	procd_set_param respawn 3600 5 0
-	# it reads the config once, at start: restart it when the file changes
-	procd_set_param file /etc/config/rd03v2-watchdog
-	procd_close_instance
+ local enabled dryrun
+ claim_reboot_receipt
+ enabled=$(uci -q get rd03v2-watchdog.main.enabled) || enabled=1
+ dryrun=$(uci -q get rd03v2-watchdog.main.dryrun) || dryrun=1
+ # Procd removes an old instance directly on config reload; stop_service is
+ # not invoked then. Cancel held actions here before replacing that instance.
+ if [ "${enabled:-1}" != 1 ] || [ -e "${ROOT:-}/etc/rd03v2-watchdog.disable" ]; then
+  cancel_reboots
+  rm -f "${ROOT:-}/tmp/rd03v2-watchdog/q6-pending"
+  return 0
+ fi
+ # Dry run keeps the recorded root incident for diagnostics/recovery on later
+ # live enablement, while every previously requested reboot is canceled.
+ [ "${dryrun:-1}" = 0 ] || cancel_reboots
+ procd_open_instance
+ procd_set_param command /usr/sbin/rd03v2-watchdog
+ procd_set_param respawn 3600 5 0
+ procd_set_param file /etc/config/rd03v2-watchdog
+ procd_close_instance
+}
+
+stop_service() {
+ # Shutdown also stops services during a genuine watchdog-requested reboot.
+ # Keep its receipt and budgets; explicit stop/restart cancels held reboots.
+ [ "${action:-stop}" = shutdown ] || cancel_reboots
 }
 
 service_triggers() {
-	procd_add_reload_trigger rd03v2-watchdog
+ procd_add_reload_trigger rd03v2-watchdog
 }

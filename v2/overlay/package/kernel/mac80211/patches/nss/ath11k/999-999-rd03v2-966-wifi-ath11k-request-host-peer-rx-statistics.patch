@@ -1,0 +1,24 @@
+From: openwrt-xiaomi-ax3000t-rd03v2 port
+Subject: [PATCH] wifi: ath11k: request peer RX statistics in the default monitor filter
+
+The monitor PPDU consumer updates station RSSI only with a valid frame
+control and AST index. PPDU_END_USER_STATS supplies those fields, but the
+default filter omits it; the NSS helper adds it only for Wi-Fi offload.
+Consequently host mode delivers payload while station signal stays at zero
+and its empty RSSI average is reported as -95 dBm.
+
+Request the peer metadata in the shared default filter. NSS already adds
+this bit, so its effective filter is unchanged. This also covers restoring
+the default filter after monitor teardown or disabling extended statistics.
+Keep the existing RSSI conversion, buffer sizes and low-memory ring counts.
+---
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -230,6 +230,7 @@
+ const struct htt_rx_ring_tlv_filter ath11k_mac_mon_status_filter_default = {
+ 	.rx_filter = HTT_RX_FILTER_TLV_FLAGS_MPDU_START |
+ 		     HTT_RX_FILTER_TLV_FLAGS_PPDU_END |
++		     HTT_RX_FILTER_TLV_FLAGS_PPDU_END_USER_STATS |
+ 		     HTT_RX_FILTER_TLV_FLAGS_PPDU_END_STATUS_DONE,
+ 	.pkt_filter_flags0 = HTT_RX_FP_MGMT_FILTER_FLAGS0,
+ 	.pkt_filter_flags1 = HTT_RX_FP_MGMT_FILTER_FLAGS1,

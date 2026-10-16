@@ -81,18 +81,20 @@ find_bus() {
 # programs a block. Anything else fails at once: a transfer that times out
 # costs i2c-qup ~15 s at 100 kHz, and it cannot be interrupted.
 xfer() {
-	local try=0 out
+	local try=0 out rc
 
 	while :; do
 		out=$(i2ctransfer -y "$BUS" "$@" 2>&1) && break
+		rc=$?
 		case "$out" in
 		*"No such device or address"*)
 			try=$((try + 1))
 			[ $try -lt 20 ] && continue
 			;;
 		esac
-		echo "nfc: i2ctransfer $*: $out" >&2
-		logger -t nfc -p daemon.err "i2ctransfer $*: $out"
+		# Write arguments contain the Wi-Fi password; tool errors may echo them too.
+		echo "nfc: i2ctransfer failed (bus $BUS, address $ADDR, status $rc)" >&2
+		logger -t nfc -p daemon.err "i2ctransfer failed (bus $BUS, address $ADDR, status $rc)"
 		return 1
 	done
 	[ -z "$out" ] || echo "$out"

@@ -1,0 +1,84 @@
+From: Stanislaw Pal <kuncy7@gmail.com>
+Subject: [PATCH] wifi: ath11k: give the firmware the user's country again after a
+ restart
+
+A country set through a user hint (hostapd's country_code) reaches the
+firmware once, as WMI_INIT_COUNTRY from the regulatory notifier. After a
+firmware restart the host still holds that regulatory domain, but the
+firmware is back on the country of its board data and nothing sends it
+the user's again: only chips with current_cc_support get their country
+back in reconfig_complete. An Archer AX55 v1 set to PL came out of a
+recovery reporting 19 dBm on 5 GHz instead of 22.
+
+Send the init country again when a radio whose country a user hint has
+set is started after a restart, before its interfaces come up: sent from
+reconfig_complete the firmware takes the country, but the vdevs already
+running keep the power they were started with.
+
+From kuncy7/openwrt-nss-edma (999-9966, ipq50xx-2026.10.12).
+
+Signed-off-by: Stanislaw Pal <kuncy7@gmail.com>
+---
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -6808,6 +6808,12 @@ static int ath11k_mac_op_start(struct ieee80211_hw *hw)
+ 
+ 	/* TODO: Do we need to enable ANI? */
+ 
++	/* before the interfaces come up again: a running vdev keeps the
++	 * transmit power of the country it was started under
++	 */
++	if (ar->state == ATH11K_STATE_RESTARTED)
++		ath11k_reg_restore_user_cc(ar);
++
+ 	ath11k_reg_update_chan_list(ar, false);
+ 
+ 	ar->num_started_vdevs = 0;
+--- a/drivers/net/wireless/ath/ath11k/reg.c
++++ b/drivers/net/wireless/ath/ath11k/reg.c
+@@ -974,6 +974,37 @@ void ath11k_reg_free(struct ath11k_base *ab)
+ 	}
+ }
+ 
++/* A restarted firmware is back on the country of its board data, while the
++ * regulatory domain a user hint had set lives on in the host. Give the
++ * firmware that country again; without current_cc_support nothing else does.
++ */
++void ath11k_reg_restore_user_cc(struct ath11k *ar)
++{
++	struct wmi_init_country_params init_country_param = {};
++	const struct ieee80211_regdomain *regd;
++	int ret;
++
++	if (ar->ab->hw_params.current_cc_support || !ar->regdom_set_by_user)
++		return;
++
++	rcu_read_lock();
++	regd = rcu_dereference(ar->hw->wiphy->regd);
++	if (!regd) {
++		rcu_read_unlock();
++		return;
++	}
++	memcpy(init_country_param.cc_info.alpha2, regd->alpha2, 2);
++	rcu_read_unlock();
++
++	init_country_param.flags = ALPHA_IS_SET;
++
++	ret = ath11k_wmi_send_init_country_cmd(ar, init_country_param);
++	if (ret)
++		ath11k_warn(ar->ab,
++			    "failed to set the country again after the restart: %d\n",
++			    ret);
++}
++
+ int ath11k_reg_set_cc(struct ath11k *ar)
+ {
+ 	struct wmi_set_current_country_params set_current_param = {};
+--- a/drivers/net/wireless/ath/ath11k/reg.h
++++ b/drivers/net/wireless/ath/ath11k/reg.h
+@@ -47,4 +47,5 @@ int ath11k_reg_handle_chan_list(struct ath11k_base *ab,
+ 				struct cur_regulatory_info *reg_info,
+ 				enum ieee80211_ap_reg_power power_type);
+ int ath11k_reg_set_cc(struct ath11k *ar);
++void ath11k_reg_restore_user_cc(struct ath11k *ar);
+ #endif

@@ -1,0 +1,572 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] qcom: add bounded secure user-PD reload support
+
+Diagnostic candidate. Restore the ASID-scoped PAS segment-loading and MSA
+operations needed to test a stopped WCSS user PD without overwriting the
+live root or another PD. The WCSS owner serializes reloads against root
+lifecycle changes and binds each transition to a boot generation.
+
+Signed-off-by: Adriel Santos <adriel@adriel.eu>
+---
+--- a/drivers/firmware/qcom/qcom_scm.c
++++ b/drivers/firmware/qcom/qcom_scm.c
+@@ -894,6 +894,122 @@
+ }
+ EXPORT_SYMBOL_GPL(qcom_scm_pas_set_wifi_power_mode);
+ 
++static int qcom_scm_mpd_state(u32 peripheral, u32 command)
++{
++	struct qcom_scm_desc desc = {
++		.svc = QCOM_SCM_SVC_PIL,
++		.cmd = command,
++		.arginfo = QCOM_SCM_ARGS(1),
++		.args[0] = peripheral,
++		.owner = ARM_SMCCC_OWNER_SIP,
++	};
++	struct qcom_scm_res res;
++	int ret;
++
++	if (!__qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_PIL,
++					  command))
++		return -EOPNOTSUPP;
++
++	ret = qcom_scm_clk_enable();
++	if (ret)
++		return ret;
++
++	ret = qcom_scm_bw_enable();
++	if (ret)
++		goto disable_clk;
++
++	ret = qcom_scm_call(__scm->dev, &desc, &res);
++	qcom_scm_bw_disable();
++
++disable_clk:
++	qcom_scm_clk_disable();
++
++	return ret ? : res.result[0];
++}
++
++int qcom_scm_msa_lock(u32 peripheral)
++{
++	return qcom_scm_mpd_state(peripheral, QCOM_SCM_MSA_LOCK);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_msa_lock);
++
++int qcom_scm_msa_unlock(u32 peripheral)
++{
++	return qcom_scm_mpd_state(peripheral, QCOM_SCM_MSA_UNLOCK);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_msa_unlock);
++
++int qcom_scm_pas_load_segment(u32 peripheral, int segment,
++			      const void *data, size_t size)
++{
++	struct qcom_scm_pas_segment_args {
++		__le64 addr;
++		__le64 block_size;
++		__le64 data_addr;
++	} *args;
++	struct qcom_scm_desc desc = {
++		.svc = QCOM_SCM_SVC_PIL,
++		.cmd = QCOM_SCM_PIL_PAS_LOAD_SEG,
++		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_VAL, QCOM_SCM_VAL,
++					 QCOM_SCM_RW, QCOM_SCM_VAL),
++		.args[0] = peripheral,
++		.args[1] = segment,
++		.owner = ARM_SMCCC_OWNER_SIP,
++	};
++	struct qcom_scm_res res;
++	dma_addr_t dma_args, dma_data;
++	void *data_buffer;
++	int ret;
++
++	if (!__qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_PIL,
++					  QCOM_SCM_PIL_PAS_LOAD_SEG))
++		return -EOPNOTSUPP;
++	if (!data || !size)
++		return -EINVAL;
++
++	args = dma_alloc_coherent(__scm->dev, sizeof(*args), &dma_args,
++				  GFP_KERNEL);
++	if (!args)
++		return -ENOMEM;
++
++	data_buffer = dma_alloc_coherent(__scm->dev, size, &dma_data,
++					 GFP_KERNEL);
++	if (!data_buffer) {
++		ret = -ENOMEM;
++		goto free_args;
++	}
++
++	memcpy(data_buffer, data, size);
++	args->addr = cpu_to_le64(dma_args + offsetof(struct qcom_scm_pas_segment_args,
++						     data_addr));
++	args->block_size = cpu_to_le64(size);
++	args->data_addr = cpu_to_le64(dma_data);
++	desc.args[2] = dma_args;
++	desc.args[3] = 1;
++
++	ret = qcom_scm_clk_enable();
++	if (ret)
++		goto free_data;
++
++	ret = qcom_scm_bw_enable();
++	if (ret)
++		goto disable_clk;
++
++	ret = qcom_scm_call(__scm->dev, &desc, &res);
++	qcom_scm_bw_disable();
++
++disable_clk:
++	qcom_scm_clk_disable();
++
++	ret = ret ? : res.result[0];
++free_data:
++	dma_free_coherent(__scm->dev, size, data_buffer, dma_data);
++free_args:
++	dma_free_coherent(__scm->dev, sizeof(*args), args, dma_args);
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_pas_load_segment);
++
+ static int __qcom_scm_pas_mss_reset(struct device *dev, bool reset)
+ {
+ 	struct qcom_scm_desc desc = {
+--- a/drivers/firmware/qcom/qcom_scm.h
++++ b/drivers/firmware/qcom/qcom_scm.h
+@@ -107,6 +107,9 @@
+ #define QCOM_SCM_PIL_PAS_MSS_RESET	0x0a
+ #define QCOM_SCM_PIL_PAS_WIFI_PWR_EN	0x17
+ #define QCOM_SCM_PIL_PAS_WIFI_PWR_DIS	0x18
++#define QCOM_SCM_PIL_PAS_LOAD_SEG	0x19
++#define QCOM_SCM_MSA_LOCK		0x24
++#define QCOM_SCM_MSA_UNLOCK		0x25
+ #define QCOM_SCM_PIL_PAS_INIT_IMAGE_V2	0x1a
+ 
+ #define QCOM_SCM_SVC_IO			0x05
+--- a/drivers/remoteproc/qcom_q6v5_wcss_sec.c
++++ b/drivers/remoteproc/qcom_q6v5_wcss_sec.c
+@@ -10,8 +10,10 @@
+ #include <linux/io.h>
+ #include <linux/mailbox_client.h>
+ #include <linux/mailbox/tmelcom-qmp.h>
++#include <linux/module.h>
+ #include <linux/of_reserved_mem.h>
+ #include <linux/platform_device.h>
++#include <linux/remoteproc/qcom_rproc.h>
+ #include <linux/soc/qcom/mdt_loader.h>
+ #include <linux/soc/qcom/smem.h>
+ #include <linux/soc/qcom/smem_state.h>
+@@ -32,6 +34,7 @@
+ #define REMOTE_PID			1
+ #define UPD_BOOT_INFO_HEADER_TYPE	0x2
+ #define UPD_BOOT_INFO_SMEM_ID		507
++#define UPD_SWID			0x12
+ 
+ struct wcss_sec {
+ 	struct device *dev;
+@@ -49,6 +52,8 @@
+ 	struct mbox_chan *mbox_chan;
+ 	void *metadata;
+ 	size_t metadata_len;
++	u32 boot_generation;
++	bool userpd_msa_unsupported;
+ };
+ 
+ struct wcss_data {
+@@ -103,6 +108,10 @@
+ 	ret = qcom_q6v5_wait_for_start(&wcss->q6, Q6_WAIT_TIMEOUT);
+ 	if (ret == -ETIMEDOUT)
+ 		dev_err(dev, "start timed out\n");
++	else if (!ret) {
++		if (!++wcss->boot_generation)
++			wcss->boot_generation++;
++	}
+ 
+ unprepare:
+ 	qcom_q6v5_unprepare(&wcss->q6);
+@@ -110,6 +119,118 @@
+ 	return ret;
+ }
+ 
++static int wcss_userpd_check(struct rproc *rproc, struct wcss_sec *wcss,
++			     u32 root_generation)
++{
++	if (rproc->state != RPROC_RUNNING || !wcss->q6.running)
++		return -ENODEV;
++	if (root_generation && root_generation != wcss->boot_generation)
++		return -ESTALE;
++
++	return 0;
++}
++
++int qcom_wcss_userpd_unprepare(struct rproc *rproc, u32 pd_asid,
++			       u32 *root_generation)
++{
++	struct wcss_sec *wcss;
++	u32 pasid;
++	int ret;
++
++	if (!rproc || !root_generation || pd_asid < 1 || pd_asid > 3)
++		return -EINVAL;
++
++	mutex_lock(&rproc->lock);
++	wcss = rproc->priv;
++	ret = wcss_userpd_check(rproc, wcss, 0);
++	if (ret)
++		goto unlock;
++
++	pasid = (pd_asid << 8) | UPD_SWID;
++	dev_info(wcss->dev,
++		 "rd03v2 userpd trace: MSA unlock asid=%u generation=%u\n",
++		 pd_asid, wcss->boot_generation);
++	ret = qcom_scm_msa_unlock(pasid);
++	if (ret == -EOPNOTSUPP) {
++		wcss->userpd_msa_unsupported = true;
++		dev_info(wcss->dev,
++			 "rd03v2 userpd trace: MSA calls unsupported; continuing without them\n");
++		ret = 0;
++	}
++	if (!ret)
++		*root_generation = wcss->boot_generation;
++
++unlock:
++	mutex_unlock(&rproc->lock);
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_wcss_userpd_unprepare);
++
++int qcom_wcss_userpd_prepare(struct rproc *rproc, u32 pd_asid,
++			     u32 root_generation)
++{
++	struct wcss_sec *wcss;
++	const struct firmware *firmware;
++	u32 pasid;
++	int ret;
++
++	if (!rproc || !root_generation || pd_asid < 1 || pd_asid > 3)
++		return -EINVAL;
++
++	mutex_lock(&rproc->lock);
++	wcss = rproc->priv;
++	ret = wcss_userpd_check(rproc, wcss, root_generation);
++	if (ret)
++		goto unlock;
++
++	ret = request_firmware(&firmware, rproc->firmware, wcss->dev);
++	if (ret)
++		goto unlock;
++
++	ret = qcom_mdt_load_pd_seg(wcss->dev, firmware, rproc->firmware,
++				   wcss->desc->pasid, pd_asid,
++				    wcss->mem_region, wcss->mem_phys,
++				    wcss->mem_size, NULL);
++	release_firmware(firmware);
++	if (ret)
++		goto unlock;
++
++	ret = wcss_userpd_check(rproc, wcss, root_generation);
++	if (ret)
++		goto unlock;
++
++	pasid = (pd_asid << 8) | UPD_SWID;
++	dev_info(wcss->dev,
++		 "rd03v2 userpd trace: MSA lock asid=%u generation=%u\n",
++		 pd_asid, wcss->boot_generation);
++	if (!wcss->userpd_msa_unsupported)
++		ret = qcom_scm_msa_lock(pasid);
++	if (!ret)
++		ret = wcss_userpd_check(rproc, wcss, root_generation);
++
++unlock:
++	mutex_unlock(&rproc->lock);
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_wcss_userpd_prepare);
++
++int qcom_wcss_userpd_root_alive(struct rproc *rproc, u32 root_generation)
++{
++	struct wcss_sec *wcss;
++	int ret;
++
++	if (!rproc || !root_generation)
++		return -EINVAL;
++
++	mutex_lock(&rproc->lock);
++	wcss = rproc->priv;
++	ret = wcss_userpd_check(rproc, wcss, root_generation);
++	mutex_unlock(&rproc->lock);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_wcss_userpd_root_alive);
++
+ static int wcss_sec_stop(struct rproc *rproc)
+ {
+ 	struct wcss_sec *wcss = rproc->priv;
+--- a/drivers/soc/qcom/mdt_loader.c
++++ b/drivers/soc/qcom/mdt_loader.c
+@@ -18,6 +18,8 @@
+ #include <linux/slab.h>
+ #include <linux/soc/qcom/mdt_loader.h>
+ 
++#define QCOM_MDT_PF_ASID_MASK	GENMASK(19, 16)
++
+ static bool mdt_header_valid(const struct firmware *fw)
+ {
+ 	const struct elf32_hdr *ehdr;
+@@ -31,6 +33,9 @@
+ 
+ 	if (memcmp(ehdr->e_ident, ELFMAG, SELFMAG))
+ 		return false;
++	if (ehdr->e_ident[EI_CLASS] != ELFCLASS32 ||
++	    ehdr->e_ident[EI_DATA] != ELFDATA2LSB)
++		return false;
+ 
+ 	if (ehdr->e_phentsize != sizeof(struct elf32_phdr))
+ 		return false;
+@@ -100,6 +105,41 @@
+ 	return ret;
+ }
+ 
++static int mdt_load_split_segment_dma(int pas_id, unsigned int segment,
++				      const struct firmware *fw, bool is_split,
++				      const struct elf32_phdr *phdrs,
++				      const char *fw_name,
++				      struct device *dev)
++{
++	const struct elf32_phdr *phdr = &phdrs[segment];
++	void *data;
++	int ret;
++
++	data = kvmalloc(phdr->p_filesz, GFP_KERNEL);
++	if (!data)
++		return -ENOMEM;
++
++	if (is_split) {
++		ret = mdt_load_split_segment(data, phdrs, segment, fw_name, dev);
++		if (ret)
++			goto free_data;
++	} else {
++		if (phdr->p_offset > fw->size ||
++		    phdr->p_filesz > fw->size - phdr->p_offset) {
++			ret = -EINVAL;
++			goto free_data;
++		}
++		memcpy(data, fw->data + phdr->p_offset, phdr->p_filesz);
++	}
++
++	ret = qcom_scm_pas_load_segment(pas_id, segment, data,
++					phdr->p_filesz);
++
++free_data:
++	kvfree(data);
++	return ret;
++}
++
+ /**
+  * qcom_mdt_get_size() - acquire size of the memory region needed to load mdt
+  * @fw:		firmware object for the mdt file
+@@ -335,7 +375,8 @@
+ static int __qcom_mdt_load(struct device *dev, const struct firmware *fw,
+ 			   const char *fw_name, void *mem_region,
+ 			   phys_addr_t mem_phys, size_t mem_size,
+-			   phys_addr_t *reloc_base)
++			   phys_addr_t *reloc_base, bool dma_required,
++			   int pas_id, int pd_asid)
+ {
+ 	const struct elf32_phdr *phdrs;
+ 	const struct elf32_phdr *phdr;
+@@ -347,6 +388,8 @@
+ 	bool is_split;
+ 	void *ptr;
+ 	int ret = 0;
++	int matching = 0;
++	int loaded = 0;
+ 	int i;
+ 
+ 	if (!fw || !mem_region || !mem_phys || !mem_size)
+@@ -392,8 +435,16 @@
+ 		if (!mdt_phdr_loadable(phdr))
+ 			continue;
+ 
++		if (pd_asid &&
++		    (FIELD_GET(QCOM_MDT_PF_ASID_MASK, phdr->p_flags) != pd_asid ||
++		     !(phdr->p_flags & PF_W)))
++			continue;
++		if (pd_asid)
++			matching++;
++
+ 		offset = phdr->p_paddr - mem_reloc;
+-		if (offset < 0 || offset + phdr->p_memsz > mem_size) {
++		if (offset < 0 || (size_t)offset > mem_size ||
++		    phdr->p_memsz > mem_size - (size_t)offset) {
+ 			dev_err(dev, "segment outside memory range\n");
+ 			ret = -EINVAL;
+ 			break;
+@@ -409,9 +460,19 @@
+ 
+ 		ptr = mem_region + offset;
+ 
+-		if (phdr->p_filesz && !is_split) {
++		if (dma_required && phdr->p_filesz) {
++			ret = mdt_load_split_segment_dma(pas_id, i, fw, is_split,
++							 phdrs, fw_name, dev);
++			if (ret)
++				break;
++			loaded++;
++			dev_info(dev,
++				 "rd03v2 userpd trace: secure reload asid=%d segment=%d bytes=%u\n",
++				 pd_asid, i, phdr->p_filesz);
++		} else if (phdr->p_filesz && !is_split) {
+ 			/* Firmware is large enough to be non-split */
+-			if (phdr->p_offset + phdr->p_filesz > fw->size) {
++			if (phdr->p_offset > fw->size ||
++			    phdr->p_filesz > fw->size - phdr->p_offset) {
+ 				dev_err(dev, "file %s segment %d would be truncated\n",
+ 					fw_name, i);
+ 				ret = -EINVAL;
+@@ -426,12 +487,14 @@
+ 				break;
+ 		}
+ 
+-		if (phdr->p_memsz > phdr->p_filesz)
++		if (!dma_required && phdr->p_memsz > phdr->p_filesz)
+ 			memset(ptr + phdr->p_filesz, 0, phdr->p_memsz - phdr->p_filesz);
+ 	}
+ 
+ 	if (reloc_base)
+ 		*reloc_base = mem_reloc;
++	if (!ret && pd_asid && (!matching || !loaded))
++		ret = -ENOENT;
+ 
+ 	return ret;
+ }
+@@ -461,7 +524,7 @@
+ 		return ret;
+ 
+ 	return __qcom_mdt_load(dev, fw, firmware, mem_region, mem_phys,
+-			       mem_size, reloc_base);
++			       mem_size, reloc_base, false, pas_id, 0);
+ }
+ EXPORT_SYMBOL_GPL(qcom_mdt_load);
+ 
+@@ -482,9 +545,22 @@
+ 			  size_t mem_size, phys_addr_t *reloc_base)
+ {
+ 	return __qcom_mdt_load(dev, fw, firmware, mem_region, mem_phys,
+-			       mem_size, reloc_base);
++			       mem_size, reloc_base, false, 0, 0);
+ }
+ EXPORT_SYMBOL_GPL(qcom_mdt_load_no_init);
+ 
++int qcom_mdt_load_pd_seg(struct device *dev, const struct firmware *fw,
++			 const char *firmware, int pas_id, int pd_asid,
++			 void *mem_region, phys_addr_t mem_phys, size_t mem_size,
++			 phys_addr_t *reloc_base)
++{
++	if (pd_asid <= 0 || pd_asid > FIELD_MAX(QCOM_MDT_PF_ASID_MASK))
++		return -EINVAL;
++
++	return __qcom_mdt_load(dev, fw, firmware, mem_region, mem_phys,
++			       mem_size, reloc_base, true, pas_id, pd_asid);
++}
++EXPORT_SYMBOL_GPL(qcom_mdt_load_pd_seg);
++
+ MODULE_DESCRIPTION("Firmware parser for Qualcomm MDT format");
+ MODULE_LICENSE("GPL v2");
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -95,6 +95,10 @@
+ bool qcom_scm_pas_supported(u32 pas_id);
+ 
+ int qcom_scm_pas_set_wifi_power_mode(u32 peripheral, bool enable);
++int qcom_scm_pas_load_segment(u32 peripheral, int segment,
++			      const void *data, size_t size);
++int qcom_scm_msa_lock(u32 peripheral);
++int qcom_scm_msa_unlock(u32 peripheral);
+ 
+ int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
+ int qcom_scm_io_writel(phys_addr_t addr, unsigned int val);
+--- a/include/linux/remoteproc/qcom_rproc.h
++++ b/include/linux/remoteproc/qcom_rproc.h
+@@ -1,7 +1,11 @@
+ #ifndef __QCOM_RPROC_H__
+ #define __QCOM_RPROC_H__
+ 
++#include <linux/errno.h>
++#include <linux/types.h>
++
+ struct notifier_block;
++struct rproc;
+ 
+ /**
+  * enum qcom_ssr_notify_type - Startup/Shutdown events related to a remoteproc
+@@ -44,5 +48,35 @@
+ }
+ 
+ #endif
++
++#if IS_ENABLED(CONFIG_QCOM_Q6V5_WCSS_SEC)
++
++int qcom_wcss_userpd_unprepare(struct rproc *rproc, u32 pd_asid,
++			       u32 *root_generation);
++int qcom_wcss_userpd_prepare(struct rproc *rproc, u32 pd_asid,
++			     u32 root_generation);
++int qcom_wcss_userpd_root_alive(struct rproc *rproc, u32 root_generation);
++
++#else
++
++static inline int qcom_wcss_userpd_unprepare(struct rproc *rproc, u32 pd_asid,
++					     u32 *root_generation)
++{
++	return -EOPNOTSUPP;
++}
++
++static inline int qcom_wcss_userpd_prepare(struct rproc *rproc, u32 pd_asid,
++					   u32 root_generation)
++{
++	return -EOPNOTSUPP;
++}
++
++static inline int qcom_wcss_userpd_root_alive(struct rproc *rproc,
++					      u32 root_generation)
++{
++	return -EOPNOTSUPP;
++}
++
++#endif
+ 
+ #endif
+--- a/include/linux/soc/qcom/mdt_loader.h
++++ b/include/linux/soc/qcom/mdt_loader.h
+@@ -27,6 +27,10 @@
+ 			  const char *fw_name, void *mem_region,
+ 			  phys_addr_t mem_phys, size_t mem_size,
+ 			  phys_addr_t *reloc_base);
++int qcom_mdt_load_pd_seg(struct device *dev, const struct firmware *fw,
++			 const char *fw_name, int pas_id, int pd_asid,
++			 void *mem_region, phys_addr_t mem_phys, size_t mem_size,
++			 phys_addr_t *reloc_base);
+ void *qcom_mdt_read_metadata(const struct firmware *fw, size_t *data_len,
+ 			     const char *fw_name, struct device *dev);
+ 
+@@ -59,6 +63,17 @@
+ 					phys_addr_t *reloc_base)
+ {
+ 	return -ENODEV;
++}
++
++static inline int qcom_mdt_load_pd_seg(struct device *dev,
++				       const struct firmware *fw,
++					const char *fw_name, int pas_id,
++					int pd_asid, void *mem_region,
++					phys_addr_t mem_phys,
++					size_t mem_size,
++					phys_addr_t *reloc_base)
++{
++	return -ENODEV;
+ }
+ 
+ static inline void *qcom_mdt_read_metadata(const struct firmware *fw,

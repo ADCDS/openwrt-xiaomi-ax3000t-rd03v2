@@ -1,0 +1,12 @@
+#!/bin/sh /etc/rc.common
+# Keep NSS pools out of RAM installers, before nss-dwmac START=19 loads Wi-Fi.
+START=17
+start() {
+	. /lib/functions.sh
+	. /lib/upgrade/common.sh
+	[ "$(rootfs_type)" = tmpfs ] || return 0
+	uci -q set nss.general.enabled='0'
+	uci -q set nss.general.wifi_offload='0'
+	uci -q commit nss
+	logger -t rd03v2-installer 'RAM installer: NSS disabled, host Wi-Fi available'
+}

@@ -1,0 +1,98 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: skip the user-PD stop handshake when the firmware is gone
+
+ath11k_ahb_stop_user_pd() always sends the SMP2P stop request and waits
+ATH11K_USERPD_STOP_TIMEOUT for an ack from the firmware that spawned the
+user PD. After a fatal error on the Q6 that firmware no longer exists, and
+ATH11K_FLAG_CRASH_FLUSH stays set until a recovery actually brings it back -
+it is what makes every WMI command fail with -ESHUTDOWN in the meantime.
+
+The ack can then never arrive, so the stop burns its full five-second
+timeout, twice on this board, and the -ETIMEDOUT return skips the SCM
+power-off and the MSA unprepare. The teardown finishes with pending ack
+frames still queued, and ieee80211_free_hw() warns on the way out:
+
+  ath11k c000000.wifi: UserPD stop wait timed out
+  Have pending ack frames!
+  WARNING: CPU: 1 PID: 12722 at net/mac80211/main.c:1716
+    ieee80211_free_ack_frame+0x58/0x60 [mac80211]
+    ieee80211_free_hw+0x30/0x470 [mac80211]
+    ath11k_mac_destroy+0x50/0x84 [ath11k]
+    ath11k_core_deinit+0x124/0x180 [ath11k]
+    ath11k_ahb_remove+0x78/0xc0 [ath11k_ahb]
+
+Measured on the RD03v2 bench (IPQ5018 + QCN6122) with one 2.4 GHz assert
+and the watchdog's driver reload: crash detected at 94529.4, the root PD
+back up at 94531.7, the 5 GHz stop timing out at 94570.9 and the 2.4 GHz
+one at 94579.5, the warning immediately after.
+
+Skip the handshake while CRASH_FLUSH is set and tear the user PD down
+locally instead. Behaviour on a healthy stop is unchanged: the flag is only
+set by the crash-reconfigure path, and it is cleared once a recovery
+succeeds.
+
+Signed-off-by: Adriel Santos <adriel@adriel.eu>
+---
+--- a/drivers/net/wireless/ath/ath11k/ahb.c
++++ b/drivers/net/wireless/ath/ath11k/ahb.c
+@@ -579,25 +579,41 @@
+ 
+ 	ath11k_info(ab, "rd03v2 userpd trace: power-down begin id=%d stop_done=%d\n",
+ 		    ab_ahb->userpd_id, completion_done(&ab_ahb->userpd_stopped));
+-	reinit_completion(&ab_ahb->userpd_stopped);
+-	ath11k_info(ab, "rd03v2 userpd trace: stop request assert\n");
+-	ret = qcom_smem_state_update_bits(ab_ahb->stop_state, BIT(ab_ahb->stop_bit),
+-					 BIT(ab_ahb->stop_bit));
+-	if (ret)
+-		return ret;
+-
+-	time_left = wait_for_completion_timeout(&ab_ahb->userpd_stopped,
+-						ATH11K_USERPD_STOP_TIMEOUT);
+-	ath11k_info(ab, "rd03v2 userpd trace: stop wait end remaining=%lu\n",
+-		    time_left);
+-	ret = qcom_smem_state_update_bits(ab_ahb->stop_state,
+-					 BIT(ab_ahb->stop_bit), 0);
+-	ath11k_info(ab, "rd03v2 userpd trace: stop request cleared\n");
+-	if (ret)
+-		return ret;
+-	if (!time_left) {
+-		ath11k_warn(ab, "UserPD stop wait timed out\n");
+-		return -ETIMEDOUT;
++
++	/*
++	 * This stop request is an SMP2P handshake answered by the firmware that
++	 * spawned this user PD. After a fatal error on the Q6 that firmware is
++	 * gone, and ATH11K_FLAG_CRASH_FLUSH stays set until a recovery really
++	 * brings it back - it is what makes every WMI command fail with
++	 * -ESHUTDOWN meanwhile. The ack can then never arrive: the wait below
++	 * would only burn its five-second timeout, and its -ETIMEDOUT return
++	 * skips the SCM power-off and the MSA unprepare, leaving the pending ack
++	 * frames that make ieee80211_free_hw() warn on the way out. Tear the
++	 * user PD down locally instead, as qcom_q6v5_mpd does for a dead root PD.
++	 */
++	if (test_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags)) {
++		ath11k_info(ab, "rd03v2 userpd trace: firmware is gone; skipping the stop handshake\n");
++	} else {
++		reinit_completion(&ab_ahb->userpd_stopped);
++		ath11k_info(ab, "rd03v2 userpd trace: stop request assert\n");
++		ret = qcom_smem_state_update_bits(ab_ahb->stop_state, BIT(ab_ahb->stop_bit),
++						 BIT(ab_ahb->stop_bit));
++		if (ret)
++			return ret;
++
++		time_left = wait_for_completion_timeout(&ab_ahb->userpd_stopped,
++							ATH11K_USERPD_STOP_TIMEOUT);
++		ath11k_info(ab, "rd03v2 userpd trace: stop wait end remaining=%lu\n",
++			    time_left);
++		ret = qcom_smem_state_update_bits(ab_ahb->stop_state,
++						 BIT(ab_ahb->stop_bit), 0);
++		ath11k_info(ab, "rd03v2 userpd trace: stop request cleared\n");
++		if (ret)
++			return ret;
++		if (!time_left) {
++			ath11k_warn(ab, "UserPD stop wait timed out\n");
++			return -ETIMEDOUT;
++		}
+ 	}
+ 
+ 	if (ab->hw_rev == ATH11K_HW_IPQ5018_HW10) {

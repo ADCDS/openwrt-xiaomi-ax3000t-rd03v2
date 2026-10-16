@@ -1,0 +1,52 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] soc: qcom: mdt_loader: zero the bss when a user PD is reloaded
+
+__qcom_mdt_load() zeroes the part of a segment that has no file data only
+when the load is not done through the secure loader:
+
+	if (!dma_required && phdr->p_memsz > phdr->p_filesz)
+		memset(ptr + phdr->p_filesz, 0, phdr->p_memsz - phdr->p_filesz);
+
+qcom_mdt_load_pd_seg(), the ASID-scoped reload an in-place user-PD restart
+uses, passes dma_required = true, so that memset never runs for it. The
+secure load copies the file-backed bytes of the segments it is given, and a
+pure-BSS segment (p_filesz == 0) is not given to it at all. A reloaded PD
+therefore starts on whatever the previous firmware left in its bss.
+
+Measured on the RD03v2 bench (IPQ5018 + QCN6122), 2.4 GHz hw-restart with
+the user-PD reload:
+
+  [742.283] ... userpd trace: power-up complete id=1
+  [752.487] ath11k c000000.wifi: failed to enable PMF QOS: (-108
+  [752.499] Hardware became unavailable during restart.
+  [752.504] WARNING: ... ieee80211_reconfig+0xb88/0x1070 [mac80211]
+  [754.865] remoteproc remoteproc0: crash detected in q6wcss: type fatal error
+
+The PD spawns and reports ready, but no chip_id/fw_version line follows, so
+its QMI server never came up: ath11k then waits out its firmware start, the
+WMI sends keep failing with -ESHUTDOWN because CRASH_FLUSH is still set, and
+the root Q6 takes a fatal error ten seconds later. Segment 12 of ASID 1 is
+757760 bytes of pure bss at 0x4b7aa000 that the reload never touched.
+
+Zero the bss tail for both paths. The cold-boot behaviour is unchanged.
+
+Signed-off-by: Adriel Santos <adriel@adriel.eu>
+---
+--- a/drivers/soc/qcom/mdt_loader.c
++++ b/drivers/soc/qcom/mdt_loader.c
+@@ -487,7 +487,14 @@
+ 				break;
+ 		}
+ 
+-		if (!dma_required && phdr->p_memsz > phdr->p_filesz)
++		/*
++		 * Zero the bss tail on both paths. The secure segment load copies
++		 * only the file-backed bytes, and a pure-BSS segment (p_filesz ==
++		 * 0) is not sent to it at all, so a reloaded user PD would
++		 * otherwise start on the previous firmware's bss: it spawns and
++		 * reports ready, but never brings its QMI server up.
++		 */
++		if (phdr->p_memsz > phdr->p_filesz)
+ 			memset(ptr + phdr->p_filesz, 0, phdr->p_memsz - phdr->p_filesz);
+ 	}
+ 

@@ -1,0 +1,32 @@
+From: Adriel Santos <adriel@adriel.eu>
+Date: Mon, 12 Oct 2026 22:52:59 -0300
+Subject: [PATCH] wifi: keep RD03v2 basic station statistics by default
+
+qca-nss-pbuf controls ath11k statistics before it exits on host Wi-Fi. The
+unset option defaults to one and sends a zero monitor filter and PPDU mask
+after the 2.4 GHz AP starts. This produces zero signal, an empty average
+and missing TX statistics; a later 5 GHz start masks the problem there.
+
+Cold hardware control with stats_disable=0 restores real statistics with
+extended counters off. Default to zero on this board, preserving explicit
+configuration and the default for other boards. Buffer sizes are unchanged.
+---
+--- a/package/kernel/mac80211/files/qca-nss-pbuf.init
++++ b/package/kernel/mac80211/files/qca-nss-pbuf.init
+@@ -211,9 +211,14 @@
+ 
+ set_stats_disable() {
+ 
+-  local stats_disable
++  local stats_disable stats_disable_default=1
++  # Basic RSSI and TX telemetry need the monitor/PPDU path. The legacy
++  # default clears that path after the first RD03v2 radio has started.
++  # Keep explicit disablement and other boards' defaults unchanged.
++  [ "$(cat /tmp/sysinfo/board_name 2> /dev/null)" = xiaomi,mi-router-ax3000t-v2 ] &&
++    stats_disable_default=0
+   config_load pbuf
+-  config_get stats_disable opt stats_disable 1
++  config_get stats_disable opt stats_disable "$stats_disable_default"
+ 
+   [ -d /sys/kernel/debug/ath11k ] || return 0
+ 

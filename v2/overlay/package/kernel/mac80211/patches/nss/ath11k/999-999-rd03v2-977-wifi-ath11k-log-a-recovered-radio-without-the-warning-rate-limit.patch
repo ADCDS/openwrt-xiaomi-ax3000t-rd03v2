@@ -1,0 +1,39 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: log a recovered radio without the warning rate limit
+
+ath11k_warn() is dev_warn_ratelimited() with one rate limit (10 lines per
+5 s) for every ath11k warning. When the firmware crashes, the commands in
+flight fail with -108 and each logs a warning; on the RD03v2 bench (IPQ5018,
+a Q6 assert while hostapd was updating the beacon) eleven of them use up the
+budget, and both radios recover within the next second with no "pdev 1
+successfully recovered" in the log, and no "callbacks suppressed" line later
+either, since no further warning comes.
+
+The recovery itself is complete (the state goes back to ON and the queues
+wake), but that line is how userspace tells an in-place recovery apart from a
+radio left down: the RD03v2 watchdog rejoins an encrypted mesh on it, and the
+bench harness takes it as the proof of recovery.
+
+Log it with dev_warn(), at the same level and with the same text, outside the
+rate limit. It is printed once per radio per recovery.
+
+Signed-off-by: Adriel Santos <adriel@adriel.eu>
+---
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -9566,8 +9566,13 @@ ath11k_mac_op_reconfig_complete(struct ieee80211_hw *hw,
+ 	mutex_lock(&ar->conf_mutex);
+ 
+ 	if (ar->state == ATH11K_STATE_RESTARTED) {
+-		ath11k_warn(ar->ab, "pdev %d successfully recovered\n",
+-			    ar->pdev->pdev_id);
++		/* Not ath11k_warn(): its rate limit is shared with every other
++		 * warning, and the failed commands of the crash that led here
++		 * often use it up, dropping this line that tells a recovery
++		 * apart from a radio left down.
++		 */
++		dev_warn(ar->ab->dev, "pdev %d successfully recovered\n",
++			 ar->pdev->pdev_id);
+ 		ar->state = ATH11K_STATE_ON;
+ 		ieee80211_wake_queues(ar->hw);
+ 

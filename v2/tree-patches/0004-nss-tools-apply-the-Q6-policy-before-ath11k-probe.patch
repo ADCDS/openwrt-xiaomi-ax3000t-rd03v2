@@ -1,0 +1,38 @@
+From a9373b47249da9c65c46618673e07a84365f35ae Mon Sep 17 00:00:00 2001
+From: Adriel Santos <adriel@adriel.eu>
+Date: Mon, 12 Oct 2026 09:47:44 -0300
+Subject: [PATCH] nss-tools: apply the RD03v2 Q6 policy before every ath11k
+ probe
+
+---
+ package/nss/nss-tools/files/nss-dwmac-up   | 1 +
+ package/nss/nss-tools/files/nss-dwmac.init | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/package/nss/nss-tools/files/nss-dwmac-up b/package/nss/nss-tools/files/nss-dwmac-up
+index 46ec716878..d16089da34 100644
+--- a/package/nss/nss-tools/files/nss-dwmac-up
++++ b/package/nss/nss-tools/files/nss-dwmac-up
+@@ -149,6 +149,7 @@ wifi_load_now() {
+   if [ "$offload" = 1 ]; then
+     pbuf_tune
+   fi
++  [ ! -x /usr/sbin/rd03v2-q6-policy ] || /usr/sbin/rd03v2-q6-policy || logger -t rd03v2-q6 "dump policy unavailable before ath11k probe"
+   modprobe ath11k_ahb 2>/dev/null || true
+   WIFI_LOADED_HERE=1
+   # A PCIe radio (QCN9074/9024 on a board that has one) takes nss.enabled from
+diff --git a/package/nss/nss-tools/files/nss-dwmac.init b/package/nss/nss-tools/files/nss-dwmac.init
+index 455516e217..ca30d3a66f 100644
+--- a/package/nss/nss-tools/files/nss-dwmac.init
++++ b/package/nss/nss-tools/files/nss-dwmac.init
+@@ -43,6 +43,7 @@ wifi_load() {
+ 	# the driver refuses the sysctl with -EAGAIN (feed patch 0142) and the
+ 	# pools would silently stay at their defaults. nss-dwmac-up sizes them
+ 	# after the arm, on every path.
++	[ ! -x /usr/sbin/rd03v2-q6-policy ] || /usr/sbin/rd03v2-q6-policy || logger -t rd03v2-q6 "dump policy unavailable before ath11k probe"
+ 	modprobe ath11k_ahb 2>/dev/null
+ 	modprobe ath11k_pci 2>/dev/null
+ }
+-- 
+2.47.3
+
