@@ -25,8 +25,8 @@ were on the bench before it ("rc1 (b19 sources)", "rc1 (b21 sources)").
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
-distance. The reset button, the LEDs and an NFC tap with a phone are checked by
-hand, separately (C8, C14).
+distance. The reset button, the LEDs and an NFC tap with a phone were checked
+by hand on the release candidate (C8, C14).
 
 ## Summary
 
@@ -39,13 +39,13 @@ hand, separately (C8, C14).
 | C5 | Signal and noise floor in dBm | pass on 5 GHz (within 3 dB); 2.4 GHz within about 10 dB; v1.x reads 24-31 dB high | rc1 |
 | C6 | Regulatory: GB, US, DE, both Wi-Fi modes | pass | b9 |
 | C7 | Board data | byte-identical to v1.x and kuncy7 | - |
-| C8 | NFC tag | pass; phone tap by hand | b9 |
+| C8 | NFC tag | pass, including a phone tap in both modes | b9, rc1 |
 | C9 | Recovery from Q6 firmware crashes, both Wi-Fi modes | pass, in place; a DFS AP stays up (b21, rc1); **2 board resets in 45 recoveries with a station passing traffic, cause not found** | b18-rc1 |
 | C10 | Watchdog against user actions | pass | b16 |
 | C11 | Memory | 42 MB available idle, 34-36 MB in use, no drift; a multi-day soak not run | b19 |
 | C12 | Packages from our repository, tunnels, SQM | pass | b9 |
 | C13 | Upgrade from a realistic v1.x install | pass | b16 |
-| C14 | Buttons and LEDs | registered; physical check by hand | b9 |
+| C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 |
 | C15 | Package signature failures | pass, 8 checks | b9 |
 
 ## C1: install, upgrade and rollback
@@ -295,6 +295,21 @@ qemu and the host's) runs in every build. The release candidate ships
 `inplace` unset, which now means off in both Wi-Fi modes: an incident without
 a crash goes straight to the driver reload, which recovered every time; the
 ath11k reset needs `uci set rd03v2-watchdog.main.inplace=1`.
+
+## C8, C14: NFC tap, buttons and LEDs, by hand (rc1)
+
+On the release candidate installed from stock, 2026-10-16; each step checked
+on the router as well (its log, LED state in sysfs, the boot id):
+
+| Check | Result |
+|---|---|
+| LEDs: both off, blue, yellow, both, blue dim, yellow dim, blue blinking, driven through sysfs | pass, each as expected |
+| NFC `wifi` mode: an Android phone taps the tag | pass: it offered the network and joined it, no password typed (WPA2 4-way completed in the AP's log) |
+| NFC `clear` mode: the same tap | pass: the phone reports an empty tag |
+| mesh button, short press | pass: registered as `wps`; no WPS configured, nothing changes |
+| reset button, short press | pass: reboots, back with both APs and no warning |
+| reset pressed during the early boot blink | pass: failsafe (yellow blinking 50/50 ms, read-only root, lan2 at 192.168.1.1, root without a password) |
+| reset held until yellow blinks (5 s) | pass: factory reset; back with OpenWrt's defaults (both APs off, no root password, NFC `clear`) |
 
 ## C12: packages
 
