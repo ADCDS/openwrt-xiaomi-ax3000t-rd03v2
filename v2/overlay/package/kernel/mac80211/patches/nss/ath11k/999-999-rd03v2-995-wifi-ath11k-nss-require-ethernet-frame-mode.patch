@@ -1,0 +1,37 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: nss: use ethernet frame mode with NSS offload
+
+With nss_offload=1 and frame_mode=1 (native Wi-Fi), clients associate
+but never finish WPA: the 4-way handshake times out (reason 15) on both
+radios of IPQ5018 + QCN6122. The AP transmits its EAPOL messages, but the
+clients' replies never reach the host. NSS's per-peer stats count nothing
+received from them, not even as unauthorized-peer drops, so they are lost
+below NSS. The same setup with frame_mode=2 works, and frame_mode=2 is
+what the donor pairs with nss_offload=1.
+
+Rather than bring up an AP no client can join, warn at probe and use
+ethernet mode when NSS offload is on. Mesh vdevs use native Wi-Fi on
+their own and are unaffected. Raw mode was never tried with NSS and is
+overridden the same way. Issue #24.
+---
+--- a/drivers/net/wireless/ath/ath11k/core.c
++++ b/drivers/net/wireless/ath/ath11k/core.c
+@@ -2956,6 +2956,18 @@
+ 	}
+ 	ab->nss.enabled = nss_offload;
+ 
++	/* With NSS offload, AP and station vdevs are only known to work in
++	 * Ethernet mode. In native Wi-Fi mode the clients' EAPOL frames never
++	 * reach the host, so no client gets past the 4-way handshake; raw mode
++	 * was never tried with NSS. Mesh vdevs use native Wi-Fi on their own
++	 * and are not affected by frame_mode.
++	 */
++	if (nss_offload && ath11k_frame_mode != ATH11K_HW_TXRX_ETHERNET) {
++		ath11k_warn(ab, "frame_mode %u does not work with nss_offload, using ethernet (2)\n",
++			    ath11k_frame_mode);
++		ath11k_frame_mode = ATH11K_HW_TXRX_ETHERNET;
++	}
++
+ 	if (nss_offload)
+ 		ab->nss.stats_enabled = 1;
+ 
