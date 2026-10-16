@@ -39,7 +39,7 @@ not needed here.
 ## Verified on the bench (2026-09-26/27)
 
 IPQ5018 radio (2.4 GHz) with an RT3070 peer; QCN6122 radio (5 GHz) with an
-mt76 (MT7981) peer. Evidence: `stock-investigation/captures/v110-nss-mesh-12.5-bench.txt`.
+mt76 (MT7981) peer.
 
 - Open and SAE mesh on both radios, with the AP on the same radio still
   beaconing. Data runs through NSS: the mesh decap/encap

@@ -163,8 +163,6 @@ lower host limit: on the same channel hal measured -34/-36 dBm with `US`
 
 With the patched module, `US` on 149, `BR` on 36 and `GB` on 36 behaved as
 before: the firmware's own rules, plus the 5725-5850 MHz rule for GB only.
-Raw output is in
-[`stock-investigation/captures/issue34-gb-5ghz-bench.txt`](../stock-investigation/captures/issue34-gb-5ghz-bench.txt).
 
 When a firmware with the UK band ships, its rule overlaps the table entry
 and the entry stops applying. `tools/ath11k-fw-regdb.py` shows whether a new

@@ -534,8 +534,7 @@ Side effects:
 
 The images' userland differs (release versus bench profile), so this does not
 compare CPU load or `MemAvailable`. Not covered: WAN (the bench WAN port had no
-link), PPPoE, IPv6, VLAN-aware bridges, long runs. Evidence:
-`stock-investigation/captures/v110-nss-mesh-12.5-bench.txt`.
+link), PPPoE, IPv6, VLAN-aware bridges, long runs.
 
 ## Final installed-image test
 

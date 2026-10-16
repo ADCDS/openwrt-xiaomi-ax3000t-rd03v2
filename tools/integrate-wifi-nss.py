@@ -15,9 +15,7 @@ DONOR_REV = "92a2d104145c8d265851c4b388a41bd8e9c21cd9"
 # for the gateway this build is for" — but the live stock investigation
 # contradicts the premise: stock RD03v2 (ROM 2.0.28) runs
 # qca_nss_drv.max_ipv4_conn=512 / max_ipv6_conn=512, exactly the LOW numbers, on
-# a consumer gateway. The numbers are in
-# stock-investigation/captures/phase3-wifi.txt (module-parameters section),
-# tabulated in notes/FINDINGS.md phase 4.
+# a consumer gateway (its module parameters, read on the unit).
 #
 # That does not make LOW automatically right for us — a PPPoE gateway with many
 # clients is not stock's bench case, and 512 is a hard cap on *accelerated*
@@ -53,8 +51,7 @@ DONOR_REV = "92a2d104145c8d265851c4b388a41bd8e9c21cd9"
 # Note the init script sets ONLY the pool. It deliberately does not write
 # extra_pbuf_core0, for the reasons above: that knob costs host memory rather
 # than saving it, is write-once, and its GFP_ATOMIC allocator can BUG_ON at
-# boot. See stock-investigation/notes/V1.9-TUNING.md finding #1, and the script's
-# own header, before changing either knob.
+# boot. See the script's own header before changing either knob.
 #
 # Note for anyone tempted to copy stock's /etc/sysctl.d/qca-nss-drv.conf: its
 # dev.nss.ipv4cfg.ipv4_conn=4096 line is dead. That sysctl does not exist at
