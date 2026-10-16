@@ -137,10 +137,10 @@ usteer or DAWN settings, scripts) need the same amount taken off.
 ## Known issues
 
 - **The board reset twice after an in-place Wi-Fi recovery with a client passing traffic.**
-  37 hw-restarts of the 2.4 GHz radio with a station pinging the router recovered in place
+  41 hw-restarts of the 2.4 GHz radio with a station pinging the router recovered in place
   and the station rejoined after about 6 s; in 2 of them, both in the first hour after an
   install from stock, the board stopped 23-24 s after the restart and rebooted. Not seen in
-  the 35 runs after those, and the cause is not known (VALIDATION, C9). A Q6 firmware crash
+  the 39 runs after those, and the cause is not known (VALIDATION, C9). A Q6 firmware crash
   is rare in normal use; if one resets the board, the reboot brings the radios back.
 - **A multi-day soak of v2 was not run.** MemAvailable is 42 MB idle with both radios up and
   NSS offload, and settles at 34-36 MB once Wi-Fi clients have carried traffic; repeated
