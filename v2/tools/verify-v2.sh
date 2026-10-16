@@ -103,6 +103,9 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 		"$(grep -cF '@.interface[@.proto="pppoe"].interface' "$X/usr/sbin/nss-dwmac-up" 2>/dev/null)" 1
 	chk "PPPoE re-dial honors pppname" "$(grep -cF 'network.$_i.pppname' "$X/usr/sbin/nss-dwmac-up")" 1
 	chk "Q6 policy before NSS probe" "$(grep -cF '/usr/sbin/rd03v2-q6-policy' "$X/usr/sbin/nss-dwmac-up")" 1
+	# tree patch 0007: a radio netifd gave up on while ath11k loaded is set up again
+	chk "nss-dwmac-up retries a radio left down (0007)" \
+		"$(grep -cF 'asking netifd to set it up again' "$X/usr/sbin/nss-dwmac-up")" 1
 	chk "RD03v2 keeps basic station statistics by default (0005)" \
 		"$(grep -cF 'stats_disable_default=0' "$X/etc/init.d/qca-nss-pbuf")" 1
 	chk "statistics policy preserves explicit UCI override" \
@@ -110,9 +113,11 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 	chk "early Q6 policy service" "$(yes_ test -L "$X/etc/rc.d/S18rd03v2-q6")" yes
 	chk "early RAM installer service" "$(yes_ test -L "$X/etc/rc.d/S17rd03v2-installer")" yes
 	# B10/B11 first-boot scripts
-	for u in 00-rd03v2-migrate-v1x 95-rd03v2-apk-pins; do
+	for u in 00-rd03v2-migrate-v1x 01-rd03v2-wireless 95-rd03v2-apk-pins 97-rd03v2-four-way-retries; do
 		chk "uci-defaults $u" "$(yes_ sh -n "$X/etc/uci-defaults/$u")" yes
 	done
+	# an empty /etc/board.json after an unclean reboot is generated again
+	chk "preinit 81_rd03v2_board_json" "$(yes_ sh -n "$X/lib/preinit/81_rd03v2_board_json")" yes
 	chk "apk pins match build.sh's copies" \
 		"$(sed -n "s/^PINS='\(.*\)'\$/\1/p" "$X/etc/uci-defaults/95-rd03v2-apk-pins" 2>/dev/null)" \
 		"$(sed -n "s/^PINS='\(.*\)'\$/\1/p" "$OV/target/linux/qualcommax/ipq50xx/base-files/etc/uci-defaults/95-rd03v2-apk-pins")"

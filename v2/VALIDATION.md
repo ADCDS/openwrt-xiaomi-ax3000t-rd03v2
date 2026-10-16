@@ -12,10 +12,15 @@ NAND, with:
   ("B"), and kuncy7's `ipq50xx-2026.10.09` image as he publishes it ("K").
 
 The test builds come from the same sources as the release candidate, built
-from a clean tree; the release candidate differs from the last one (b19) only
+from a clean tree; the release candidate differs from the last one (b21) only
 in its version stamp and its repository address. Each result names the build
 it ran on; "rc1-a" is the first build of the release candidate (b16 plus the
-watchdog default), superseded before publication by the NSS in-place fix.
+watchdog default), superseded before publication by the NSS in-place fix. b21
+is b19 plus the first-boot Wi-Fi defaults (`01-rd03v2-wireless`), the
+`board.json` check (`81_rd03v2_board_json`), the 4-way handshake setting
+(`97-rd03v2-four-way-retries`) and tree patches 0006 (DFS state) and 0007
+(radio retry); a build of the release candidate from b19's sources was on the
+bench before it ("rc1 (b19 sources)").
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -26,15 +31,15 @@ hand, separately (C8, C14).
 
 | | Check | Result | Build |
 |---|---|---|---|
-| C1 | Install, upgrade and rollback paths | see below | b5-rc1-a |
+| C1 | Install, upgrade and rollback paths, stock firmware both ways | see below | b5-b21 |
 | C2 | Reboots, half of them power cuts | pass: 20 / 20 (b9), 4 / 4 (rc1-a) | b9, rc1-a |
 | C3 | Wired through NSS: NAT, WAN VLAN, PPPoE on a WAN VLAN, QinQ, IPv6 over QinQ | pass, all offloaded, 923-941 Mbit/s | b9, b19 |
-| C4 | Wi-Fi, both modes, both bands | pass (b9, b16, b19, rc1); see below for 2.4 GHz in the daytime | b9-rc1 |
+| C4 | Wi-Fi, both modes, both bands | pass (b9, b16, b19, rc1); b21 5 GHz pass; see below for 2.4 GHz in the daytime | b9-b21 |
 | C5 | Signal and noise floor in dBm | pass on 5 GHz (within 3 dB); 2.4 GHz within about 10 dB; v1.x reads 24-31 dB high | rc1 |
 | C6 | Regulatory: GB, US, DE, both Wi-Fi modes | pass | b9 |
 | C7 | Board data | byte-identical to v1.x and kuncy7 | - |
 | C8 | NFC tag | pass; phone tap by hand | b9 |
-| C9 | Recovery from Q6 firmware crashes, both Wi-Fi modes | pass, in place | b18, b19, rc1 |
+| C9 | Recovery from Q6 firmware crashes, both Wi-Fi modes | pass, in place; a DFS AP stays up (b21); **2 board resets in 37 recoveries with a station passing traffic, cause not found** | b18-b21 |
 | C10 | Watchdog against user actions | pass | b16 |
 | C11 | Memory | 42 MB available idle, 34-36 MB in use, no drift; a multi-day soak not run | b19 |
 | C12 | Packages from our repository, tunnels, SQM | pass | b9 |
@@ -50,7 +55,9 @@ hand, separately (C8, C14).
 | v2 -> v2, keeping settings | pass | b10d2, and every candidate since (b12 -> b16) |
 | v2 -> v1.14-nss (rollback), with a v1.x config | pass: v1.14-nss boots with it, both APs, NSS and ECM loaded, no warnings | b16 |
 | offline RAM installer from a release cache (`install.py nss-v2 --offline`) | pass | b9 |
-| stock firmware -> v2 with `xiaomi-openwrt-install`, wired and over Wi-Fi | not run on the bench for this candidate | - |
+| v2 -> stock 2.0.28 with `xiaomi-openwrt-install` (`revert.py`, wired) | pass: stock written and read back, setup wizard back (`inited=0`) | rc1 (twice) |
+| stock 2.0.28 -> v2 with `xiaomi-openwrt-install` (`install.py nss-v2`, wired, `--root-password`, `--wifi-ssid`/`--wifi-key`/`--wifi-country`) | b21: pass, the installer's first-boot settings applied (SSID, WPA2 key and country on both radios, both APs up, root password set, `wpa_pairwise_update_count=8` on both APs). The first rc1 build: installed, but both radios came up off with OpenWrt's defaults, because the first-boot script ran before ath11k had loaded (fixed by `01-rd03v2-wireless`) | b21, rc1 (b19 sources) |
+| stock firmware -> v2 over Wi-Fi | not run on the bench for this candidate | - |
 | kuncy7's `ipq50xx-2026.10.09` image -> v2, keeping its config (hostname, root password, Wi-Fi settings, a static DHCP host) | pass: all kept, migration marker set, NSS and ECM up, offload on, no warnings | rc1-a |
 
 ## C13: upgrade from a realistic v1.x install (b16)
@@ -106,6 +113,7 @@ and 3/3 hashes.
 | Build, mode | 5 GHz up / down | 2.4 GHz up / down | v1.14 reference (5 / 2.4 GHz) |
 |---|---|---|---|
 | rc1, NSS offload | 287 / 338 | 32 / 55 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
+| b21, NSS offload | 292 / 346, 302 / 350 | not comparable: 33 / 35, 7 / 28 with the test client's Bluetooth streaming audio | 288 / 345, 29 / 45 (v1.14-nss) |
 | b19, NSS offload | 286 / 337 | 39 / 56 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
 | b18 (an earlier rc1 build), NSS offload | 278 / 320 | 46 / 58 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
 | b18, host | 257 / 294 | 29 / 36 (channel 6, daytime) | 273 / 236, 32 / 48 (v1.14 plain) |
@@ -193,6 +201,36 @@ both bands afterwards.
 b19 (with the memory changes, the NSS 256 MiB profile among them), NSS offload,
 same campaign: hw-restart 10 / 10 and assert 6 / 6 in place, client back with a
 verified payload in 6-8 s, driver reload 5 / 5, no kernel warning.
+
+5 GHz AP on a DFS channel (52 at 80 MHz, country BR), after the 60 s CAC, NSS
+offload. rc1 (b19 sources), assert: the radios recovered in place, but 5260 MHz
+went from "available" to "usable" within 5 s, and 60-70 s after the crash the AP
+lost its carrier and channel for good, hostapd still reporting it enabled
+(kuncy7/openwrt-nss-edma#28: ath11k applies its regulatory domain again after a
+restart, and cfg80211 then forgets the CAC). b21, with tree patch 0006: assert
+and hw-restart, 5260 MHz stayed available and the AP kept carrier and channel
+to +120 s both times.
+
+A station attached through the event and passing traffic from the first second
+(2026-10-16; the test client on 2.4 GHz, pinging the router 5 times a second; a
+2.4 GHz hw-restart every 75 s; NSS offload): the station was back after about
+6 s each time. Without `wpa_pairwise_update_count=8` 7 of 22 rejoins failed the
+4-way handshake and backed off 10 s (#25: NSS holds the radio's RX for a few
+seconds after the restart, then delivers it at once); with it, 0 of 22, so b21
+sets it on every AP interface (`97-rd03v2-four-way-retries`).
+
+**The board reset twice** in those runs, both on rc1 and both among the 15
+restarts without that setting that had traffic afterwards (37 had traffic
+afterwards in all, 29 on rc1 and 8 on b21): 23-24 s after the restart the
+station's pings stopped, the board stopped answering on the wired LAN too, and
+it rebooted a minute later (UBIFS recovery on the next boot, so not a clean
+reboot; no watchdog decision on record). Both came in the first hour after the
+first install from stock; none came in the 35 restarts with traffic since, with
+or without the setting, after reboots or not. The cause is not known: there is
+no console on this unit and no pstore in this kernel, and the log streamed to
+the bench host for the later runs caught no reset. The reset also left `/etc/board.json` empty, which
+kept the radios down on every boot after it; b21 generates it again at boot
+(`81_rd03v2_board_json`).
 
 How it got there (all on the bench):
 - b16, NSS offload, without 979-981: radios back beaconing, but no client

@@ -24,6 +24,8 @@ commit, and our changes are applied on top of it at build time.
 | His NSS bring-up debug options reverted (serial sysrq, sysrq mask) | tree patch 0001 | his commit `5d86c24df4` asks for it in deployed builds |
 | NFC tag: I2C bus, `/usr/sbin/nfc`, its service and config | tree patch 0002, `shared.list` | [docs/nfc.md](../docs/nfc.md) |
 | Every PPPoE session made again once the NSS PPPoE manager is resident, not only the default-route WAN's (otherwise a second PPPoE WAN stays on the host path after every boot) | tree patch 0003 | gate soak, 2026-10-10; kuncy7/openwrt-nss-edma#25 |
+| cfg80211 keeps the DFS state of the channels when ath11k applies its domain again after a firmware restart. Without it an AP on a DFS channel (52-144, or 36 at 160 MHz) lost its carrier and channel 60 s after every in-place recovery, with hostapd still reporting it enabled | tree patch 0006 | kuncy7 238d307610 (10.15-2), kuncy7/openwrt-nss-edma#28 |
+| A radio that netifd gave up on while ath11k loaded is set up again once every radio has its phy (with NSS offload the 5 GHz QCN6122 probes about 4 s after the 2.4 GHz radio) | tree patch 0007 | kuncy7 dff118f852 (10.15-2), kuncy7/openwrt-nss-edma#29 |
 | Q6 crash-dump policy applied before every ath11k probe: `coredump=disabled` by default, so a root-PD crash restarts the Q6 in seconds instead of waiting 5 min for a dump to be read | tree patch 0004, `overlay/.../rd03v2-q6` (service, config, hotplug, `rd03v2-q6-policy`) | gate A5 |
 | ath11k statistics kept on by default on this board (`qca-nss-pbuf` turned them off after the 2.4 GHz AP started: zero station signal) | tree patch 0005 | phase C, B7-B9 |
 | Host-mode Wi-Fi: RX filter sizes in bytes (965), peer RX statistics (966) and monitor metadata (967) requested, so host mode receives correctly and reports station signal | `overlay/.../nss/ath11k/999-999-rd03v2-965..967-*` | phase C, B5-B9 |
@@ -43,6 +45,9 @@ commit, and our changes are applied on top of it at build time.
 | ath11k: UK 5.8 GHz band (964) | `overlay/.../nss/ath11k/999-999-rd03v2-964-*` | v1.x, #34 |
 | smp2p: clear cached inbound bits across a Q6 restart (0918), so `rmmod`/`insmod` and crash recovery can start the Q6 again | `overlay/target/linux/qualcommax/patches-6.18/0918-*` | v1.x 0918, moved into his `wcss_sec_start()` |
 | Wi-Fi watchdog, ported to his single `q6wcss` remoteproc, **acting by default** (`dryrun=0`, `reload=1`, `inplace` unset = off: it reloads ath11k rather than resetting one radio). It leaves a root-PD crash to the kernel's respawn (both Wi-Fi modes) and steps in when the radios are not back 120 s later, or the respawn was suppressed. An upgrade from an earlier candidate is migrated to `dryrun=0` | `overlay/.../usr/sbin/rd03v2-watchdog`, `overlay/.../uci-defaults/96-rd03v2-watchdog-defaults` | v1.x, #15 |
+| hostapd sends the first 4-way handshake message 8 times (`wpa_pairwise_update_count=8` on every AP interface, once). NSS holds a radio's RX for a few seconds after an in-place recovery; without it 7 of 22 rejoins failed the handshake and backed off 10 s, with it 0 of 22 | `overlay/.../uci-defaults/97-rd03v2-four-way-retries` | v1.x, #25; stock round trip, 2026-10-16 |
+| First-boot Wi-Fi settings apply: both radio sections are written before any other uci-defaults script, as OpenWrt writes them. ath11k loads a minute into the first boot (after the NSS arm), so a first-boot script found no radio to configure: an install from stock with `--wifi-ssid` ended with both radios off | `overlay/.../uci-defaults/01-rd03v2-wireless` | stock round trip, 2026-10-16 |
+| An empty or unreadable `/etc/board.json` is generated again at boot. An unclean reboot can leave it empty (wifi-detect rewrites it without fsync), and OpenWrt only generates a missing one: the radios then stayed down on every boot ("PHY is undefined") | `overlay/.../lib/preinit/81_rd03v2_board_json` | crash reboots, 2026-10-16 |
 | apk pins for the packages he changes without a version bump | `overlay/.../uci-defaults/95-rd03v2-apk-pins` | see [Packages](#packages) |
 | Migration of v1.x settings | `overlay/.../uci-defaults/00-rd03v2-migrate-v1x` | see [Upgrading from v1.x](#upgrading-from-v1x) |
 | Our signing key, our repository first in `distfeeds.list` | `build.sh`, `keys/` | |
@@ -131,6 +136,12 @@ usteer or DAWN settings, scripts) need the same amount taken off.
 
 ## Known issues
 
+- **The board reset twice after an in-place Wi-Fi recovery with a client passing traffic.**
+  37 hw-restarts of the 2.4 GHz radio with a station pinging the router recovered in place
+  and the station rejoined after about 6 s; in 2 of them, both in the first hour after an
+  install from stock, the board stopped 23-24 s after the restart and rebooted. Not seen in
+  the 35 runs after those, and the cause is not known (VALIDATION, C9). A Q6 firmware crash
+  is rare in normal use; if one resets the board, the reboot brings the radios back.
 - **A multi-day soak of v2 was not run.** MemAvailable is 42 MB idle with both radios up and
   NSS offload, and settles at 34-36 MB once Wi-Fi clients have carried traffic; repeated
   client sessions, in-place recoveries and driver reloads did not make it drift (VALIDATION).

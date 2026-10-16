@@ -1,0 +1,115 @@
+From 189b5e4b2c953cd4b294e0328fd077c481414303 Mon Sep 17 00:00:00 2001
+From: Stanislaw Pal <kuncy7@gmail.com>
+Date: Thu, 15 Oct 2026 21:10:57 +0200
+Subject: [PATCH] nss-tools: set up a radio again that netifd gave up on
+ while it loaded
+
+With the Wi-Fi offload on, ath11k loads after the NSS takeover, long
+after netifd started. The hotplug of the first radio makes netifd set
+up every radio; a radio that comes later - a PCIe card has to probe
+and boot its own firmware, ~2 s on a QCN9074 - fails those setups
+("PHY is undefined for device") until its retries are gone, and the
+retry that its own hotplug asks for arrives while a setup is still
+running, which netifd drops. The radio stays down until 'wifi up'.
+Reported on a Xiaomi AX6000 (issue 29); on the GL-B3000 and the Archer
+AX55 both radios are on the SoC and appear together.
+
+After the radios are loaded, wait until every enabled radio has its phy
+and netifd has nothing pending, then ask netifd to retry the radios
+that are still down. A retry starts a radio that is down and clears its
+given-up state; it does nothing to a radio that is up.
+
+Upstream: https://github.com/kuncy7/openwrt-nss-edma/commit/dff118f8521d26d462e3e71335cd8e9bf9c959ac (ipq50xx-2026.10.15-2, kuncy7/openwrt-nss-edma#29); PKG_RELEASE 14 -> 15 on top of
+tree patch 0003.
+
+Signed-off-by: Stanislaw Pal <kuncy7@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ package/nss/nss-tools/Makefile           |  2 +-
+ package/nss/nss-tools/files/nss-dwmac-up | 49 +++++++++++++++++++++++-
+ 2 files changed, 49 insertions(+), 2 deletions(-)
+
+diff --git a/package/nss/nss-tools/Makefile b/package/nss/nss-tools/Makefile
+index a997235033..d41a487c13 100644
+--- a/package/nss/nss-tools/Makefile
++++ b/package/nss/nss-tools/Makefile
+@@ -6,7 +6,7 @@
+ include $(TOPDIR)/rules.mk
+ 
+ PKG_NAME:=nss-tools
+-PKG_RELEASE:=14
++PKG_RELEASE:=15
+ 
+ include $(INCLUDE_DIR)/package.mk
+ 
+diff --git a/package/nss/nss-tools/files/nss-dwmac-up b/package/nss/nss-tools/files/nss-dwmac-up
+index d16089da34..9b8670432c 100644
+--- a/package/nss/nss-tools/files/nss-dwmac-up
++++ b/package/nss/nss-tools/files/nss-dwmac-up
+@@ -193,15 +193,62 @@ wifi_radios_up() {
+   return 0
+ }
+ 
++# A radio that comes up later than the others - a PCIe card has to probe
++# and boot its own firmware after the module loads, ~2 s on a QCN9074 -
++# can be left down for good: the hotplug of the first radio makes netifd
++# set up every radio, the late one's setups fail ("PHY is undefined for
++# device") until its retries are gone, and the retry its own hotplug asks
++# for arrives while a setup is still running, which netifd drops. A retry
++# once nothing is pending starts it again (it also clears the given-up
++# state). Reported on a Xiaomi AX6000 (issue 29).
++radio_has_phy() {
++  local p="$1" d
++  for d in /sys/class/ieee80211/*; do
++    [ -e "$d/device" ] || continue
++    case "$(readlink -f "$d/device")" in */devices/"$p") return 0 ;; esac
++  done
++  return 1
++}
++
++wifi_radios_present() {
++  local r p
++  for r in $(radio_sections); do
++    [ "$(uci -q get "wireless.$r.disabled")" = 1 ] && continue
++    p="$(uci -q get "wireless.$r.path")"
++    [ -n "$p" ] || continue
++    radio_has_phy "$p" || return 1
++  done
++  return 0
++}
++
++wifi_none_pending() {
++  ! ubus call network.wireless status 2>/dev/null | jsonfilter -e '@[*].pending' | grep -q true
++}
++
++wifi_radios_quiet() { wifi_radios_present && wifi_none_pending; }
++
+ wifi_settled() { wifi_netifd_stale || wifi_radios_up; }
+ 
++wifi_retry_down() {
++  local r
++  for r in $(radio_sections); do
++    [ "$(uci -q get "wireless.$r.disabled")" = 1 ] && continue
++    [ "$(ubus call network.wireless status 2>/dev/null | jsonfilter -e "@.$r.up")" = true ] && continue
++    echo "$r is down after the radios loaded - asking netifd to set it up again"
++    ubus call network.wireless retry "{\"device\":\"$r\"}" 2>/dev/null || true
++  done
++}
++
+ wifi_sync_netifd() {
+   [ "$WIFI_LOADED_HERE" = 1 ] || return 0
+-  poll_until 20 wifi_settled || return 0
++  poll_until 20 wifi_settled && wifi_radios_up && return 0
+   if wifi_netifd_stale; then
+     echo "wireless config changed while the radios loaded - reloading netifd"
+     ubus call network reload 2>/dev/null || true
++    return 0
+   fi
++  poll_until 30 wifi_radios_quiet || echo "WARN: radios still missing or being set up after 30 s"
++  wifi_retry_down
+   return 0
+ }
+ 
+-- 
+2.47.3
+

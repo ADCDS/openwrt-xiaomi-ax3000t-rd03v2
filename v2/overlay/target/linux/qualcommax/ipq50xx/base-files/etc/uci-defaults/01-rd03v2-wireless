@@ -1,0 +1,52 @@
+#!/bin/sh
+# The two radios in /etc/config/wireless before any other first-boot script runs.
+#
+# ath11k_ahb is loaded by /etc/init.d/nss (START=19), and with NSS Wi-Fi offload on only after
+# the firmware arm, about a minute into the first boot. uci-defaults run before that, in
+# /etc/init.d/boot, so on a fresh install or after a factory reset there is no wifi-device yet
+# when they run: a first-boot script that sets the SSID, key or country (xiaomi-openwrt-install's
+# --wifi-ssid, an image builder's or the firmware selector's script) finds nothing to set, and
+# the radios come up later with OpenWrt's defaults, disabled. Measured: an install from stock
+# with --wifi-ssid ended with both radios off.
+#
+# Write them here as /lib/wifi/mac80211.uc writes them for this board (same section names,
+# paths and defaults). When the phys appear, `wifi config` finds a wifi-device on each path and
+# adds nothing. A configuration that already has a wifi-device (any sysupgrade that kept the
+# settings) is left alone.
+. /lib/functions.sh
+
+[ "$(board_name)" = xiaomi,mi-router-ax3000t-v2 ] || exit 0
+[ -f /etc/config/wireless ] || touch /etc/config/wireless
+uci -q show wireless | grep -q '=wifi-device$' && exit 0
+
+uci -q batch <<'EOF'
+set wireless.radio0=wifi-device
+set wireless.radio0.type='mac80211'
+set wireless.radio0.path='platform/soc@0/c000000.wifi'
+set wireless.radio0.band='2g'
+set wireless.radio0.channel='1'
+set wireless.radio0.htmode='HE20'
+set wireless.default_radio0=wifi-iface
+set wireless.default_radio0.device='radio0'
+set wireless.default_radio0.network='lan'
+set wireless.default_radio0.mode='ap'
+set wireless.default_radio0.ssid='OpenWrt'
+set wireless.default_radio0.encryption='none'
+set wireless.default_radio0.disabled='1'
+set wireless.radio1=wifi-device
+set wireless.radio1.type='mac80211'
+set wireless.radio1.path='platform/soc@0/b00a040.wifi'
+set wireless.radio1.band='5g'
+set wireless.radio1.channel='36'
+set wireless.radio1.htmode='HE80'
+set wireless.default_radio1=wifi-iface
+set wireless.default_radio1.device='radio1'
+set wireless.default_radio1.network='lan'
+set wireless.default_radio1.mode='ap'
+set wireless.default_radio1.ssid='OpenWrt'
+set wireless.default_radio1.encryption='none'
+set wireless.default_radio1.disabled='1'
+commit wireless
+EOF
+logger -t rd03v2-wireless "wrote the default radio sections before the radios appeared"
+exit 0
