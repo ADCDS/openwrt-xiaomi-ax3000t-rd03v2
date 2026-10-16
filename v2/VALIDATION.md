@@ -12,15 +12,16 @@ NAND, with:
   ("B"), and kuncy7's `ipq50xx-2026.10.09` image as he publishes it ("K").
 
 The test builds come from the same sources as the release candidate, built
-from a clean tree; the release candidate differs from the last one (b21) only
-in its version stamp and its repository address. Each result names the build
+from a clean tree; the release candidate is b21 plus overlay patch 985 (the
+channel in use follows a channel switch), in its version stamp and repository
+address. Each result names the build
 it ran on; "rc1-a" is the first build of the release candidate (b16 plus the
 watchdog default), superseded before publication by the NSS in-place fix. b21
 is b19 plus the first-boot Wi-Fi defaults (`01-rd03v2-wireless`), the
 `board.json` check (`81_rd03v2_board_json`), the 4-way handshake setting
 (`97-rd03v2-four-way-retries`) and tree patches 0006 (DFS state) and 0007
-(radio retry); a build of the release candidate from b19's sources was on the
-bench before it ("rc1 (b19 sources)").
+(radio retry); builds of the release candidate from b19's and b21's sources
+were on the bench before it ("rc1 (b19 sources)", "rc1 (b21 sources)").
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -34,12 +35,12 @@ hand, separately (C8, C14).
 | C1 | Install, upgrade and rollback paths, stock firmware both ways | see below | b5-b21 |
 | C2 | Reboots, half of them power cuts | pass: 20 / 20 (b9), 4 / 4 (rc1-a) | b9, rc1-a |
 | C3 | Wired through NSS: NAT, WAN VLAN, PPPoE on a WAN VLAN, QinQ, IPv6 over QinQ | pass, all offloaded, 923-941 Mbit/s | b9, b19 |
-| C4 | Wi-Fi, both modes, both bands | pass (b9, b16, b19, rc1); b21 5 GHz pass; see below for 2.4 GHz in the daytime | b9-b21 |
+| C4 | Wi-Fi, both modes, both bands | pass (b9, b16, b19, rc1 each build); 2.4 GHz needs the test client's Bluetooth off, see below | b9-rc1 |
 | C5 | Signal and noise floor in dBm | pass on 5 GHz (within 3 dB); 2.4 GHz within about 10 dB; v1.x reads 24-31 dB high | rc1 |
 | C6 | Regulatory: GB, US, DE, both Wi-Fi modes | pass | b9 |
 | C7 | Board data | byte-identical to v1.x and kuncy7 | - |
 | C8 | NFC tag | pass; phone tap by hand | b9 |
-| C9 | Recovery from Q6 firmware crashes, both Wi-Fi modes | pass, in place; a DFS AP stays up (b21); **2 board resets in 41 recoveries with a station passing traffic, cause not found** | b18-b21 |
+| C9 | Recovery from Q6 firmware crashes, both Wi-Fi modes | pass, in place; a DFS AP stays up (b21, rc1); **2 board resets in 45 recoveries with a station passing traffic, cause not found** | b18-rc1 |
 | C10 | Watchdog against user actions | pass | b16 |
 | C11 | Memory | 42 MB available idle, 34-36 MB in use, no drift; a multi-day soak not run | b19 |
 | C12 | Packages from our repository, tunnels, SQM | pass | b9 |
@@ -57,7 +58,7 @@ hand, separately (C8, C14).
 | offline RAM installer from a release cache (`install.py nss-v2 --offline`) | pass | b9 |
 | v2 -> stock 2.0.28 with `xiaomi-openwrt-install` (`revert.py`, wired) | pass: stock written and read back, setup wizard back (`inited=0`) | rc1 (twice) |
 | stock 2.0.28 -> v2 with `xiaomi-openwrt-install` (`install.py nss-v2`, wired, `--root-password`, `--wifi-ssid`/`--wifi-key`/`--wifi-country`) | rc1 and b21: pass, the installer's first-boot settings applied (SSID, WPA2 key and country on both radios, both APs up, root password set, `wpa_pairwise_update_count=8` on both APs). The first rc1 build: installed, but both radios came up off with OpenWrt's defaults, because the first-boot script ran before ath11k had loaded (fixed by `01-rd03v2-wireless`) | rc1, b21, rc1 (b19 sources) |
-| stock firmware -> v2 over Wi-Fi | not run on the bench for this candidate | - |
+| stock 2.0.28 -> v2 over Wi-Fi (`install.py nss-v2 --transport wifi`, the test client joining the factory network, then the RAM installer's, then the permanent one) | pass: final verification over the permanent Wi-Fi, the same first-boot settings applied as on the wired install | rc1 (b21 sources) |
 | kuncy7's `ipq50xx-2026.10.09` image -> v2, keeping its config (hostname, root password, Wi-Fi settings, a static DHCP host) | pass: all kept, migration marker set, NSS and ECM up, offload on, no warnings | rc1-a |
 
 ## C13: upgrade from a realistic v1.x install (b16)
@@ -113,7 +114,8 @@ and 3/3 hashes.
 | Build, mode | 5 GHz up / down | 2.4 GHz up / down | v1.14 reference (5 / 2.4 GHz) |
 |---|---|---|---|
 | rc1 (b19 sources), NSS offload | 287 / 338 | 32 / 55 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
-| rc1, NSS offload | 287 / 346 | not comparable: 25 / 37 with the test client's Bluetooth streaming audio | 288 / 345, 29 / 45 (v1.14-nss) |
+| rc1, NSS offload | 298 / 349 | 44 / 58 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
+| rc1 (b21 sources), NSS offload | 287 / 346, 290 / 338 | 50 / 60 (channel 6, Bluetooth off); 25 / 37 with it streaming audio | 288 / 345, 29 / 45 (v1.14-nss) |
 | b21, NSS offload | 292 / 346, 302 / 350 | not comparable: 33 / 35, 7 / 28 with the test client's Bluetooth streaming audio | 288 / 345, 29 / 45 (v1.14-nss) |
 | b19, NSS offload | 286 / 337 | 39 / 56 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
 | b18 (an earlier rc1 build), NSS offload | 278 / 320 | 46 / 58 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
@@ -222,17 +224,17 @@ sets it on every AP interface (`97-rd03v2-four-way-retries`).
 
 **The board reset twice** in those runs, both on the first rc1 build (b19
 sources) and both among the 15 restarts without that setting that had traffic
-afterwards (41 had traffic afterwards in all: 29 on that build, 8 on b21, 4 on
-the release candidate): 23-24 s after the restart the
+afterwards (45 had traffic afterwards in all: 29 on that build, 8 on b21, 4 on
+each of the two later rc1 builds): 23-24 s after the restart the
 station's pings stopped, the board stopped answering on the wired LAN too, and
 it rebooted a minute later (UBIFS recovery on the next boot, so not a clean
 reboot; no watchdog decision on record). Both came in the first hour after the
-first install from stock; none came in the 39 restarts with traffic since, with
+first install from stock; none came in the 43 restarts with traffic since, with
 or without the setting, after reboots or not. The cause is not known: there is
 no console on this unit and no pstore in this kernel, and the log streamed to
 the bench host for the later runs caught no reset. The release candidate
-itself (b21 sources, installed from stock), the last 4 of them: in place, the
-station back after 6.4 s each time, same boot, no warning. The reset also left `/etc/board.json` empty, which
+itself (installed from stock), the last 4 of them: in place, the station back
+after about 6.3 s each time, same boot, no warning. The reset also left `/etc/board.json` empty, which
 kept the radios down on every boot after it; b21 generates it again at boot
 (`81_rd03v2_board_json`).
 
@@ -278,6 +280,15 @@ traffic moved it by 0.5 MB, and a driver reload gives the buffers back (40-42 MB
 | one radio disabled in UCI for 4 min | the same, for that radio | pass |
 | `rmmod ath11k_ahb ath11k` by hand | detected, ath11k reloaded, recovered, no reboot | pass, same boot |
 | a fourth incident within an hour | reboot (its budget is three recoveries an hour) | pass (seen when C10 first ran right after the C9 asserts) |
+
+**After a channel change** (rc1 with b21's sources): OpenWrt applies a new
+channel with a CSA, and ath11k left the channel in use on the old one; the
+survey then showed the old channel in use with frozen counters, the watchdog
+reported "survey freeze" 2-3 minutes later and, past 10 minutes of uptime,
+reloaded ath11k (seen after 5 GHz 52 -> 36 and 2.4 GHz 1 -> 6 and 6 -> 11; the
+reload itself recovered). rc1 with 985: after 2.4 GHz 1 -> 6 and 5 GHz 36 -> 52
+(an assert there) -> 36, the channel in use followed each switch, its counters
+moved, and the watchdog did nothing in 21 minutes of uptime.
 
 The watchdog's own scenario suite (43 scenarios, the router's BusyBox through
 qemu and the host's) runs in every build. The release candidate ships

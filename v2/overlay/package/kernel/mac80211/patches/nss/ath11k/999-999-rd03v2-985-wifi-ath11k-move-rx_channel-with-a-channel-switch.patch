@@ -1,0 +1,44 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: move rx_channel with a channel switch
+
+ar->rx_channel is set when a channel context is added and cleared when it
+is removed, but a channel switch (switch_vif_chanctx, or change_chanctx)
+left it on the old channel: ath11k_mac_update_vif_chan() only had a TODO.
+get_survey marks rx_channel [in use], and the BSS channel survey is only
+read for rx_channel, so after every switch `iw survey dump` showed the old
+channel in use with its counters frozen.
+
+OpenWrt applies a channel change with a CSA (`wifi reload` after changing
+the channel: AP-CSA-FINISHED), so every channel change hit this. The
+RD03v2 Wi-Fi watchdog reads the [in use] entry and took the frozen counter
+for a stuck radio: "survey freeze", and past 10 minutes of uptime it
+reloaded ath11k (bench, v2.0.0-rc1: 2.4 GHz from channel 6 to 11, and
+5 GHz from 52 back to 36). A firmware restart re-adds the context, which is
+why one cleared it.
+
+Set rx_channel to the new context's channel, as add_chanctx does. ath11k
+runs one channel per radio here, so the first vif's new context is the
+radio's channel.
+
+Signed-off-by: Adriel Santos <adriel@adriel.eu>
+---
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -8016,7 +8016,16 @@
+ 	 * should be available for the channel switch now.
+ 	 */
+ 
+-	/* TODO: Update ar->rx_channel */
++	/* The vdevs move to the new context: rx_channel follows, as
++	 * add_chanctx sets it. get_survey marks that channel [in use] and the
++	 * BSS channel survey is only read for it; left on the old channel, the
++	 * survey of the channel in use stops moving after every switch.
++	 */
++	if (n_vifs > 0) {
++		spin_lock_bh(&ar->data_lock);
++		ar->rx_channel = vifs[0].new_ctx->def.chan;
++		spin_unlock_bh(&ar->data_lock);
++	}
+ 
+ 	for (i = 0; i < n_vifs; i++) {
+ 		arvif = ath11k_vif_to_arvif(vifs[i].vif);

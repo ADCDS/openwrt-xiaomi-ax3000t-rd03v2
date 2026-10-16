@@ -34,6 +34,7 @@ commit, and our changes are applied on top of it at build time.
 | ath11k with NSS Wi-Fi offload: what makes an in-place recovery work with the offload on. The shared ring-pointer state is cleared on restart (979, upstream f51e4b3b5574: the restarted firmware read the old head pointer of the NSS-filled RXDMA ring, a NOC error once traffic came), NSS is torn down after the crash-path IRQ quiesce (980), and the NSS VAP nodes and peers of the old instance are released before the recovery (981: without it the radios beaconed but no station completed a 4-way handshake, and unloading ath11k afterwards reset the board). From v1.x, as carried in kuncy7's ipq50xx-2026.10.12 | `overlay/.../nss/ath11k/999-999-rd03v2-979..981-*` | C9 |
 | ath11k: a restarted firmware gets the user's country again (982, kuncy7) | `overlay/.../nss/ath11k/999-999-rd03v2-982-*` | his 9966 |
 | Memory, NSS Wi-Fi offload on this 256 MB board: kuncy7's optional NSS 256 MiB ath11k profile switched on (`CONFIG_ATH11K_NSS_MEM_PROFILE_256M`, his PR #21, off for every board in his releases: no host TX arrays NSS does not use, 4096 TX descriptors and completions per radio, private RXDMA page-frag caches), a private page-frag cache per CE RX pipe (984), and the per-CPU free page lists capped (`vm.percpu_pagelist_high_fraction=100`; 6-18 MB of free pages were parked there, uncounted). MemAvailable idle with both radios up: 42 MB, against 13-21 MB before and 34-35 MB on v1.14-nss | `config/rd03v2.config`, `overlay/.../nss/ath11k/999-999-rd03v2-984-*`, `overlay/.../etc/sysctl.d/13-rd03v2-pcp.conf` | memory deep dive |
+| ath11k: the channel in use follows a channel switch (985). OpenWrt applies a channel change with a CSA, and ath11k left `rx_channel` on the old channel: `iw survey dump` showed the old channel in use with frozen counters, and the watchdog took that for a stuck radio and reloaded ath11k a few minutes after every channel change | `overlay/.../nss/ath11k/999-999-rd03v2-985-*` | bench, 2026-10-16 |
 | ath11k: "pdev N successfully recovered" is logged outside ath11k's shared warning rate limit, which a crash's failed commands often use up; the watchdog's mesh rejoin reads that line (977) | `overlay/.../nss/ath11k/999-999-rd03v2-977-*` | C9 |
 | AN8855: room for a second 802.1Q tag in the switch's RX length (0959e). A VLAN on a WAN VLAN (QinQ, `wan.20.30`) is `[20][30]` on the wire, 1526 bytes at MTU 1500; the switch dropped every such frame in both directions, offloaded or not, so QinQ carried no full-size packets | `overlay/target/linux/qualcommax/patches-6.18/0959e-*` | C3 (QinQ) |
 | ECM package release 3: his sources as they are. Release 2 (rc1) carried our 0053, which kept QinQ off the NSS firmware; it is gone, QinQ is offloaded since 0959e | `tools/feed-overlay-v2.py` | C3 (QinQ) |
@@ -137,10 +138,10 @@ usteer or DAWN settings, scripts) need the same amount taken off.
 ## Known issues
 
 - **The board reset twice after an in-place Wi-Fi recovery with a client passing traffic.**
-  41 hw-restarts of the 2.4 GHz radio with a station pinging the router recovered in place
+  45 hw-restarts of the 2.4 GHz radio with a station pinging the router recovered in place
   and the station rejoined after about 6 s; in 2 of them, both in the first hour after an
   install from stock, the board stopped 23-24 s after the restart and rebooted. Not seen in
-  the 39 runs after those, and the cause is not known (VALIDATION, C9). A Q6 firmware crash
+  the 43 runs after those, and the cause is not known (VALIDATION, C9). A Q6 firmware crash
   is rare in normal use; if one resets the board, the reboot brings the radios back.
 - **A multi-day soak of v2 was not run.** MemAvailable is 42 MB idle with both radios up and
   NSS offload, and settles at 34-36 MB once Wi-Fi clients have carried traffic; repeated
