@@ -18,8 +18,8 @@
 #   - the in-use channel's survey active time stops moving (~2 min) while the
 #     radio's stations, if it has any, receive nothing either - how the silent
 #     death shows, which raises no fatal interrupt and logs nothing. This is a
-#     heuristic: ath11k's in-use survey entry can also go stale on a working
-#     radio (see iface_active).
+#     heuristic: the in-use survey entry also stops moving while the radio
+#     scans (see iface_active).
 #
 # It then tries, stopping at the first step after which every expected radio
 # is healthy again:
@@ -29,8 +29,8 @@
 #      inplace_on() for why it is not the default);
 #   2. ath11k driver reload, both radios, as nss-dwmac-up loads it at boot -
 #      unless the uci option reload is 0. It needs smp2p patch 0918: without
-#      it the Q6 restart times out, which is why nss-dwmac-up calls a reload
-#      of ath11k on IPQ5018 "not an option";
+#      it the Q6 restart times out, which is why his NSS service
+#      (/etc/init.d/nss) calls a reload of ath11k on IPQ5018 "not an option";
 #   3. reboot.
 #
 # A root PD crash ("crash detected in q6wcss") is the kernel's to recover when
@@ -69,7 +69,8 @@
 # with a deadline, and interfaces are listed from sysfs rather than through
 # nl80211. The reboot request itself, sync and logger are not bounded.
 #
-# Dry run (uci option dryrun, off by default in v2.0): every incident is
+# Dry run (uci option dryrun: 0 in the shipped config, on when the option is
+# missing): every incident is
 # detected and its evidence written, and the log says what would be done, but
 # nothing is touched.
 #
@@ -370,10 +371,9 @@ ath11k_bound() { [ -n "$(ls "$SYS/module/ath11k/holders" 2>/dev/null)" ]; }
 
 # Active time of the channel ath11k marks "[in use]". Frozen across several
 # samples is how the silent death shows - but it is a heuristic: ath11k marks
-# and refreshes that entry by ar->rx_channel, which it sets only when a channel
-# context is added (not on every channel switch) and does not refresh while
-# scanning, so the entry can also go stale on a working radio. Returns 124 when
-# iw timed out.
+# and refreshes that entry by ar->rx_channel, which follows the channel context
+# (and a channel switch, with 985) but is not refreshed while the radio scans,
+# so the entry can also stall on a working radio. Returns 124 when iw timed out.
 iface_active() {
 	ia_out=$(iw_bounded dev "$1" survey dump) || return $?
 	printf '%s\n' "$ia_out" | \
@@ -543,11 +543,11 @@ offload_now() {
 }
 
 # Step 1 allowed? Only with uci inplace 1. With 975 the reset restarts the root
-# PD and both radios come back in place, but not reliably enough to be the
-# default: on the RD03v2 bench (b16, host mode, before 979-981) the third of
-# three resets in one boot left the 2.4 GHz radio beaconing and deaf to
-# authentication. The reload is the default step instead. Never after a root
-# PD crash: that one is the kernel's (see sample()).
+# PD and both radios come back in place. The driver reload stays the default
+# step: it rebuilds both radios from scratch and recovered every time it was
+# tested, while an earlier reset (before 979-981) once left the 2.4 GHz radio
+# beaconing and deaf to authentication. Never after a root PD crash: that one
+# is the kernel's (see sample()).
 inplace_on() {
 	[ "$ROOT_CRASH" = 1 ] && return 1
 	[ "$CFG_INPLACE" = 1 ]
@@ -765,8 +765,8 @@ record_inplace() {
 	mv "$STATE_DIR/inplace-attempts.new" "$STATE_DIR/inplace-attempts"
 }
 
-# Step 1: ath11k's own reset of the affected radios. Rebuilds the driver state
-# and restarts that radio's user PD without touching the root PD.
+# Step 1: ath11k's own reset (hw-restart) of an affected radio. With 975 it
+# restarts the root PD, and with it every radio (see below).
 # $1 = ath11k devices.
 try_ath_reset() {
 	did=0

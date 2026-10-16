@@ -4,6 +4,12 @@ Date: Mon, 12 Oct 2026 09:47:44 -0300
 Subject: [PATCH] nss-tools: apply the RD03v2 Q6 policy before every ath11k
  probe
 
+The Q6 crash-dump policy (rd03v2-q6-policy: coredump disabled by default)
+has to be in place before ath11k_ahb probes, or a root-PD crash waits for a
+dump to be read instead of restarting in seconds. ath11k is loaded from his
+NSS service in both Wi-Fi modes (nss-dwmac.init for host Wi-Fi,
+nss-dwmac-up after the NSS arm), so call the policy in both places.
+
 ---
  package/nss/nss-tools/files/nss-dwmac-up   | 1 +
  package/nss/nss-tools/files/nss-dwmac.init | 1 +

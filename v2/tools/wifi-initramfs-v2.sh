@@ -20,5 +20,5 @@ if [ "${V2_HEAVY_LOCK_HELD:-0}" != 1 ]; then
 	flock -n 9 || { echo 'wifi-initramfs-v2: another heavy workload is active' >&2; exit 1; }
 fi
 available=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
-[ "$available" -ge 4194304 ] || { echo 'wifi-initramfs-v2: less than 4 GiB available' >&2; exit 1; }
+[ "$available" -ge "${V2_MIN_MEM_KB:-4194304}" ] || { echo "wifi-initramfs-v2: less than ${V2_MIN_MEM_KB:-4194304} kB available (V2_MIN_MEM_KB)" >&2; exit 1; }
 exec "$REPO/v2/tools/wifi-initramfs.sh" "$TREE"

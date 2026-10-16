@@ -19,10 +19,10 @@ wpad-mbedtls
 !wpad-basic-mbedtls
 i2c-tools
 ethtool
-kmod-tun
-kmod-inet-diag
-kmod-nft-tproxy
 # in our repository only, never in the image
+!kmod-tun
+!kmod-inet-diag
+!kmod-nft-tproxy
 !kmod-amneziawg
 !amneziawg-tools
 !luci-proto-amneziawg

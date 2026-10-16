@@ -7,10 +7,10 @@ dev_alloc_skb(2048), i.e. 2432-byte pieces of the shared per-CPU 32 KiB
 page-frag chunks. Ring buffers can wait minutes for the target, while
 traffic skbs carved from the same chunks come and go around them; every
 buffer left behind pins its whole chunk. Without the skb recycler that the
-v1.x kernel had (which turned these into slab objects), the RD03v2 bench
-measured 22.6 MiB of untracked pages released by unloading ath11k with
-NSS offload on (rc1), against 4.2 MiB on v1.14-nss; the allocation
-profiler put 20.7 MiB of it in page-frag chunks after 15 min of idle.
+v1.x kernel had (which turned these into slab objects), an RD03v2
+released 22.6 MiB of untracked pages when ath11k was unloaded with NSS
+offload on, against 4.2 MiB on v1.14-nss; the allocation profiler put
+20.7 MiB of it in page-frag chunks after 15 min of idle.
 
 Allocate them from a page-frag cache private to the pipe, under the
 ce_lock that already serialises the refill: a chunk then only holds
@@ -19,15 +19,17 @@ same idea as kuncy7's 999-993 (Georg Seema) for the RXDMA rings, which
 only applies inside the optional NSS 256 MiB profile; this covers the CE
 rings in every mode. The cache is drained when the pipe is cleaned up.
 
-Measured on the bench on top of the NSS 256 MiB profile and the per-CPU
-list cap (same rc1 image, ath11k.ko and ath11k_ahb.ko from one build):
-5.1 / 5.3 / 5.1 MiB fewer raw pages at 5 / 15 / 25 min of idle, MemAvailable
-40.8 / 39.5 / 39.5 MiB instead of 35.7 / 34.3 / 34.4 MiB. Both radios up,
-no warnings. Not yet run with Wi-Fi clients or through crash recovery.
+Measured on top of the NSS 256 MiB profile and the per-CPU list cap (the
+same image, ath11k.ko and ath11k_ahb.ko from one build): 5.1 / 5.3 / 5.1 MiB
+fewer raw pages at 5 / 15 / 25 min of idle, MemAvailable 40.8 / 39.5 /
+39.5 MiB instead of 35.7 / 34.3 / 34.4 MiB. Both radios up, no warnings.
+With Wi-Fi clients and through in-place recoveries: MemAvailable stays at
+34-36 MiB over nine client sessions on both bands, and eight recoveries
+moved it by 0.5 MiB.
 
 The new member changes struct ath11k_ce_pipe, which struct ath11k_base embeds: ath11k_ahb.ko
-and ath11k_pci.ko must come from the same build as ath11k.ko (a bench test that swapped
-ath11k.ko alone crashed the board at radio bring-up).
+and ath11k_pci.ko must come from the same build as ath11k.ko (swapping ath11k.ko alone
+crashed the board at radio bring-up).
 
 Signed-off-by: Adriel Santos <adriel@adriel.eu>
 ---

@@ -228,7 +228,7 @@ def verify_release(directory, apk, keys):
                 value = run(['fdtget', '-t', kind, dtb, '/soc@0/i2c@78b7000', prop]).decode().strip()
                 require(value == expected, 'installer NFC DTB: ' + prop)
             # mkrelease copies whatever installer pair the tree holds, and the Wi-Fi pair is
-            # made by a separate step (wifi-initramfs-v2.sh): b10d3-b10d6 shipped b10d2's.
+            # made by a separate step (wifi-initramfs-v2.sh): an earlier build shipped an older pair.
             require(stamp(initramfs_file(itb, 'etc/rd03v2-release')) == identity,
                     'installer was built for this release: ' + (suffix or 'cable'))
             rc = initramfs_file(itb, 'etc/rc.local')

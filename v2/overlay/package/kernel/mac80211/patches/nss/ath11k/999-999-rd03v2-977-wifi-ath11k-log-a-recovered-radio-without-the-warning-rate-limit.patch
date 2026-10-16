@@ -3,16 +3,15 @@ Subject: [PATCH] wifi: ath11k: log a recovered radio without the warning rate li
 
 ath11k_warn() is dev_warn_ratelimited() with one rate limit (10 lines per
 5 s) for every ath11k warning. When the firmware crashes, the commands in
-flight fail with -108 and each logs a warning; on the RD03v2 bench (IPQ5018,
-a Q6 assert while hostapd was updating the beacon) eleven of them use up the
+flight fail with -108 and each logs a warning; on an RD03v2 (IPQ5018, a Q6
+assert while hostapd was updating the beacon) eleven of them use up the
 budget, and both radios recover within the next second with no "pdev 1
 successfully recovered" in the log, and no "callbacks suppressed" line later
 either, since no further warning comes.
 
 The recovery itself is complete (the state goes back to ON and the queues
 wake), but that line is how userspace tells an in-place recovery apart from a
-radio left down: the RD03v2 watchdog rejoins an encrypted mesh on it, and the
-bench harness takes it as the proof of recovery.
+radio left down: the RD03v2 watchdog rejoins an encrypted mesh on it.
 
 Log it with dev_warn(), at the same level and with the same text, outside the
 rate limit. It is printed once per radio per recovery.

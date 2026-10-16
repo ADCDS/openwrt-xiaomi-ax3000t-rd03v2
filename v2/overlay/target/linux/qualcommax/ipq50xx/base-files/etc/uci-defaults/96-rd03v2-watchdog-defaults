@@ -1,7 +1,7 @@
 #!/bin/sh
-# The watchdog's shipped default changed: v2.0 candidates up to b10d4 shipped
+# The watchdog's shipped default changed: early v2.0 candidates shipped
 # dryrun 1 with inplace unset; it acts now (dryrun 0), with inplace unset
-# (automatic: on with ath11k_ahb's user-PD respawn).
+# (off: the driver reload is its first step).
 # A sysupgrade restores /etc/config, so an upgrade keeps whatever the previous
 # install had and would never pick the new default up on its own.
 #

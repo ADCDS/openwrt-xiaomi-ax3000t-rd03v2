@@ -51,15 +51,15 @@ reads return; the bus itself was not captured. In FIFO mode, i2c-qup sends
 the two parts as separate steps, so under CPU load the read can come much
 later.
 
-On the bench, with two busy loops at `nice -15`:
+Under CPU load (two busy loops at `nice -15`):
 - 16-byte reads came back with the header row in bursts: 245 of the 630
   reads away from address 0 in one run, 100 of 100 in another.
 - A separate address write and read failed the same way.
 - DMA queues both parts at once. Interleaved with the 100 failing reads, 100
   of 100 whole-area reads were right.
 
-The same fault happened at boot on the NSS image, where the first `nfc update`
-then rewrote blocks that were already right. So `nfc` reads each range in one
+The same fault happened at boot, where the first `nfc update` then rewrote
+blocks that were already right. So `nfc` reads each range in one
 transfer: 16 bytes for the header, the whole data area, or all 1 KB for
 `dump`.
 
@@ -79,8 +79,8 @@ transfer: 16 bytes for the header, the whole data area, or all 1 KB for
 - Stock writes only the new record. It never clears what follows it, so the
   tails of longer, older records stay readable past the terminator.
 
-None of this ran under OpenWrt until now, so a flashed router still holds
-whatever stock wrote last. That is often the owner's stock-era SSID and
+None of this runs under OpenWrt, so a flashed router still holds whatever
+stock wrote last. That is often the owner's stock-era SSID and
 password, readable by any phone, even with the router switched off.
 
 ## What this port does
@@ -173,52 +173,25 @@ reflash, until something clears it. A guest network is a good candidate for
   config is read once the lock is held, so a run that waited applies the
   newest one.
 
-## Verified on the bench (2026-10-01)
+## Tested
 
-Non-NSS build of this branch, run first as the RAM installer, then installed
-to NAND with a kept config:
+On v2 ([VALIDATION](../v2/VALIDATION.md), C8 and C13): the tag answers at `0x57`
+on `i2c-0`; the first boot clears the record stock left; in `wifi` mode the tag
+holds the configured network, and an Android phone tapped on the router joins it
+without the password being typed; in `clear` mode the phone reports an empty tag;
+a `wireless` change rewrites the tag through the procd trigger; and with
+`option iface` naming a guest network, the tag shares that network.
 
-- `/dev/i2c-0` is the QUP at `78b7000`, with gpio25/26 muxed to `blsp2_i2c1`
-  and no pull. A read-mode scan finds only `0x57`.
-- On the first boot `nfc update` (mode `clear`) wiped the stock record and its
-  leftovers: 30 blocks. The UID, lock bytes, capability container and chip
-  data above the area read back identical to a dump taken before the change.
-- A full Wi-Fi record takes 23 block writes and 1.4 s, including two full
-  reads of the data area. No write needed a retry. A re-run writes nothing
-  and takes 0.6 s.
-- The BLSP BAM channels 8/9 are allocated as tx/rx. 16-byte reads stay in
-  FIFO mode. 64- and 255-byte reads go through DMA and return the same data.
-- Changing `nfc.main.mode` or the `wireless` config and running
-  `reload_config` rewrites the tag through the procd triggers.
-- Tapping an Android phone on the router offered to join the shared network
-  (`psk2`).
+Measured with this script on the same hardware:
+- a full Wi-Fi record takes 28 I2C transfers; a run that finds nothing to change
+  writes nothing;
+- 40 updates killed with `kill -9` during their writes each left an empty tag or
+  a complete record, never a mix;
+- `off` makes no I2C transfer, whether from a trigger or a manual run;
+- the UID, lock bytes, capability container and chip data above the data area
+  read back unchanged after an update.
 
-A review then changed the script: background runs, the write order above,
-NACK-only retries, `off` without I2C access, hidden and multi-radio
-interfaces, and the `psk3` and cipher-order mapping.
-
-## Verified on the bench (2026-10-02)
-
-The v1.12 release images, both flavours, installed to NAND with a kept
-config:
-- The boot-time update runs in the background, after procd's "init complete".
-- `off` makes no I2C transfer, whether from a trigger or a manual run.
-- `reload_config` returns at once, and the tag then follows a `wireless`
-  change.
-- 40 updates killed with `kill -9` during their writes each left an empty tag
-  or a complete record, never a mix.
-- A missing `option iface` clears the tag and logs a notice.
-- The NSS core stays healthy, with offload on.
-
-The read fault above was found on the NSS image, where it showed up at boot.
-With one transfer per read:
-- 4 boots in a row wrote nothing;
-- under load, 10 of 10 `status` and `dump` runs were right, and updates wrote
-  nothing;
-- a full Wi-Fi record takes 28 transfers instead of 190.
-
-Not verified: RF writes to the tag, and iOS, which does not act on WSC
-records.
+Not verified: RF writes to the tag, and iOS, which does not act on WSC records.
 
 ## xinfc
 

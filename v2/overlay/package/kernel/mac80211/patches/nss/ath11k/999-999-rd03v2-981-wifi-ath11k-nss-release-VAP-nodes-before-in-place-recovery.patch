@@ -39,17 +39,17 @@ re-setup; such a node was never bound to a VAP or brought up, so it is
 only the host unregister and the dynamic node deallocation.
 
 
-Taken from https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2
-(999-999-rd03v2-nss-recovery-2-release-vdevs-on-restart); the nss.c hunks
-of it (peer->nss.vaddr cleared on free, the srng unlock) are already in
-this tree. Seen here on an Archer AX55 v1: after a recovery traffic
-towards the stations stopped until the interfaces were made again.
+From v1.x of this port (999-999-rd03v2-nss-recovery-2-release-vdevs-on-restart),
+as kuncy7's ipq50xx-2026.10.12 carries it; its nss.c hunks (peer->nss.vaddr
+cleared on free, the srng unlock) are already in his tree. On an Archer AX55
+v1, traffic towards the stations stopped after a recovery until the
+interfaces were made again.
 
-In this tree it replaces the earlier 976, which deleted only the NSS VAPs
-and did it in ath11k_core_halt(), after the crash path had already torn
-NSS down and set it up again. With NSS offload, unloading ath11k after an
-in-place recovery jumped into ath11k_nss_vdev_event_receive() of a VAP the
-NSS driver still had registered, and reset the board (RD03v2 bench).
+It replaces an earlier version that deleted only the NSS VAPs, in
+ath11k_core_halt(), after the crash path had already torn NSS down and set
+it up again: with NSS offload, unloading ath11k after an in-place recovery
+then jumped into ath11k_nss_vdev_event_receive() of a VAP the NSS driver
+still had registered, and reset an RD03v2.
 
 Signed-off-by: Adriel Santos <adriel@adriel.eu>
 ---

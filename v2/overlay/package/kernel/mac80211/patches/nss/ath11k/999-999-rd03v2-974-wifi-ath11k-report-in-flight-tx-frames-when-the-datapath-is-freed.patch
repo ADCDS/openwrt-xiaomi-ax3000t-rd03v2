@@ -17,11 +17,9 @@ already does for the frames it drops. ath11k_dp_free() runs before
 ath11k_mac_destroy(), so the hw is still allocated, and on the crash-recovery
 path it is still registered.
 
-Measured on the RD03v2 bench (IPQ5018 + QCN6122, host-mode Wi-Fi): a Q6
-assert followed by the watchdog's driver reload produced the warning on every
-run; a healthy wifi down plus rmmod/modprobe produced none. This replaces an
-earlier candidate that released the entries in mac80211 itself
-(v2/candidates/private-userpd/).
+Measured on an RD03v2 (IPQ5018 + QCN6122, host-mode Wi-Fi): a Q6 assert
+followed by the watchdog's driver reload produced the warning on every run; a
+healthy wifi down plus rmmod/modprobe produced none.
 
 Signed-off-by: Adriel Santos <adriel@adriel.eu>
 ---

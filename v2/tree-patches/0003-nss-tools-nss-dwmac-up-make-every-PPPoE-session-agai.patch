@@ -3,7 +3,10 @@ From: Adriel Santos <adriel@adriel.eu>
 Date: Mon, 12 Oct 2026 09:47:44 -0300
 Subject: [PATCH] nss-tools: nss-dwmac-up: re-dial every existing PPPoE session
 
-Port the accepted upstream b2b6b3fff8 refinement onto the locked 10-09 tree. A session whose netdev exists before netifd declares it up must also be re-created; honor pppname. Bump the local package release to distinguish the changed payload.
+Port his accepted b2b6b3fff8 refinement onto the pinned 10-09 tree. A
+session whose netdev exists before netifd declares it up must also be
+re-created, and pppname is honoured. The package release is bumped so the
+changed package is told apart from his.
 
 Upstream: https://github.com/kuncy7/openwrt-nss-edma/commit/b2b6b3fff8b85f6f202c7ae3e129b39b0817f100
 ---

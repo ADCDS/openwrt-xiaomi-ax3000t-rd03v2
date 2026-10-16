@@ -5,12 +5,12 @@
 #   v2/tools/test-watchdog.sh [--env host|target|both] [--rootfs DIR] [--keep] [SCENARIO...]
 #
 # The watchdog runs under BusyBox ash with nothing of the host's but the stubs:
-#   host    hal's own busybox (sh and every applet);
+#   host    the build host's busybox (sh and every applet);
 #   target  the image's busybox, through qemu-aarch64 (binfmt_misc if it is
 #           registered, a wrapper per applet if not) - the exact shell and
 #           applets of the router. Slow (every applet is an emulated process).
 # Both use the image's own uci and jsonfilter (through qemu), from --rootfs, an
-# unpacked rootfs of a kuncy7-based image (default: the gate image's).
+# unpacked rootfs of a v2 image (or WD_ROOTFS); verify-v2.sh passes the image's own.
 #
 # The fake board lives in $ROOT/world, one file per fact (see world.sh below);
 # the stubs (iw, wifi, ubus, rmmod, modprobe, insmod, dmesg, reboot, sync,
@@ -23,7 +23,7 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 WD=$HERE/../overlay/target/linux/qualcommax/ipq50xx/base-files/usr/sbin/rd03v2-watchdog
 CONF=$HERE/../overlay/target/linux/qualcommax/ipq50xx/base-files/etc/config/rd03v2-watchdog
-RFS=${WD_ROOTFS:-${RD03V2_WS:-$(cd "$HERE/../../.." && pwd)}/kuncy-gate/ipq50xx-2026.10.09/inspect/rootfs}
+RFS=${WD_ROOTFS:-}
 ENVS=both KEEP=0 ONLY=""
 while [ $# -gt 0 ]; do
 	case $1 in
@@ -36,6 +36,7 @@ while [ $# -gt 0 ]; do
 done
 die() { echo "test-watchdog: $*" >&2; exit 2; }
 [ -f "$WD" ] || die "no watchdog at $WD"
+[ -n "$RFS" ] || die "pass --rootfs DIR (an unpacked v2 image rootfs) or set WD_ROOTFS"
 for f in bin/busybox sbin/uci usr/bin/jsonfilter lib/ld-musl-aarch64.so.1; do
 	[ -e "$RFS/$f" ] || die "$RFS is not an unpacked image rootfs (no $f); pass --rootfs"
 done

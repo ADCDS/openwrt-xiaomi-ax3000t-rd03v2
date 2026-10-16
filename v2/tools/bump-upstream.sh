@@ -1,6 +1,6 @@
 #!/bin/bash
-# bump-upstream.sh <release tag>: move v2 to another kuncy7 release, as far as hal can check
-# it without building or flashing anything.
+# bump-upstream.sh <release tag>: move v2 to another kuncy7 release, as far as that can be
+# checked without building or flashing anything.
 #
 #  1. fetch the tag into our mirror of his tree, and his nss feed into ours, never pruning
 #     (his CI deletes old releases and the feed branch gets rebased), and tag the pinned
@@ -9,9 +9,9 @@
 #     upstream.lock and feeds.lock in place, for review with git diff. His nss feed is the
 #     exception: its branch gets rebased, which rewrites commit dates and brings in commits
 #     that were not on it at release time, so a freeze by date picks the wrong commit (a
-#     no-op bump of ipq50xx-2026.10.09 on 10-10 got c30fbbff instead of 94f44cc). Its
+#     no-op bump of ipq50xx-2026.10.09 by date got c30fbbff instead of 94f44cc). Its
 #     commit is the branch head at his CI run's time, read from our mirror's reflog
-#     (core.logAllRefUpdates=always since 10-10), so the mirror must be fetched before he
+#     (the mirror sets core.logAllRefUpdates=always), so the mirror must be fetched before he
 #     rebases again; or NSS_COMMIT_OVERRIDE=<commit>;
 #  3. PREPARE_ONLY build into a scratch tree: our tree patches apply (git am), the overlay
 #     overwrites nothing of his, every feed pins, defconfig drops nothing we asked for;
@@ -21,7 +21,7 @@
 #
 # A failing tree patch, or one of our patches that no longer applies, usually means his tree
 # now does what it did: drop ours, or refresh it. Then: a full build, verify-v2.sh, and a
-# smoke test on the bench. The full phase C matrix is for releases.
+# smoke test on hardware. The full VALIDATION.md matrix is for releases.
 #
 # FEEDS_FROZEN_AT_OVERRIDE=<ISO 8601> sets the freeze time. Default: unchanged when re-preparing
 # the locked release, else his CI run's start + 4 min (GitHub API), when feeds update has run.

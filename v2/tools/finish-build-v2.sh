@@ -11,12 +11,12 @@ export TMPDIR=${TMPDIR:-$WS/v2-tmp}
 mkdir -p "$TMPDIR"
 shopt -s nullglob
 die() { echo "finish-build-v2: $*" >&2; exit 1; }
-case "$JOBS" in 1|2) ;; *) die 'JOBS must be 1 or 2' ;; esac
+case "$JOBS" in ''|*[!0-9]*|0) die 'JOBS must be a positive number' ;; esac
 mkdir -p "$WS/v2-validation"
 exec 9>"$WS/v2-validation/heavy-workload.lock"
 flock -n 9 || die 'another heavy local workload is active'
 available=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
-[ "$available" -ge 4194304 ] || die 'less than 4 GiB available; preserve running services and wait'
+[ "$available" -ge "${V2_MIN_MEM_KB:-4194304}" ] || die "less than ${V2_MIN_MEM_KB:-4194304} kB available (V2_MIN_MEM_KB)"
 git -C "$TREE" merge-base --is-ancestor "$COMMIT" HEAD || die 'wrong upstream tree'
 while read -r name rev; do
  case "$name" in ''|\#*) continue ;; esac
@@ -46,7 +46,7 @@ mkdir -p "$DLDIR"; ln -s "$DLDIR" "$TREE/dl"
 for i in 1 2 3; do (cd "$TREE" && make download -j"$JOBS" >"$TREE/download.log" 2>&1) && break; done ||
 	die "make download failed (see $TREE/download.log)"
 # A rebuild leaves an earlier -wifi installer pair in place, and wifi-initramfs.sh refuses to
-# run over one, so a release would ship the old pair (b10d3-b10d6 carried b10d2's). It is
+# run over one, so a release would ship the old pair (an earlier build once did). It is
 # remade below from this build.
 T=$TREE/bin/targets/qualcommax/ipq50xx
 for f in "$T"/*-initramfs-uImage-wifi.itb "$T"/*-initramfs-factory-wifi.ubi; do

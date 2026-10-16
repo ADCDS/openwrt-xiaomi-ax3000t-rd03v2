@@ -1,10 +1,10 @@
 From: openwrt-xiaomi-ax3000t-rd03v2 port
 Subject: [PATCH] wifi: ath11k: complete host monitor metadata at every default reset
 
-Requesting USER_STATS alone did not populate host station RSSI on the bench.
-The existing extended-statistics filter restored real RSSI and its average on
-both radios. Use that measured metadata mask in host mode while leaving the
-extended counter flag disabled. PPDU_START supplies per-PPDU identity/reset
+In host mode, requesting USER_STATS alone does not populate the station
+RSSI; the extended-statistics filter does, with its average, on both radios.
+Use that metadata mask in host mode while leaving the extended counter flag
+disabled. PPDU_START supplies per-PPDU identity/reset
 state; firmware's grouping of the PHY RSSI TLVs is not visible to the host.
 
 Keep the effective NSS mask unchanged, and apply the helper after every

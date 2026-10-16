@@ -3,10 +3,10 @@ Subject: [PATCH] wifi: ath11k: skip the user-PD stop handshake when the firmware
 
 ath11k_ahb_stop_user_pd() always raises the SMP2P stop request and waits
 ATH11K_USERPD_STOP_TIMEOUT for the ack of the firmware that spawned the user
-PD. After a fatal error on the Q6 that firmware no longer exists: on this
-tree the root PD restarts on its own (coredump disabled) but does not
-respawn the user PDs, and ATH11K_FLAG_CRASH_FLUSH stays set until a
-recovery brings the firmware back. The ack can never arrive, so the
+PD. After a fatal error on the Q6 that firmware no longer exists: the root
+PD restarts on its own (coredump disabled), nothing spawns the user PDs
+again without 975 (or with its respawn_userpds=0), and
+ATH11K_FLAG_CRASH_FLUSH stays set until a recovery brings the firmware back. The ack can never arrive, so the
 watchdog's driver reload after a root-PD crash spends 5 s per radio in the
 wait and logs "UserPD stop wait timed out" twice.
 
@@ -14,10 +14,8 @@ Skip the handshake while CRASH_FLUSH is set and power the radio down
 directly. A healthy stop is unchanged: the flag is set on the
 firmware-crash path (QMI server exit) and cleared once a recovery succeeds.
 
-Measured on the RD03v2 bench (IPQ5018 + QCN6122), Q6 assert followed by the
-watchdog's reload: both stop timeouts gone. This is the clean-tree form of
-the change first tested on top of the private user-PD experiments (see
-v2/candidates/private-userpd/).
+Measured on an RD03v2 (IPQ5018 + QCN6122), a Q6 assert followed by the
+watchdog's reload: both stop timeouts gone.
 
 Signed-off-by: Adriel Santos <adriel@adriel.eu>
 ---

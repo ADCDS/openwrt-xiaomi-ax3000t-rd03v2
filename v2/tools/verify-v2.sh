@@ -1,6 +1,6 @@
 #!/bin/bash
 # verify-v2.sh --tree <openwrt-v2>: check a finished v2 build. Each check prints PASS/FAIL;
-# exit status is the number of failures. Grows with every v2 change (plan B1-B14).
+# exit status is the number of failures. Grows with every v2 change.
 #
 # The image contents are checked in the sysupgrade image itself (its root squashfs), not in
 # a staging directory of the tree: that is what gets flashed.
@@ -112,7 +112,7 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 		"$(grep -cF 'config_get stats_disable opt stats_disable "$stats_disable_default"' "$X/etc/init.d/qca-nss-pbuf")" 1
 	chk "early Q6 policy service" "$(yes_ test -L "$X/etc/rc.d/S18rd03v2-q6")" yes
 	chk "early RAM installer service" "$(yes_ test -L "$X/etc/rc.d/S17rd03v2-installer")" yes
-	# B10/B11 first-boot scripts
+	# first-boot scripts
 	for u in 00-rd03v2-migrate-v1x 01-rd03v2-wireless 95-rd03v2-apk-pins 97-rd03v2-four-way-retries; do
 		chk "uci-defaults $u" "$(yes_ sh -n "$X/etc/uci-defaults/$u")" yes
 	done
@@ -125,8 +125,8 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 	for f in $(cd "$OV/target/linux/qualcommax/ipq50xx/base-files" 2>/dev/null && find . -type f | sed 's#^\./##'); do
 		chk "overlay file /$f" "$(yes_ cmp "$OV/target/linux/qualcommax/ipq50xx/base-files/$f" "$X/$f")" yes
 	done
-	# the Wi-Fi watchdog (B9): its --check scenarios, with this image's uci and jsonfilter
-	# (the image's copy is the overlay's, checked above), and dry run on by default
+	# the Wi-Fi watchdog: its --check scenarios, with this image's uci and jsonfilter
+	# (the image's copy is the overlay's, checked above), and the shipped default config
 	chk "watchdog default matches the reviewed overlay" \
 		"$(yes_ cmp "$X/etc/config/rd03v2-watchdog" "$OV/target/linux/qualcommax/ipq50xx/base-files/etc/config/rd03v2-watchdog")" yes
 	"$V2/tools/test-watchdog.sh" --env host --rootfs "$X" > "$W/watchdog-tests" 2>&1

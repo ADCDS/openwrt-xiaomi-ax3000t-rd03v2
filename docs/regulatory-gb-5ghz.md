@@ -6,14 +6,13 @@
 > channel list from the regulatory database compiled into the Q6 firmware.
 > `WLAN.HK.2.7.0.1-01744`, the newest IPQ5018/QCN6122 firmware, puts GB in the
 > same ETSI domain as the EU, which stops at 5710 MHz. Patch `964` adds the UK
-> band on top of the firmware's rules. Verified on the bench against v1.12:
-> with the patch, an AP on channel 149 at 80 MHz comes up under `GB` at
-> 23 dBm, carries traffic, and advertises 149-165 in its Country element.
+> band on top of the firmware's rules. With the patch, an AP on channel 149 at
+> 80 MHz comes up under `GB` at 23 dBm, carries traffic, and advertises 149-165
+> in its Country element. v2 carries the patch unchanged (`999-999-rd03v2-964`).
 
 ## The failure
 
-Reproduced on the bench on 2026-10-07 with v1.12 (`r35297-25ee12629e`, NSS
-Wi-Fi image), the OpenWrt revision in the report. Country `GB` set on both
+Reproduced on v1.12, the release in the report, with country `GB` set on both
 radios:
 
 ```
@@ -42,10 +41,10 @@ hostapd: Could not select hw_mode and channel. (-3)
 hostapd: phy1-ap0: AP-DISABLED
 ```
 
-A scan from a second machine (hal, QCA9377) sees only the 2.4 GHz BSS.
-Switching the same configuration to `US` brings the AP up on 149 at 80 MHz,
-seen by hal at 5745 MHz and -36 dBm, so the radio and the board data are
-fine. Only the regulatory rules differ.
+A scan from a client (a QCA9377 card) sees only the 2.4 GHz BSS. Switching the
+same configuration to `US` brings the AP up on 149 at 80 MHz, seen by the
+client at 5745 MHz and -36 dBm, so the radio and the board data are fine. Only
+the regulatory rules differ.
 
 ## Why: the rules come from the firmware
 
@@ -57,8 +56,8 @@ answers with `WMI_REG_CHAN_LIST_CC`, and ath11k turns those rules into the
 not enter into it. OpenWrt's `905` patch already removed the intersection with
 the board's default country, so nothing else narrows the rules either.
 
-Setting 66 countries in turn on the bench (`iw reg set XX`, reading the
-`phy#1` block) shows the firmware's grouping:
+Setting 66 countries in turn (`iw reg set XX`, reading the `phy#1` block)
+shows the firmware's grouping:
 
 | firmware 5 GHz rules | countries |
 |---|---|
@@ -68,7 +67,7 @@ Setting 66 countries in turn on the bench (`iw reg set XX`, reading the
 | no 5.8 GHz | JP, EG |
 
 GB gets nothing the EU does not. The firmware's tables can be listed without a
-router: [`tools/ath11k-fw-regdb.py`](https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/blob/v1.14/tools/ath11k-fw-regdb.py) finds the
+router: [`ath11k-fw-regdb.py`](https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/blob/v1.14/tools/ath11k-fw-regdb.py) (in the v1.x tools) finds the
 5 GHz rule and domain tables in the Q6 image (they sit in each user PD's data
 segment, `q6_fw.b10`/`b17`/`b22`) and decodes them. GB's rules are domain
 `0x0e`:
@@ -130,21 +129,19 @@ Left out on purpose:
 
 **Rule building, off target.** The patched `ath11k_reg_build_regd()` was
 compiled into a userspace harness under AddressSanitizer and UBSan and fed the
-rules the firmware sends for GB. It reproduces the bench's `iw reg get`
+rules the firmware sends for GB. It reproduces the router's `iw reg get`
 exactly (including the weather-radar split) and appends
 `5725-5850 @ 80, 23 dBm, NO-OUTDOOR` as the eighth rule, within the
 allocation. With no 5 GHz rules (the 2.4 GHz radio), for DE and US, and for
 a firmware that already reports 5735-5835 for GB, nothing is added.
 
-**On the bench (2026-10-07).** The test isolates the patch on the v1.12
-image itself. This tree was configured as the v1.12 NSS Wi-Fi release was
-built (`KMODS=1 NSS=1`, pinned donor): the kernel vermagic came out
-`b8b357d59665e168c40d5dd63a78dd3b`, the bench's, and the unpatched
-`ath11k.ko` byte-identical to the installed one (md5 `128b8b99…`). The build
-with 964 was loaded in its place on the running bench (`wifi down`,
-`rmmod ath11k_ahb ath11k`, `insmod`, `wifi up`). A reload of the stock module
-the same way was clean first. The configuration was the same for both runs:
-country `GB` on both radios, 5 GHz on channel 149, HE80.
+**On the router, v1.12.** The test isolated the patch on the v1.12 image
+itself: a module built with the release's configuration (same vermagic, and an
+unpatched `ath11k.ko` byte-identical to the installed one) plus 964 was loaded
+in place of the release's own (`wifi down`, `rmmod ath11k_ahb ath11k`,
+`insmod`, `wifi up`), after a clean reload of the release's module the same
+way. The configuration was the same for both runs: country `GB` on both
+radios, 5 GHz on channel 149, HE80.
 
 | | v1.12 | v1.12 + 964 |
 |---|---|---|
@@ -152,20 +149,20 @@ country `GB` on both radios, 5 GHz on channel 149, HE80.
 | channels 149-165 | disabled | enabled, 23 dBm |
 | channels 144, 169-177 | disabled | disabled |
 | 5 GHz AP on 149 | `AP-DISABLED`, "not allowed for AP mode" | `AP-ENABLED`, 80 MHz, txpower 23 dBm |
-| seen from hal | 2.4 GHz BSS only | 5745 MHz, -40/-41 dBm, Country `GB` with `[149 - 165] @ 23 dBm` |
+| seen from the client | 2.4 GHz BSS only | 5745 MHz, -40/-41 dBm, Country `GB` with `[149 - 165] @ 23 dBm` |
 
-With 964, hal (QCA9377, 1x1) associated on 149 at 80 MHz and
+With 964, the client (QCA9377, 1x1) associated on 149 at 80 MHz and
 answered 30 of 30 pings (4 ms average). Three 8 MB HTTP downloads from the
 router ran at about 24 MB/s at VHT-MCS 9, with no retries or failures. The
 firmware started the vdev on 5745 MHz without an error, and it applies the
-lower host limit: on the same channel hal measured -34/-36 dBm with `US`
+lower host limit: on the same channel the client measured -34/-36 dBm with `US`
 (28 dBm) and -40/-41 dBm with `GB` (23 dBm).
 
 With the patched module, `US` on 149, `BR` on 36 and `GB` on 36 behaved as
 before: the firmware's own rules, plus the 5725-5850 MHz rule for GB only.
 
 When a firmware with the UK band ships, its rule overlaps the table entry
-and the entry stops applying. `tools/ath11k-fw-regdb.py` shows whether a new
+and the entry stops applying. The regdb tool above shows whether a new
 firmware has it, before anyone removes the entry.
 
 ## Related, not fixed here: 2.4 GHz power in ETSI countries
@@ -173,6 +170,6 @@ firmware has it, before anyone removes the entry.
 The IPQ5018's own firmware rules for the 2.4 GHz radio come back as
 `(2402 - 2482 @ 40), (N/A, 33)` for GB, DE and FR (30 dBm for BR), and that
 AP runs at 30 dBm txpower in those countries. The QCN6122 firmware reports
-20 dBm for the same band and country, which is the ETSI limit. This is the
-stock v1.12 module, unaffected by 964. Whether the board data's ETSI CTL
+20 dBm for the same band and country, which is the ETSI limit. This comes
+from the firmware, not from 964. Whether the board data's ETSI CTL
 holds the radiated power down was not measured.

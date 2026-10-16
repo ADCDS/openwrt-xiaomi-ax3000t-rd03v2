@@ -64,7 +64,7 @@ D=$WT/v2/$TAG
 mkdir -p "$D"
 cp -p "$T"/packages/*.apk "$T/packages/packages.adb" "$D/"
 git -C "$WT" add -A
-git -C "$WT" -c user.name="Adriel Santos" -c user.email=adriel@adriel.eu commit -q -m "v2 $TAG: package repository"
+git -C "$WT" commit -q -m "v2 $TAG: package repository"
 du -sh "$WT/v2"/* | sed 's/^/  /'
 echo "publish-repo: $TAG staged in $WT (local commit $(git -C "$WT" rev-parse --short HEAD))"
 echo "to publish (approval needed): git -C $WT push origin gh-pages"

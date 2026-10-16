@@ -7,8 +7,8 @@ unset option defaults to one and sends a zero monitor filter and PPDU mask
 after the 2.4 GHz AP starts. This produces zero signal, an empty average
 and missing TX statistics; a later 5 GHz start masks the problem there.
 
-Cold hardware control with stats_disable=0 restores real statistics with
-extended counters off. Default to zero on this board, preserving explicit
+With stats_disable=0 set before the radios start, the statistics are real
+again, with extended counters off. Default to zero on this board, preserving explicit
 configuration and the default for other boards. Buffer sizes are unchanged.
 ---
 --- a/package/kernel/mac80211/files/qca-nss-pbuf.init

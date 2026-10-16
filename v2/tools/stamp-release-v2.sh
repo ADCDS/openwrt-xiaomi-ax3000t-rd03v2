@@ -3,7 +3,7 @@
 # repository list that go into the image (files/etc/rd03v2-release and
 # files/etc/apk/repositories.d/distfeeds.list). build.sh calls it when it prepares a tree;
 # finish-build-v2.sh calls it again when TAG is given, so a tree is never re-tagged by hand
-# (b10d3 first shipped b10d2's repository line that way).
+# (an earlier build once shipped its predecessor's repository line that way).
 set -euo pipefail
 V2=$(cd "$(dirname "$0")/.." && pwd)
 TREE=${1:?usage: $0 <tree> <tag> <repository URL>}

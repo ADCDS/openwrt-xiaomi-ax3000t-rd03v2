@@ -2,8 +2,8 @@ From: Adriel Santos <adriel@adriel.eu>
 Subject: [PATCH] wifi: ath11k: ahb: absorb a fatal raised during a planned root PD restart
 
 A hw-restart of one radio stops its user PD and then restarts the root PD
-(975). On the RD03v2 bench (b17, NSS offload, the third of five 5 GHz
-hw-restarts) the user PD took 3.2 s to stop instead of 0.17 s, and the root
+(975). On an RD03v2 (NSS offload, the third of five 5 GHz hw-restarts in a
+row) the user PD took 3.2 s to stop instead of 0.17 s, and the root
 raised a fatal error with an empty message 1.5 ms into rproc_shutdown().
 The remoteproc crash handler waited for the rproc lock, which shutdown and
 then rproc_boot() held, and ran once the new root was up: it took that root

@@ -11,17 +11,23 @@ NAND, with:
 - references measured on the same bench: v1.14 and v1.14-nss of this port
   ("B"), and kuncy7's `ipq50xx-2026.10.09` image as he publishes it ("K").
 
-The test builds come from the same sources as the release candidate, built
-from a clean tree; the release candidate is b21 plus overlay patch 985 (the
-channel in use follows a channel switch), in its version stamp and repository
-address. Each result names the build
-it ran on; "rc1-a" is the first build of the release candidate (b16 plus the
-watchdog default), superseded before publication by the NSS in-place fix. b21
-is b19 plus the first-boot Wi-Fi defaults (`01-rd03v2-wireless`), the
-`board.json` check (`81_rd03v2_board_json`), the 4-way handshake setting
-(`97-rd03v2-four-way-retries`) and tree patches 0006 (DFS state) and 0007
-(radio retry); builds of the release candidate from b19's and b21's sources
-were on the bench before it ("rc1 (b19 sources)", "rc1 (b21 sources)").
+Each result names the build it ran on. The test builds (`v2.0.0-local.bN`) come
+from the same tree as the release candidate, built with `v2/build.sh`; a release
+candidate build differs from its test build only in its version stamp and
+repository address.
+
+| Build | What it adds |
+|---|---|
+| b5-b12 | the port onto kuncy7's tree, host-mode Wi-Fi fixes, the watchdog |
+| b16 | in-place recovery after a root-PD crash (975, 977) |
+| rc1-a | the first release candidate build: b16 plus the watchdog default |
+| b17 | NSS in-place recovery (979-982) |
+| b18 | 983 (a fatal during a planned root restart) |
+| b19 | memory (per-CPU list cap, NSS 256 MiB profile, 984), QinQ (0959e), ECM release 3 |
+| rc1 (b19 sources) | the release candidate built from b19 |
+| b21 | first-boot Wi-Fi defaults (`01-rd03v2-wireless`), the `board.json` check (`81_rd03v2_board_json`), the 4-way handshake setting (`97-rd03v2-four-way-retries`), tree patches 0006 (DFS state) and 0007 (radio retry) |
+| rc1 (b21 sources) | the release candidate built from b21 |
+| rc1 | the release candidate: b21 plus 985 (the channel in use follows a channel switch); `kmod-tun`, `kmod-inet-diag` and `kmod-nft-tproxy` moved from the image to our repository |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -52,8 +58,8 @@ by hand on the release candidate (C8, C14).
 
 | Path | Result | Build |
 |---|---|---|
-| v1.14-nss -> v2 through the RAM installer, keeping a v1.x config (VLANs, the v1.x NSS knobs and disabled services that the migration handles) | pass | b5, b10d6, rc1-a |
-| v2 -> v2, keeping settings | pass | b10d2, and every candidate since (b12 -> b16) |
+| v1.14-nss -> v2 through the RAM installer, keeping a v1.x config (VLANs, the v1.x NSS knobs and disabled services that the migration handles) | pass | b5, b10, rc1-a |
+| v2 -> v2, keeping settings | pass | b10, and every candidate since (b12 -> b16) |
 | v2 -> v1.14-nss (rollback), with a v1.x config | pass: v1.14-nss boots with it, both APs, NSS and ECM loaded, no warnings | b16 |
 | offline RAM installer from a release cache (`install.py nss-v2 --offline`) | pass | b9 |
 | v2 -> stock 2.0.28 with `xiaomi-openwrt-install` (`revert.py`, wired) | pass: stock written and read back, setup wizard back (`inited=0`) | rc1 (twice) |
@@ -88,20 +94,19 @@ configuration, and the packages are added again from v2's repositories.
 NAT44 through the NSS firmware, 4 streams each way, wired LAN client to a WAN
 host: 941 Mbit/s up, 941 Mbit/s down, all flows accelerated (NSS counters),
 no frames leaked to the LAN (b9). PPPoE on a WAN VLAN was measured on kuncy7's
-image itself (933 / 930 Mbit/s, the gate) and runs on b16 in C13.
+image itself (933 / 930 Mbit/s) and runs on b16 in C13.
 
 QinQ (a VLAN on a WAN VLAN, `wan.20.30`), 4 streams each way to a host on that VLAN:
 936 up, 936 down Mbit/s NAT44 (twice) and 923 / 923 routed IPv6, all
-flows offloaded, `[20][30]` on the wire, nothing on the LAN (rc1 + 0959e, ECM without
-0053). On rc1 as built the same test moves no data in either direction, on the host path
+flows offloaded, `[20][30]` on the wire, nothing on the LAN (b18 + 0959e, ECM without
+0053). Without 0959e the same test moves no data in either direction, on the host path
 as well as offloaded: the switch accepted 1522-byte frames, an MTU-sized QinQ frame is
-1526, and `RxBadPktBytes` on the CPU and WAN ports took every one. With 0959e but rc1's
-ECM (0053) QinQ runs on the host path at 124 / 177. On the 0959e image a
+1526, and `RxBadPktBytes` on the CPU and WAN ports took every one. With 0959e but ECM
+release 2 (0053) QinQ runs on the host path at 124 / 177. On the 0959e image a
 single WAN VLAN gives 939 / 939, PPPoE on a WAN VLAN 934 / 934 and the
 untagged WAN 941 / 941, all offloaded.
 
-b19 (the release candidate's sources: 0959e, ECM release 3, and the memory changes
-below), same rig: QinQ 936 / 936 (twice), IPv6 over QinQ 923 / 922, single WAN VLAN
+b19 (0959e, ECM release 3, and the memory changes below), same rig: QinQ 936 / 936 (twice), IPv6 over QinQ 923 / 922, single WAN VLAN
 939 / 938, PPPoE on a WAN VLAN 934 / 934, untagged WAN NAT 941 / 940, every flow
 accelerated, nothing from the WAN on the LAN.
 
@@ -118,25 +123,21 @@ and 3/3 hashes.
 | rc1 (b21 sources), NSS offload | 287 / 346, 290 / 338 | 50 / 60 (channel 6, Bluetooth off); 25 / 37 with it streaming audio | 288 / 345, 29 / 45 (v1.14-nss) |
 | b21, NSS offload | 292 / 346, 302 / 350 | not comparable: 33 / 35, 7 / 28 with the test client's Bluetooth streaming audio | 288 / 345, 29 / 45 (v1.14-nss) |
 | b19, NSS offload | 286 / 337 | 39 / 56 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
-| b18 (an earlier rc1 build), NSS offload | 278 / 320 | 46 / 58 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
+| b18, NSS offload | 278 / 320 | 46 / 58 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
 | b18, host | 257 / 294 | 29 / 36 (channel 6, daytime) | 273 / 236, 32 / 48 (v1.14 plain) |
 | rc1-a, NSS offload | 296 / 334 | see below | as below |
 | b16, NSS offload | 296 / 335 | 50 / 57 | 288 / 345, 29 / 45 (v1.14-nss) |
 | b9, NSS offload | 294 / 349 | 36 / 53 | as above |
 | b9, host | 284 / 315 | 36 / 47 | v1.14 plain |
 
-(Mbit/s; the 2.4 GHz AP runs 20 MHz on channel 1, shared with a strong home
-network, and the client is 1x1.)
+(Mbit/s; the 2.4 GHz AP runs 20 MHz, on channel 1 up to b16 and on channel 6 from b18
+on, and the client is 1x1.)
 
-**2.4 GHz on the morning of 2026-10-15.** On rc1-a the 2.4 GHz sessions failed:
-the AP sometimes did not answer the client's authentication, and when it did,
-the link carried 1-35 Mbit/s and a 32 MiB download timed out. The channel was
-57 % busy with almost none of it the bench's own traffic. v1.14-nss, installed
-for the comparison and measured right then on the same channel, carried 0-2
-Mbit/s on 2.4 GHz (its 5 GHz: 284 / 323 Mbit/s, 3 / 3 hashes), so this is the
-radio environment at that hour, not v2; b16, with the same Wi-Fi code as rc1-a,
-had passed 2.4 GHz at 05:00. The 2.4 GHz numbers are to be measured again at
-a quiet hour.
+2.4 GHz rates depend on the channel's load and on the test client's Bluetooth (its
+Wi-Fi and Bluetooth share one chip). With channel 1 57 % busy with other networks,
+v1.14-nss carried 0-2 Mbit/s on 2.4 GHz and rc1-a failed its 2.4 GHz sessions the same
+way; with the client streaming audio over Bluetooth every build dropped. The 2.4 GHz
+numbers above are from quiet hours with Bluetooth off unless the row says otherwise.
 
 ## C5: signal and noise floor
 
@@ -153,8 +154,8 @@ client about 1 m away, TX power of both ends stepped down to 10 dBm and up again
   -50..-53 dBm and the client reads the router's at -52..-53 (5 GHz): the router reads 0 to
   2.5 dB higher, which its two receive chains account for. On 2.4 GHz the router reads
   -35..-36 in every run, the client -25 in one run and -44..-45 in two: the client card's
-  2.4 GHz readings jump by about 20 dB (a Bluetooth headset was connected to it), so it
-  cannot check 2.4 GHz closer than that.
+  2.4 GHz readings jump by about 20 dB (its Bluetooth, on the same chip, was in use), so
+  it cannot check 2.4 GHz closer than that.
 - **Physics.** The router reads the client at -27.5 dBm on 2.4 GHz while the client sends
   15-17 dBm (from the drop when it is capped at 10 dBm): 42-45 dB of path, against 40 dB of
   free space at 1 m. v1.x would show +3.5 dBm, a path of 11-14 dB, which antennas about 1 m
@@ -176,7 +177,7 @@ PD down and both radios with it, and a hw-restart, the reset ath11k asks for
 itself. After each, the client joins the radio's band again and fetches a
 hashed payload, then both bands carry an iperf3 session and three 32 MiB
 downloads checked by sha256; the boot must not change and the kernel must log
-no warning. b18 (the release candidate's sources), 2.4 GHz AP on channel 6:
+no warning. b18, 2.4 GHz AP on channel 6:
 
 | Mode | Event | Result | Client back with a verified payload after |
 |---|---|---|---|
@@ -196,9 +197,8 @@ the NSS VAP nodes and peers released before the NSS teardown (980, 981). A
 fatal the root raises while it is being restarted for a hw-restart is
 absorbed by that restart (983).
 
-The release candidate itself (rc1, built from b19's sources), on the bench
-NAND, NSS offload: a 2.4 GHz hw-restart recovered in place with the client
-back in 6.1 s and a 5 GHz assert in 5.9 s, same boot, no warning; C4 passed on
+rc1 (b19 sources), NSS offload: a 2.4 GHz hw-restart recovered in place with the
+client back in 6.1 s and a 5 GHz assert in 5.9 s, same boot, no warning; C4 passed on
 both bands afterwards.
 
 b19 (with the memory changes, the NSS 256 MiB profile among them), NSS offload,
@@ -212,11 +212,11 @@ lost its carrier and channel for good, hostapd still reporting it enabled
 (kuncy7/openwrt-nss-edma#28: ath11k applies its regulatory domain again after a
 restart, and cfg80211 then forgets the CAC). b21, with tree patch 0006: assert
 and hw-restart, 5260 MHz stayed available and the AP kept carrier and channel
-to +120 s both times; the release candidate (b21 sources), assert, the same.
+to +120 s both times; rc1 (b21 sources) and rc1, assert, the same.
 
 A station attached through the event and passing traffic from the first second
-(2026-10-16; the test client on 2.4 GHz, pinging the router 5 times a second; a
-2.4 GHz hw-restart every 75 s; NSS offload): the station was back after about
+(the test client on 2.4 GHz, pinging the router 5 times a second; a 2.4 GHz
+hw-restart every 75 s; NSS offload): the station was back after about
 6 s each time. Without `wpa_pairwise_update_count=8` 7 of 22 rejoins failed the
 4-way handshake and backed off 10 s (#25: NSS holds the radio's RX for a few
 seconds after the restart, then delivers it at once); with it, 0 of 22, so b21
@@ -232,22 +232,10 @@ reboot; no watchdog decision on record). Both came in the first hour after the
 first install from stock; none came in the 43 restarts with traffic since, with
 or without the setting, after reboots or not. The cause is not known: there is
 no console on this unit and no pstore in this kernel, and the log streamed to
-the bench host for the later runs caught no reset. The release candidate
-itself (installed from stock), the last 4 of them: in place, the station back
-after about 6.3 s each time, same boot, no warning. The reset also left `/etc/board.json` empty, which
-kept the radios down on every boot after it; b21 generates it again at boot
-(`81_rd03v2_board_json`).
-
-How it got there (all on the bench):
-- b16, NSS offload, without 979-981: radios back beaconing, but no client
-  completed a 4-way handshake, and a client's attempt faulted the IPQ5018 PD
-  (NOC error). v1.x had met the same with its NSS stack and fixed it with the
-  same patches; kuncy7's ipq50xx-2026.10.12 carries them too.
-- b16, host mode, before 979: a third hw-restart in one boot left the 2.4 GHz
-  radio deaf. Not seen on b18 (10 / 10).
-- b17, NSS, before 983: one 5 GHz hw-restart in three raised a root fatal
-  during the planned root restart, which the remoteproc crash handler then
-  restarted a second time under the spawned PD; the 5 GHz radio was lost.
+the test host for the later runs caught no reset. The last 4 ran on rc1 itself,
+installed from stock: in place, the station back after about 6.3 s each time, same
+boot, no warning. The reset also left `/etc/board.json` empty, which kept the radios
+down on every boot after it; b21 generates it again at boot (`81_rd03v2_board_json`).
 
 ## Memory (b19)
 
@@ -256,10 +244,10 @@ MemAvailable with both radios up, NSS offload, idle, at 5 / 15 / 25 min after bo
 | Image | MemAvailable |
 |---|---|
 | v1.14-nss | 35.4 / 34.5 / 33.8 MB |
-| rc1 (before) | 20.7 / 17.3 / 21.1 MB (12.6 MB in one 40 min sample) |
+| b18 (before) | 20.7 / 17.3 / 21.1 MB (12.6 MB in one 40 min sample) |
 | b19 | 41.9 / 41.7 / 41.9 MB |
 
-Where it went on rc1 (the memory deep dive): 6-18 MB of free pages parked on the per-CPU
+Where it went before b19: 6-18 MB of free pages parked on the per-CPU
 lists (10 MiB per CPU allowed with `min_free_kbytes` 16384; uncounted in MemFree and
 MemAvailable, so kswapd evicted page cache), and 6-8.5 MB more held by the Wi-Fi stack than
 on v1.14, growing with uptime: long-lived ring buffers pinning shared 32 KiB page-frag
@@ -279,9 +267,9 @@ traffic moved it by 0.5 MB, and a driver reload gives the buffers back (40-42 MB
 | `wifi down` for 4 min | "taken down on purpose", nothing done | pass |
 | one radio disabled in UCI for 4 min | the same, for that radio | pass |
 | `rmmod ath11k_ahb ath11k` by hand | detected, ath11k reloaded, recovered, no reboot | pass, same boot |
-| a fourth incident within an hour | reboot (its budget is three recoveries an hour) | pass (seen when C10 first ran right after the C9 asserts) |
+| a fourth incident within an hour | reboot (its budget is three recoveries an hour) | pass |
 
-**After a channel change** (rc1 with b21's sources): OpenWrt applies a new
+**After a channel change** (rc1 (b21 sources)): OpenWrt applies a new
 channel with a CSA, and ath11k left the channel in use on the old one; the
 survey then showed the old channel in use with frozen counters, the watchdog
 reported "survey freeze" 2-3 minutes later and, past 10 minutes of uptime,
@@ -298,8 +286,8 @@ ath11k reset needs `uci set rd03v2-watchdog.main.inplace=1`.
 
 ## C8, C14: NFC tap, buttons and LEDs, by hand (rc1)
 
-On the release candidate installed from stock, 2026-10-16; each step checked
-on the router as well (its log, LED state in sysfs, the boot id):
+On rc1 installed from stock; each step checked on the router as well (its log,
+LED state in sysfs, the boot id):
 
 | Check | Result |
 |---|---|
