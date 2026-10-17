@@ -21,7 +21,7 @@ feeds. **Status: release candidate.**
 
 - **From stock firmware:** use
   [xiaomi-openwrt-install](https://github.com/ADCDS/xiaomi-openwrt-install):
-  `python3 install.py nss-v2 --release <v2 tag>`. It installs over Ethernet or Wi-Fi
+  `python3 install.py`. It installs the latest release over Ethernet or Wi-Fi
   **without opening the case or connecting UART**, validates the board and NAND, and verifies
   the images it writes. Its `--wifi-ssid`, `--wifi-key`, `--wifi-country` and
   `--root-password` options set up the installed system.

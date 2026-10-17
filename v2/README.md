@@ -156,24 +156,16 @@ usteer or DAWN settings, scripts) need the same amount taken off.
   until the mesh interface is removed; the kernel log says so and names the remedy (patch
   986). Run mesh in host mode (`nss.general.wifi_offload='0'`), where it starts and the AP
   stays up. v1.x's experimental NSS mesh (#21) is not carried.
-- **`ath11k.frame_mode` must stay at its default (2).** Set to 1 by hand, no client can
-  associate under NSS offload. v1.x forced it to 2 (999-995); that guard is not carried, so
-  nothing stops a manual change. Nothing on v2 sets it to 1.
 - `n2h_rx_queue[0]_drops` rise during offloaded PPPoE uploads. That queue is still 256 on
   256 MB boards; his 10-09 release raised it only for 512 MB and 1 GB boards.
-- Fixed here, open in his release: a PPPoE session that does not hold the default route
-  (mwan3, a backup line, PPPoE next to a DHCP uplink) is never offloaded after a boot
-  (tree patch 0003; kuncy7/openwrt-nss-edma#25).
 
 ## Installing
 
-A release candidate is a GitHub **pre-release**: tools that look for the latest release, like
-`xiaomi-openwrt-install` without `--release`, skip it.
-
-- **From stock firmware:** `python3 install.py nss-v2 --release <v2 tag>` with
-  [xiaomi-openwrt-install](https://github.com/ADCDS/xiaomi-openwrt-install). It roots stock,
-  boots the v2 RAM installer and writes v2 to NAND, over a cable or (with the `-wifi`
-  installer pair) over Wi-Fi.
+- **From stock firmware:** `python3 install.py` with
+  [xiaomi-openwrt-install](https://github.com/ADCDS/xiaomi-openwrt-install), which installs the
+  latest release. It roots stock, boots the v2 RAM installer and writes v2 to NAND, over a
+  cable or (with the `-wifi` installer pair) over Wi-Fi. v2 has one image, so its `standard`
+  and `nss` selections install the same one; `--release v1.14` selects v1.x.
 - **From v1.x or another OpenWrt build:** as for any release of this port, boot the v2 RAM
   installer (`…-initramfs-factory.ubi` into `ubi_kernel`, see
   [docs/no-uart-reflash.md](../docs/no-uart-reflash.md)) and run `sysupgrade` with the
@@ -202,15 +194,17 @@ TAG=DEV-<name> v2/build.sh            # or a release tag; PREPARE_ONLY=1 stops b
   (`verify-artifacts.py` uses its image checks). `RD03V2_WS` points elsewhere; each path
   also has its own variable. The build tree defaults to `openwrt-v2/` and release assets to
   `rel-v2-<tag>/`, both inside the repository and ignored by git.
-- `upstream.lock`: his release and commit, built from the local mirror (his CI keeps only
-  three releases, and his branches get rebased). The commits a release of ours builds on
-  are also tagged `rd03v2/<his release>` in our forks
-  [ADCDS/openwrt](https://github.com/ADCDS/openwrt) (his tree) and
-  [ADCDS/nss-packages](https://github.com/ADCDS/nss-packages) (his nss feed). His
-  `ipq50xx-rebase` branch no longer contains the nss commit of `ipq50xx-2026.10.09`.
-  `bump-upstream.sh` tags new pins in the mirrors; pushing those tags is a separate step.
-- `feeds.lock`: every feed pinned to a commit. `tools/freeze-feeds.sh` picks the commits as
-  of his release time.
+- `upstream.lock`: his release and commit. His CI keeps only three releases and his branches
+  get rebased, so the commits a release of ours builds on live in our forks, tagged
+  `rd03v2/<his release>`: [ADCDS/openwrt](https://github.com/ADCDS/openwrt) (his tree; the fork
+  in his fork network) and [ADCDS/nss-packages](https://github.com/ADCDS/nss-packages) (his nss
+  feed). The build reads the local mirrors and fills them from the forks when a pinned commit
+  is missing, so a fresh workspace builds from the forks alone.
+  `tools/bump-upstream.sh <release>` takes a new release from his repositories, tags its
+  commits in the mirrors and, with `PUSH_PINS=1`, pushes the tags to the forks.
+- `feeds.lock`: every feed pinned to a commit: the ones his CI built our board group with,
+  from the `feeds-256m.buildinfo` it attaches to each release (`tools/freeze-feeds.sh` picks
+  them by date for a release without one).
 - `tree-patches/`: our changes to his files, applied with `git am` (no fuzz).
 - `overlay/`: new files only; the build refuses to overwrite his.
 - `config/`: his CI fragments for the 256 MB group are used as they are; ours follow.
