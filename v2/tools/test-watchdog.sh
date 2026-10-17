@@ -66,7 +66,9 @@ cat > "$STUBS/world.sh" <<'EOF'
 #   frozen_<dev>  survey active time stuck; sta_<dev>: station count;
 #   rxmove_<dev>  their rx packets keep rising
 #   heal_reset, heal_reload: an ath11k reset / driver reload cures the faults
-#   respawn       ath11k_ahb respawns the user PDs after a root PD restart (975)
+#   respawn       ath11k_ahb respawns the user PDs after a root PD restart (kuncy7's
+#                 976: no parameter); unset, it does not (respawn_userpds=N, as our
+#                 former 975 switched off)
 #   dmesg         the kernel log
 PATH=/usr/bin:/bin
 W=$ROOT/world; S=$ROOT/sys
@@ -132,9 +134,9 @@ world_render() {
 	fi
 	[ "$(wg drv)" = loaded ] || return 0
 	mkdir -p "$S/module/ath11k_ahb"
-	if wis respawn; then  # ath11k_ahb with patch 975
+	if ! wis respawn; then  # an ath11k_ahb that does not respawn says so
 		mkdir -p "$S/module/ath11k_ahb/parameters"
-		echo Y > "$S/module/ath11k_ahb/parameters/respawn_userpds"
+		echo N > "$S/module/ath11k_ahb/parameters/respawn_userpds"
 	fi
 	: > "$S/module/ath11k/holders/ath11k_ahb"
 	for d in $RADIOS; do

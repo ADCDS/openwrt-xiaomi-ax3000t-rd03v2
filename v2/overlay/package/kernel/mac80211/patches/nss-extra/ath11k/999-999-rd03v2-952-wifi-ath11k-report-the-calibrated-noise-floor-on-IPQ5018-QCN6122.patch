@@ -31,7 +31,7 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
 ---
 --- a/drivers/net/wireless/ath/ath11k/core.h
 +++ b/drivers/net/wireless/ath/ath11k/core.h
-@@ -831,6 +831,16 @@ struct ath11k {
+@@ -838,6 +838,16 @@ struct ath11k {
  	u32 survey_last_rx_clear_count;
  	u32 survey_last_cycle_count;
  
@@ -50,7 +50,7 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
  	 *
 --- a/drivers/net/wireless/ath/ath11k/mac.c
 +++ b/drivers/net/wireless/ath/ath11k/mac.c
-@@ -9581,6 +9581,12 @@ static int ath11k_mac_op_get_survey(struct ieee80211_hw *hw, int idx,
+@@ -9981,6 +9981,12 @@ static int ath11k_mac_op_get_survey(struct ieee80211_hw *hw, int idx,
  
  	mutex_lock(&ar->conf_mutex);
  
@@ -63,7 +63,7 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
  	sband = hw->wiphy->bands[NL80211_BAND_2GHZ];
  	if (sband && idx >= sband->n_channels) {
  		idx -= sband->n_channels;
-@@ -9609,6 +9615,26 @@ static int ath11k_mac_op_get_survey(struct ieee80211_hw *hw, int idx,
+@@ -10009,6 +10015,26 @@ static int ath11k_mac_op_get_survey(struct ieee80211_hw *hw, int idx,
  
  	survey->channel = &sband->channels[idx];
  
@@ -90,7 +90,7 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
  	if (ar->rx_channel == survey->channel)
  		survey->filled |= SURVEY_INFO_IN_USE;
  
-@@ -9733,6 +9759,12 @@ static void ath11k_mac_op_sta_statistics(struct ieee80211_hw *hw,
+@@ -10058,6 +10084,12 @@ static void ath11k_mac_op_sta_statistics(struct ieee80211_hw *hw,
  	bool db2dbm = test_bit(WMI_TLV_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT,
  			       ar->ab->wmi_ab.svc_map);
  
@@ -105,7 +105,7 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
  
 --- a/drivers/net/wireless/ath/ath11k/wmi.c
 +++ b/drivers/net/wireless/ath/ath11k/wmi.c
-@@ -1811,6 +1811,36 @@ int ath11k_wmi_send_pdev_temperature_cmd(struct ath11k *ar)
+@@ -1821,6 +1821,36 @@ int ath11k_wmi_send_pdev_temperature_cmd(struct ath11k *ar)
  	return ret;
  }
  
@@ -142,7 +142,7 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
  int ath11k_wmi_send_bcn_offload_control_cmd(struct ath11k *ar,
  					    u32 vdev_id, u32 bcn_ctrl_op)
  {
-@@ -8721,6 +8751,127 @@ exit:
+@@ -8774,6 +8804,127 @@ exit:
  	kfree(tb);
  }
  
@@ -270,7 +270,7 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
  static void ath11k_fils_discovery_event(struct ath11k_base *ab,
  					struct sk_buff *skb)
  {
-@@ -9193,6 +9344,9 @@ static void ath11k_wmi_tlv_op_rx(struct ath11k_base *ab, struct sk_buff *skb)
+@@ -9265,6 +9416,9 @@ static void ath11k_wmi_tlv_op_rx(struct ath11k_base *ab, struct sk_buff *skb)
  	case WMI_PDEV_TEMPERATURE_EVENTID:
  		ath11k_wmi_pdev_temperature_event(ab, skb);
  		break;
@@ -282,7 +282,7 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
  		break;
 --- a/drivers/net/wireless/ath/ath11k/wmi.h
 +++ b/drivers/net/wireless/ath/ath11k/wmi.h
-@@ -3644,6 +3644,11 @@ struct wmi_get_pdev_temperature_cmd {
+@@ -3635,6 +3635,11 @@ struct wmi_get_pdev_temperature_cmd {
  	u32 pdev_id;
  } __packed;
  
@@ -294,8 +294,8 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
  struct wmi_ftm_seg_hdr {
  	u32 len;
  	u32 msgref;
-@@ -5004,6 +5009,17 @@ struct wmi_pdev_update_muedca_event {
- 	u32 muedca_expiration_time[WMI_AC_MAX];
+@@ -5022,6 +5027,17 @@ struct wmi_pdev_temperature_event {
+ 	u32 pdev_id;
  } __packed;
  
 +/* WMI_PDEV_NFCAL_POWER_ALL_CHANNELS_EVENTID fixed_param; followed by three
@@ -312,7 +312,7 @@ v1.x read 24-31 dB high (an in-room client at +9..+12 dBm on 2.4 GHz).
  #define WMI_RX_STATUS_OK			0x00
  #define WMI_RX_STATUS_ERR_CRC			0x01
  #define WMI_RX_STATUS_ERR_DECRYPT		0x08
-@@ -6582,6 +6598,7 @@ int ath11k_wmi_pdev_bss_chan_info_request(struct ath11k *ar,
+@@ -6600,6 +6616,7 @@ int ath11k_wmi_pdev_bss_chan_info_request(struct ath11k *ar,
  int ath11k_wmi_send_stats_request_cmd(struct ath11k *ar,
  				      struct stats_request_params *param);
  int ath11k_wmi_send_pdev_temperature_cmd(struct ath11k *ar);

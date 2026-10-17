@@ -155,7 +155,7 @@ dropped=$(grep -E '^(CONFIG_[A-Za-z0-9_.+-]+=|# CONFIG_[A-Za-z0-9_.+-]+ is not s
 [ -z "$dropped" ] || die "defconfig dropped: $dropped"
 for must in CONFIG_TARGET_DEVICE_qualcommax_ipq50xx_DEVICE_xiaomi_mi-router-ax3000t-v2=y \
 	CONFIG_ATH11K_MEM_PROFILE_256M=y CONFIG_NSS_MEM_PROFILE_LOW=y CONFIG_ATH11K_NSS_SUPPORT=y CONFIG_ATH11K_NSS_MEM_PROFILE_256M=y \
-	CONFIG_NSS_FIRMWARE_VERSION_12_2=y; do
+	CONFIG_NSS_FIRMWARE_VERSION_12_5=y; do
 	grep -qxF "$must" "$TREE/.config" || die ".config lacks $must"
 done
 [ "$(grep -c '^CONFIG_TARGET_DEVICE_.*=y' "$TREE/.config")" = 1 ] || die "more than one device selected"

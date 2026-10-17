@@ -35,12 +35,12 @@ done
 grep -vE '^\s*(#|$)' "$V2/feeds.lock" | while read -r name rev; do
 	[ "$(git -C "$TREE/feeds/$name" rev-parse HEAD 2>/dev/null)" = "$rev" ] && echo "PASS feed $name" || echo "FAIL feed $name"
 done > "$W/feeds"; cat "$W/feeds"; fail=$((fail + $(grep -c '^FAIL' "$W/feeds")))
-chk "pinned NSS feed overlay and package release" "$(yes_ python3 "$V2/tools/feed-overlay-v2.py" --check "$TREE")" yes
+chk "NSS feed is its pin (plus feed-overlay files, if any)" "$(yes_ python3 "$V2/tools/feed-overlay-v2.py" --check "$TREE")" yes
 
 echo "=== configuration"
 chk "one device in .config" "$(grep -c '^CONFIG_TARGET_DEVICE_.*=y' "$TREE/.config")" 1
 for c in CONFIG_ATH11K_MEM_PROFILE_256M=y CONFIG_NSS_MEM_PROFILE_LOW=y CONFIG_ATH11K_NSS_SUPPORT=y CONFIG_ATH11K_NSS_MEM_PROFILE_256M=y \
-	CONFIG_NSS_FIRMWARE_VERSION_12_2=y; do
+	CONFIG_NSS_FIRMWARE_VERSION_12_5=y; do
 	chk "$c" "$(grep -cxF "$c" "$TREE/.config")" 1
 done
 LX=$(ls -d "$TREE"/build_dir/target-*/linux-qualcommax_ipq50xx/linux-[0-9]* 2>/dev/null | head -1)
@@ -98,13 +98,15 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 	chk "S99nfc symlink" "$(yes_ test -L "$X/etc/rc.d/S99nfc")" yes
 	chk "i2ctransfer" "$(yes_ test -x "$X/usr/sbin/i2ctransfer")" yes
 	chk "nfc default mode" "$(grep -hE '^[[:space:]]*option mode' "$X/etc/config/nfc" 2>/dev/null)" "	option mode 'clear'"
-	# tree patch 0003: every PPPoE session made again once the NSS PPPoE manager is resident
-	chk "nss-dwmac-up re-dials every PPPoE interface (0003)" \
+	# every PPPoE session made again once the NSS PPPoE manager is resident (his b2b6b3fff8, our
+	# former tree patch 0003; kept as a check that his tree still does it)
+	chk "nss-dwmac-up re-dials every PPPoE interface" \
 		"$(grep -cF '@.interface[@.proto="pppoe"].interface' "$X/usr/sbin/nss-dwmac-up" 2>/dev/null)" 1
 	chk "PPPoE re-dial honors pppname" "$(grep -cF 'network.$_i.pppname' "$X/usr/sbin/nss-dwmac-up")" 1
 	chk "Q6 policy before NSS probe" "$(grep -cF '/usr/sbin/rd03v2-q6-policy' "$X/usr/sbin/nss-dwmac-up")" 1
-	# tree patch 0007: a radio netifd gave up on while ath11k loaded is set up again
-	chk "nss-dwmac-up retries a radio left down (0007)" \
+	# a radio netifd gave up on while ath11k loaded is set up again (his dff118f852, our former
+	# tree patch 0007)
+	chk "nss-dwmac-up retries a radio left down" \
 		"$(grep -cF 'asking netifd to set it up again' "$X/usr/sbin/nss-dwmac-up")" 1
 	chk "RD03v2 keeps basic station statistics by default (0005)" \
 		"$(grep -cF 'stats_disable_default=0' "$X/etc/init.d/qca-nss-pbuf")" 1

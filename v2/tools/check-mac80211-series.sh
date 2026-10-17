@@ -1,7 +1,9 @@
 #!/bin/bash
 # check-mac80211-series.sh <tree> [workdir]: apply the tree's whole mac80211 patch series to a
-# fresh backports source, in the order of its Build/Patch (NSS directories last, as with
-# CONFIG_ATH11K_NSS_SUPPORT), refusing any fuzz.
+# fresh backports source, in the order of its Build/Patch (the NSS directories last, as with
+# CONFIG_ATH11K_NSS_SUPPORT: patches/nss/<driver>, then patches/nss-extra/<driver> where the
+# Makefile has it; the mesh directories only with WITH_MESH=1, as for
+# CONFIG_ATH11K_NSS_MESH_SUPPORT, which the 256 MB group does not build), refusing any fuzz.
 #
 # OpenWrt's patch-kernel.sh applies with patch's default fuzz of 2, so a hunk of ours whose
 # context drifted after a bump of his tree can land in the wrong place without an error. This
@@ -16,9 +18,12 @@ MK=$TREE/package/kernel/mac80211/Makefile
 PD=$TREE/package/kernel/mac80211/patches
 die() { echo "check-mac80211-series: $*" >&2; exit 1; }
 
+# PKG_VERSION is either the version or derived from PKG_SOURCE_VERSION
+srcver=$(sed -n 's/^PKG_SOURCE_VERSION:=//p' "$MK")
 ver=$(sed -n 's/^PKG_VERSION:=//p' "$MK")
+case $ver in *'$(PKG_SOURCE_VERSION)'*) ver=${srcver//-/_} ;; esac
 hash=$(sed -n 's/^PKG_HASH:=//p' "$MK")
-src=$(sed -n 's/^PKG_SOURCE:=//p' "$MK" | sed "s/\$(PKG_VERSION)/$ver/")
+src=$(sed -n 's/^PKG_SOURCE:=//p' "$MK" | sed -e "s/\$(PKG_VERSION)/$ver/" -e "s/\$(PKG_SOURCE_VERSION)/$srcver/")
 [ -n "$ver" ] && [ -n "$hash" ] && [ -n "$src" ] || die "cannot read PKG_VERSION/PKG_HASH/PKG_SOURCE from $MK"
 tarball=$(readlink -f "$TREE/dl/$src" 2>/dev/null || true)
 [ -f "$tarball" ] || tarball=${V2_DL:-${RD03V2_WS:-$(cd "$(dirname "$0")/../../.." && pwd)}/dl-v2}/$src
@@ -33,6 +38,14 @@ nss=$(sed -n 's/^NSS_PATCH:= *//p' "$MK")
 grep -q 'PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/nss/$(driver),nss/$(driver)/' "$MK" ||
 	die "the NSS patch loop of $MK changed"
 for d in $nss; do dirs+=("nss/$d"); done
+[ "${WITH_MESH:-0}" = 1 ] && dirs+=("nss/mesh")
+extra=$(sed -n 's/^NSS_EXTRA_PATCH:= *//p' "$MK")
+if [ -n "$extra" ]; then
+	grep -q 'PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/nss-extra/$(driver),nss-extra/$(driver)/' "$MK" ||
+		die "the nss-extra patch loop of $MK changed"
+	for d in $extra; do dirs+=("nss-extra/$d"); done
+	[ "${WITH_MESH:-0}" = 1 ] && dirs+=("nss-extra/mesh")
+fi
 
 rm -rf "$WORK/src"; mkdir -p "$WORK/src"; cd "$WORK/src"
 tar --zstd -xf "$tarball" --strip-components=1 2>/dev/null || tar -xf "$tarball" --strip-components=1

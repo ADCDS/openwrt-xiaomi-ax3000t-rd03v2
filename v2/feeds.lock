@@ -1,10 +1,10 @@
-# <feed> <commit>: v2/tools/freeze-feeds.sh <his feeds.conf.default> 2026-10-09T19:52:00Z
-packages dbd1a89a059fb3a92cbfebc66bd2f1c0f084fe22
-luci 37e6a6bb654984bfaaeff18bcd7cfa8d9c568a52
+# <feed> <commit>: his feeds-256m.buildinfo of ipq50xx-2026.10.15-2
+packages d5545ad20d449e1e853e043c72a07853f50ccd05
+luci b0cead459cfb434f2b2066e03f36c5bf39a583e7
 routing 4b9891b9136259f93294a424507ed24c5e8c1cbd
 telephony 5d68d53c160a325ea9d03fce393e051573bcc736
-video 8d4551ceb287527f6a2ba99f9e86ded782a937bb
-nss 94f44cc3bd4259b9b49f186f157e90e06b5ab003
+video 6917907d4d6c670cf85be525d23216595655061d
+nss 84e4f0c0e8eb6b580fc7ea130f1cb2c7090ca2ad
 # Not one of his feeds: v2/build.sh adds it. Same pin as v1.x (branch v1); its sources are
 # pinned to commits by awg_pin in v2/build.sh.
 amneziawg 03b62269e2edc168504f057cffaafda11b25ed92

@@ -24,7 +24,7 @@
 # It then tries, stopping at the first step after which every expected radio
 # is healthy again:
 #   1. ath11k reset (hw-restart) of the affected radio - only with the uci
-#      option inplace 1 (with ath11k_ahb's respawn, 975, the reset restarts
+#      option inplace 1 (with ath11k_ahb's user-PD respawn the reset restarts
 #      the root PD and both radios come back in a few seconds; see
 #      inplace_on() for why it is not the default);
 #   2. ath11k driver reload, both radios, as nss-dwmac-up loads it at boot -
@@ -34,13 +34,13 @@
 #   3. reboot.
 #
 # A root PD crash ("crash detected in q6wcss") is the kernel's to recover when
-# ath11k_ahb respawns the user PDs (patch 975, parameter respawn_userpds, on by
-# default): the remoteproc core restarts the root PD, ath11k_ahb spawns the
-# user PDs on it again and ath11k rebuilds both radios in place, NSS Wi-Fi
-# offload included. The watchdog then only records it, and steps in when the
-# radios are not healthy RESPAWN_WAIT after the crash, or when ath11k_ahb logs
-# that it left the user PDs down after repeated crashes ("respawn suppressed
-# ...").
+# ath11k_ahb respawns the user PDs: the remoteproc core restarts the root PD,
+# ath11k_ahb spawns the user PDs on it again and ath11k rebuilds both radios in
+# place, NSS Wi-Fi offload included. kuncy7's ath11k_ahb (his 976, from
+# ipq50xx-2026.10.15) always does; earlier v2 builds carried our 975, switched
+# by the parameter respawn_userpds, which also logged "respawn suppressed ..."
+# after repeated crashes. The watchdog then only records the crash, and steps in
+# when the radios are not healthy RESPAWN_WAIT after it, or on that log line.
 #
 # What no step can do is boot a Q6 that is left "crashed": ath11k_ahb shuts it
 # down with its last radio only from "running", so it keeps the power
@@ -258,16 +258,18 @@ actions_allowed() {
 	return 1
 }
 
-# Does ath11k_ahb spawn the user PDs again when the root PD restarts (patch
-# 975, parameter respawn_userpds)? Then a root PD crash is the kernel's to
-# recover, in place, and the watchdog only steps in when the radios are not
-# back after RESPAWN_WAIT, with or without NSS Wi-Fi offload (979-981 make the
-# NSS Wi-Fi data path survive the restart). Remembered for when ath11k_ahb is
-# not loaded.
+# Does ath11k_ahb spawn the user PDs again when the root PD restarts? Then a
+# root PD crash is the kernel's to recover, in place, with or without NSS Wi-Fi
+# offload, and the watchdog only steps in when the radios are not back after
+# RESPAWN_WAIT. With the parameter respawn_userpds (our former 975) it says so;
+# without it, the loaded ath11k_ahb is kuncy7's, which always respawns.
+# Remembered for when ath11k_ahb is not loaded.
 respawn_kernel() {
 	if [ -r "$RESPAWN" ]; then
 		case "$(cat "$RESPAWN" 2>/dev/null)" in 1|Y|y) echo 1 ;; *) echo 0 ;; esac \
 			> "$STATE_DIR/respawn"
+	elif [ -d "$SYS/module/ath11k_ahb" ]; then
+		echo 1 > "$STATE_DIR/respawn"
 	fi
 	[ "$(cat "$STATE_DIR/respawn" 2>/dev/null)" = 1 ]
 }
@@ -542,8 +544,8 @@ offload_now() {
 	fi
 }
 
-# Step 1 allowed? Only with uci inplace 1. With 975 the reset restarts the root
-# PD and both radios come back in place. The driver reload stays the default
+# Step 1 allowed? Only with uci inplace 1. With the user-PD respawn the reset
+# restarts the root PD and both radios come back in place. The driver reload stays the default
 # step: it rebuilds both radios from scratch and recovered every time it was
 # tested, while an earlier reset (before 979-981) once left the 2.4 GHz radio
 # beaconing and deaf to authentication. Never after a root PD crash: that one
@@ -765,8 +767,8 @@ record_inplace() {
 	mv "$STATE_DIR/inplace-attempts.new" "$STATE_DIR/inplace-attempts"
 }
 
-# Step 1: ath11k's own reset (hw-restart) of an affected radio. With 975 it
-# restarts the root PD, and with it every radio (see below).
+# Step 1: ath11k's own reset (hw-restart) of an affected radio. With the
+# user-PD respawn it restarts the root PD, and with it every radio (see below).
 # $1 = ath11k devices.
 try_ath_reset() {
 	did=0
@@ -775,8 +777,8 @@ try_ath_reset() {
 		[ -w "$dd/simulate_fw_crash" ] || continue
 		actions_allowed || return 3
 		if respawn_kernel; then
-			# 975: the reset restarts the root PD, and with it every radio;
-			# a second one would only cut the first one's recovery short.
+			# the reset restarts the root PD, and with it every radio; a
+			# second one would only cut the first one's recovery short.
 			log "in-place: ath11k reset of $d (restarts the root PD and both radios)"
 			write_bounded 10 hw-restart "$dd/simulate_fw_crash" && did=1
 			break
