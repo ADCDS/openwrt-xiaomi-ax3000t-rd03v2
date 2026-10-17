@@ -1,36 +1,40 @@
 From: Adriel Santos <adriel@adriel.eu>
-Subject: [PATCH] wifi: ath11k: refuse a mesh vif under NSS offload when mesh is not built
+Subject: [PATCH] wifi: ath11k: give a clear error for a mesh vif under NSS offload when mesh is not built
 
 NSS 802.11s mesh offload is not built for this 256 MB board (kuncy7 builds
 it for his std group only; an active mesh costs RAM a 256 MB board cannot
 spare). With NSS offload on, the firmware then has no mesh vdev, and a
 mesh interface configured on an offloaded radio fails deep in
-ath11k_nss_vdev_create() (-EINVAL, "unsupported interface type 7"), which
-unwinds the half-created vdev and leaves the radio's AP down for good:
-`wifi reload` on a radio that carries both an AP and a mesh vif takes the
-AP out.
+ath11k_nss_vdev_create() with a cryptic "-22 / unsupported interface type
+7 for nss vdev alloc".
 
 Refuse a mesh vif at the start of add_interface, when NSS offload is on
-and NSS mesh is not compiled in, before any vdev or peer is created, so
-the AP on the same radio keeps running. 802.11s mesh works in host Wi-Fi
-mode (nss.general.wifi_offload=0). The guard compiles out if a future
-build enables CPTCFG_ATH11K_NSS_MESH_SUPPORT. Issue #21.
+and NSS mesh is not compiled in, before any vdev or peer is created, and
+log what to do. This does NOT keep the radio's AP up: netifd still wedges
+the radio while a mesh interface it cannot bring up is configured (the AP
+netdev stays carrier-down until the mesh interface is removed). What it
+changes is the diagnostic - a line that names the cause and the remedy
+(802.11s mesh needs host Wi-Fi mode, nss.general.wifi_offload=0) instead
+of the bare -22. The guard compiles out if a future build enables
+CPTCFG_ATH11K_NSS_MESH_SUPPORT. Issue #21.
 
 Signed-off-by: Adriel Santos <adriel@adriel.eu>
 ---
 --- a/drivers/net/wireless/ath/ath11k/mac.c
 +++ b/drivers/net/wireless/ath/ath11k/mac.c
-@@ -7231,6 +7231,22 @@
+@@ -7231,6 +7231,24 @@
  		goto err;
  	}
  
 +	/* NSS 802.11s mesh offload is not built on this board (the 256 MB
 +	 * boards leave it out; see ath.mk). With NSS offload on, the firmware
-+	 * has no mesh vdev, so bringing a mesh interface up fails late and
-+	 * takes the radio's AP down with it. Refuse it here, before anything
-+	 * is created, so the AP on the same radio stays up; mesh runs in host
-+	 * Wi-Fi mode (nss.general.wifi_offload=0). If a future build enables
-+	 * CPTCFG_ATH11K_NSS_MESH_SUPPORT this guard compiles out.
++	 * has no mesh vdev, so bringing a mesh interface up fails in the NSS
++	 * vdev create with a cryptic -22. Refuse it here, before anything is
++	 * created, with a message that names the remedy. This does not keep
++	 * the radio's AP up (netifd wedges the radio while the mesh interface
++	 * is configured), it just makes the cause clear: 802.11s mesh needs
++	 * host Wi-Fi mode (nss.general.wifi_offload=0). The guard compiles out
++	 * if a future build enables CPTCFG_ATH11K_NSS_MESH_SUPPORT.
 +	 */
 +#ifndef CPTCFG_ATH11K_NSS_MESH_SUPPORT
 +	if (ab->nss.enabled && vif->type == NL80211_IFTYPE_MESH_POINT) {

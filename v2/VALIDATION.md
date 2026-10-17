@@ -323,11 +323,13 @@ kept through a hw-restart and an assert), #37 (kmods from our repository). #18
 (slow receiver on 5 GHz under full WAN load, NSS and host): no stall, no OOM,
 memory recovered. Three findings:
 
-- **#21**: 802.11s mesh does not come up with NSS offload (his tree does not
-  build it for this firmware); it works in host mode. A regression from v1.11's
-  NSS mesh. See Known issues in the README.
-- **#24**: `ath11k.frame_mode=1` set by hand stops clients associating; the
-  default (2) is unaffected and nothing sets it to 1. v1.x's guard is not carried.
+- **#21**: 802.11s mesh does not come up with NSS offload (not built on this
+  256 MB board) and takes that radio's AP down while configured; patch 986 now
+  logs the cause and the remedy, and mesh works in host mode. A regression from
+  v1.11's NSS mesh. See Known issues in the README.
+- **#24**: fixed - patch 995 forces `frame_mode` to ethernet (2) under NSS, so a
+  manual `frame_mode=1` no longer brings up APs no client can join. Verified: set
+  to 1, the driver forced 2 and a client associated.
 - **#36** (ECM/mwan3 IPv6 stall) was not reproduced on the bench; v2's ECM has
   no FIB-rule notifier, so the full mwan3 + PPPoE rig would be needed to settle it.
 
