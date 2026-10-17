@@ -47,7 +47,21 @@ openssl ec -in "$KEYDIR/private-key.pem" -pubout 2>/dev/null | cmp -s - "$KEYDIR
 cmp -s "$KEYDIR/public-key.pem" "$V2/keys/public-key.pem" ||
 	die "the signing key is not the one committed in v2/keys/public-key.pem"
 
-# 1. his tree at the locked commit (full history: getver.sh derives the revision from it)
+# 1. his tree at the locked commit (full history: getver.sh derives the revision from it).
+# The pinned commits come from our forks (upstream.lock) when a local mirror lacks them, so a
+# build does not depend on his repositories keeping a release.
+fill_mirror() {  # fill_mirror <mirror> <fork URL> <commit>
+	[ -d "$1" ] || git init -q --bare "$1"
+	git -C "$1" cat-file -e "$3^{commit}" 2>/dev/null && return 0
+	echo "mirror $1: fetching rd03v2/$RELEASE from $2"
+	git -C "$1" fetch -q "$2" "+refs/tags/rd03v2/$RELEASE:refs/tags/rd03v2/$RELEASE" ||
+		die "cannot fetch rd03v2/$RELEASE from $2"
+	git -C "$1" cat-file -e "$3^{commit}" 2>/dev/null || die "rd03v2/$RELEASE in $2 does not contain $3"
+}
+NSS_COMMIT=$(awk '$1 == "nss" { print $2 }' "$V2/feeds.lock")
+[ -n "$NSS_COMMIT" ] || die "v2/feeds.lock has no nss line"
+fill_mirror "$MIRROR" "$URL" "$COMMIT"
+fill_mirror "$NSS_MIRROR" "$NSS_URL" "$NSS_COMMIT"
 git clone -q --no-checkout "$MIRROR" "$TREE"
 git -C "$TREE" checkout -q --detach "$COMMIT"
 [ "$(git -C "$TREE" rev-parse HEAD)" = "$COMMIT" ] || die "checkout is not $COMMIT"

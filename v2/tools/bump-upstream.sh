@@ -4,9 +4,12 @@
 #
 #  1. fetch the tag into our mirror of his tree, and his nss feed into ours, never pruning
 #     (his CI deletes old releases and the feed branch gets rebased), and tag the pinned
-#     commits rd03v2/<release> in both mirrors so they stay reachable;
-#  2. freeze his feeds as of his CI run for that commit (tools/freeze-feeds.sh) and rewrite
-#     upstream.lock and feeds.lock in place, for review with git diff. His nss feed is the
+#     commits rd03v2/<release> in both mirrors so they stay reachable; PUSH_PINS=1 pushes those
+#     tags to our forks (URL, NSS_URL in upstream.lock), where builds take a missing commit from;
+#  2. take the feed commits from the feeds-256m.buildinfo his CI attaches to a release (since
+#     ipq50xx-2026.10.15), and rewrite upstream.lock and feeds.lock in place, for review with
+#     git diff. An older release has none: then his feeds are frozen as of his CI run for that
+#     commit (tools/freeze-feeds.sh). His nss feed is the
 #     exception: its branch gets rebased, which rewrites commit dates and brings in commits
 #     that were not on it at release time, so a freeze by date picks the wrong commit (a
 #     no-op bump of ipq50xx-2026.10.09 by date got c30fbbff instead of 94f44cc). Its
@@ -32,62 +35,88 @@ REPO=$PWD V2=$PWD/v2
 WS=${RD03V2_WS:-$(dirname "$REPO")}
 . "$V2/upstream.lock"
 NSS_MIRROR=${V2_NSS_MIRROR:-$WS/mirrors/nss-packages.git}
-NSS_URL=https://github.com/kuncy7/nss-packages.git
+GROUP=256m  # his CI board group of the AX3000T v2
+UP_REPO=$(sed -E 's#^https://github.com/##; s#\.git$##' <<<"$UPSTREAM_URL")
 die() { echo "bump-upstream: $*" >&2; exit 1; }
 [ -z "$(git -C "$REPO" status --porcelain -- v2/upstream.lock v2/feeds.lock)" ] ||
 	die "v2/upstream.lock or v2/feeds.lock has uncommitted changes"
 
-# 1. mirrors (no --prune: what we built on stays)
-git -C "$MIRROR" fetch -q origin "+refs/tags/$NEW:refs/tags/$NEW" '+refs/heads/*:refs/heads/*'
+# 1. mirrors, from his repositories (no --prune: what we built on stays)
+git -C "$MIRROR" fetch -q "$UPSTREAM_URL" "+refs/tags/$NEW:refs/tags/$NEW" '+refs/heads/*:refs/heads/*'
 C=$(git -C "$MIRROR" rev-parse "refs/tags/$NEW^{commit}")
-git -C "$NSS_MIRROR" fetch -q "$NSS_URL" '+refs/heads/*:refs/heads/*'
+git -C "$NSS_MIRROR" fetch -q "$UPSTREAM_NSS_URL" '+refs/heads/*:refs/heads/*'
 echo "release $NEW = $C ($(git -C "$MIRROR" log -1 --format='%cI' "$C"))"
 
-# 2. feeds as of his CI run
-if [ -n "${FEEDS_FROZEN_AT_OVERRIDE:-}" ]; then
-	FEEDS_FROZEN_AT=$FEEDS_FROZEN_AT_OVERRIDE
-elif [ "$NEW" != "$RELEASE" ]; then
-	FEEDS_FROZEN_AT=
-fi
-if [ -z "$FEEDS_FROZEN_AT" ]; then
-	started=$(gh api "repos/kuncy7/openwrt-nss-edma/actions/runs?head_sha=$C" \
-		--jq '[.workflow_runs[] | select(.path | test("ipq50xx"))] | sort_by(.run_started_at) | .[0].run_started_at' 2>/dev/null || true)
-	[ -n "$started" ] && [ "$started" != null ] ||
-		die "no CI run found for $C; set FEEDS_FROZEN_AT_OVERRIDE=<ISO 8601>"
-	FEEDS_FROZEN_AT=$(date -u -d "$started + 4 min" +%Y-%m-%dT%H:%M:%SZ)
-fi
-conf=$(mktemp); trap 'rm -f "$conf"' EXIT
+# 2. feeds: the commits his CI built our board group with, from the buildinfo it attaches to
+# the release; for a release without one, frozen as of his CI run (nss: see the top)
+conf=$(mktemp); info=$(mktemp -d); trap 'rm -rf "$conf" "$info"' EXIT
 git -C "$MIRROR" show "$C:feeds.conf.default" > "$conf"
-new_feeds=$("$V2/tools/freeze-feeds.sh" "$conf" "$FEEDS_FROZEN_AT")
-grep -q '^nss ' <<<"$new_feeds" || die "his feeds.conf.default has no nss feed"
-# nss: not by date (see the top); the branch head at his CI run's time, from our reflog
-nss_branch=$(sed -n 's#^src-git nss [^;]*;\(.*\)$#\1#p' "$conf")
-[ -n "$nss_branch" ] || die "cannot read the nss feed branch from his feeds.conf.default"
-if [ -n "${NSS_COMMIT_OVERRIDE:-}" ]; then
-	nss=$NSS_COMMIT_OVERRIDE
-elif nss=$(git -C "$NSS_MIRROR" rev-parse -q --verify "refs/heads/$nss_branch@{$FEEDS_FROZEN_AT}" 2>/dev/null); then
-	echo "nss: $nss_branch was at $nss at $FEEDS_FROZEN_AT (mirror reflog)"
-elif [ "$NEW" = "$RELEASE" ]; then
-	nss=$(awk '$1 == "nss" { print $2 }' "$V2/feeds.lock")
-	echo "nss: no reflog for $FEEDS_FROZEN_AT; keeping the locked $nss for the same release"
+his_feeds=$(awk '/^src-git/ { print $2 }' "$conf" | xargs)
+FEEDS_FROM=
+if gh release download "$NEW" -R "$UP_REPO" -p "feeds-$GROUP.buildinfo" -D "$info" 2>/dev/null; then
+	FEEDS_FROM=feeds-$GROUP.buildinfo FEEDS_FROZEN_AT=
+	new_feeds=$(sed -nE 's#^src-git ([^ ]+) [^^ ]+\^([0-9a-f]{40})$#\1 \2#p' "$info/$FEEDS_FROM")
+	for f in $his_feeds; do grep -q "^$f " <<<"$new_feeds" || die "$FEEDS_FROM has no $f feed"; done
+	nss=$(awk '$1 == "nss" { print $2 }' <<<"$new_feeds")
+	echo "feeds: the commits of his $FEEDS_FROM"
 else
-	die "no reflog of $nss_branch at $FEEDS_FROZEN_AT in $NSS_MIRROR; set NSS_COMMIT_OVERRIDE (the head his CI built)"
+	if [ -n "${FEEDS_FROZEN_AT_OVERRIDE:-}" ]; then
+		FEEDS_FROZEN_AT=$FEEDS_FROZEN_AT_OVERRIDE
+	elif [ "$NEW" != "$RELEASE" ]; then
+		FEEDS_FROZEN_AT=
+	fi
+	if [ -z "$FEEDS_FROZEN_AT" ]; then
+		started=$(gh api "repos/$UP_REPO/actions/runs?head_sha=$C" \
+			--jq '[.workflow_runs[] | select(.path | test("ipq50xx"))] | sort_by(.run_started_at) | .[0].run_started_at' 2>/dev/null || true)
+		[ -n "$started" ] && [ "$started" != null ] ||
+			die "no feeds buildinfo and no CI run found for $C; set FEEDS_FROZEN_AT_OVERRIDE=<ISO 8601>"
+		FEEDS_FROZEN_AT=$(date -u -d "$started + 4 min" +%Y-%m-%dT%H:%M:%SZ)
+	fi
+	new_feeds=$("$V2/tools/freeze-feeds.sh" "$conf" "$FEEDS_FROZEN_AT")
+	grep -q '^nss ' <<<"$new_feeds" || die "his feeds.conf.default has no nss feed"
+	nss_branch=$(sed -n 's#^src-git nss [^;]*;\(.*\)$#\1#p' "$conf")
+	[ -n "$nss_branch" ] || die "cannot read the nss feed branch from his feeds.conf.default"
+	if [ -n "${NSS_COMMIT_OVERRIDE:-}" ]; then
+		nss=$NSS_COMMIT_OVERRIDE
+	elif nss=$(git -C "$NSS_MIRROR" rev-parse -q --verify "refs/heads/$nss_branch@{$FEEDS_FROZEN_AT}" 2>/dev/null); then
+		echo "nss: $nss_branch was at $nss at $FEEDS_FROZEN_AT (mirror reflog)"
+	elif [ "$NEW" = "$RELEASE" ]; then
+		nss=$(awk '$1 == "nss" { print $2 }' "$V2/feeds.lock")
+		echo "nss: no reflog for $FEEDS_FROZEN_AT; keeping the locked $nss for the same release"
+	else
+		die "no reflog of $nss_branch at $FEEDS_FROZEN_AT in $NSS_MIRROR; set NSS_COMMIT_OVERRIDE (the head his CI built)"
+	fi
+	new_feeds=$(awk -v c="$nss" '$1 == "nss" { $2 = c } { print }' <<<"$new_feeds")
 fi
-new_feeds=$(awk -v c="$nss" '$1 == "nss" { $2 = c } { print }' <<<"$new_feeds")
 git -C "$NSS_MIRROR" cat-file -e "$nss^{commit}" 2>/dev/null ||
 	die "nss feed commit $nss is not in $NSS_MIRROR (rebased away before we fetched?)"
 git -C "$MIRROR" tag -f "rd03v2/$NEW" "$C" >/dev/null
 git -C "$NSS_MIRROR" tag -f "rd03v2/$NEW" "$nss" >/dev/null
 
+# the pins in our forks: publishing, so only on request
+if [ "${PUSH_PINS:-0}" = 1 ]; then
+	git -C "$MIRROR" push -q "$URL" "refs/tags/rd03v2/$NEW"
+	git -C "$NSS_MIRROR" push -q "$NSS_URL" "refs/tags/rd03v2/$NEW"
+	echo "pins: rd03v2/$NEW pushed to $URL and $NSS_URL"
+else
+	echo "pins: not pushed (PUSH_PINS=1 pushes them):"
+	echo "  git -C $MIRROR push $URL refs/tags/rd03v2/$NEW"
+	echo "  git -C $NSS_MIRROR push $NSS_URL refs/tags/rd03v2/$NEW"
+fi
+
 sed -i -e "s/^RELEASE=.*/RELEASE=$NEW/" -e "s/^COMMIT=.*/COMMIT=$C/" \
+	-e "s/^FEEDS_FROM=.*/FEEDS_FROM=$FEEDS_FROM/" \
 	-e "s/^FEEDS_FROZEN_AT=.*/FEEDS_FROZEN_AT=$FEEDS_FROZEN_AT/" "$V2/upstream.lock"
 grep -q "^COMMIT=$C\$" "$V2/upstream.lock" || die "could not rewrite upstream.lock"
-echo "NOTE: update the release/commit times in the comment of v2/upstream.lock by hand"
-# his feeds from the freeze; ours (not in his feeds.conf.default) keep their lines
+# his feeds; ours (not in his feeds.conf.default) keep their lines
 {
-	echo "# <feed> <commit>: v2/tools/freeze-feeds.sh <his feeds.conf.default> $FEEDS_FROZEN_AT"
-	echo "$new_feeds"
-	awk 'NR > 1' "$V2/feeds.lock" | awk -v his="$(cut -d' ' -f1 <<<"$new_feeds" | xargs)" '
+	if [ -n "$FEEDS_FROM" ]; then
+		echo "# <feed> <commit>: his $FEEDS_FROM of $NEW"
+	else
+		echo "# <feed> <commit>: v2/tools/freeze-feeds.sh <his feeds.conf.default> $FEEDS_FROZEN_AT"
+	fi
+	for f in $his_feeds; do grep "^$f " <<<"$new_feeds"; done
+	awk 'NR > 1' "$V2/feeds.lock" | awk -v his="$his_feeds" '
 		BEGIN { n = split(his, h, " "); for (i = 1; i <= n; i++) skip[h[i]] = 1 }
 		/^#/ { c = c $0 "\n"; next }
 		!($1 in skip) { printf "%s%s\n", c, $0 } { c = "" }'
