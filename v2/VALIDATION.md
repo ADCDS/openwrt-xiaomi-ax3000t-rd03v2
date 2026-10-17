@@ -28,6 +28,7 @@ repository address.
 | b21 | first-boot Wi-Fi defaults (`01-rd03v2-wireless`), the `board.json` check (`81_rd03v2_board_json`), the 4-way handshake setting (`97-rd03v2-four-way-retries`), tree patches 0006 (DFS state) and 0007 (radio retry) |
 | rc1 (b21 sources) | the release candidate built from b21 |
 | rc1 | the release candidate: b21 plus 985 (the channel in use follows a channel switch); `kmod-tun`, `kmod-inet-diag` and `kmod-nft-tproxy` moved from the image to our repository |
+| rc1 (final) | rc1 plus 986 (clear mesh error) and 995 (frame_mode guard), built fresh from the lean branch; flashed to NAND |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
