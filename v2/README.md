@@ -12,7 +12,7 @@ commit, and our changes are applied on top of it at build time.
 | | v1.x (branch `v1`) | v2 |
 |---|---|---|
 | Kernel | 6.12 | 6.18 (his release) |
-| NSS | qosmio's stack, 12.5 firmware, maintained here | his stack on mainline stmmac, 12.2 firmware |
+| NSS | qosmio's stack, 12.5 firmware, maintained here | his stack on mainline stmmac, 12.5 firmware |
 | Userspace packages | built here from a pinned OpenWrt snapshot; drifts from OpenWrt's feeds | OpenWrt's snapshot feeds, like his images |
 | Kernel modules | release archive | our package repository for each release (`v2/<tag>/`) |
 | Wi-Fi | NSS offload or host | NSS offload (default) or host; host mode is fixed here (965-967, tree patch 0005) |
@@ -23,39 +23,31 @@ commit, and our changes are applied on top of it at build time.
 |---|---|---|
 | His NSS bring-up debug options reverted (serial sysrq, sysrq mask) | tree patch 0001 | his commit `5d86c24df4` asks for it in deployed builds |
 | NFC tag: I2C bus, `/usr/sbin/nfc`, its service and config | tree patch 0002, `overlay/.../usr/sbin/nfc`, `etc/init.d/nfc`, `etc/config/nfc` | [docs/nfc.md](../docs/nfc.md) |
-| Every PPPoE session made again once the NSS PPPoE manager is resident, not only the default-route WAN's (otherwise a second PPPoE WAN stays on the host path after every boot) | tree patch 0003 | C3; kuncy7/openwrt-nss-edma#25 |
-| cfg80211 keeps the DFS state of the channels when ath11k applies its domain again after a firmware restart. Without it an AP on a DFS channel (52-144, or 36 at 160 MHz) lost its carrier and channel 60 s after every in-place recovery, with hostapd still reporting it enabled | tree patch 0006 | kuncy7 238d307610 (10.15-2), kuncy7/openwrt-nss-edma#28 |
-| A radio that netifd gave up on while ath11k loaded is set up again once every radio has its phy (with NSS offload the 5 GHz QCN6122 probes about 4 s after the 2.4 GHz radio) | tree patch 0007 | kuncy7 dff118f852 (10.15-2), kuncy7/openwrt-nss-edma#29 |
 | Q6 crash-dump policy applied before every ath11k probe: `coredump=disabled` by default, so a root-PD crash restarts the Q6 in seconds instead of waiting 5 min for a dump to be read | tree patch 0004, `overlay/.../rd03v2-q6` (service, config, hotplug, `rd03v2-q6-policy`) | C9 |
 | ath11k statistics kept on by default on this board (`qca-nss-pbuf` turned them off after the 2.4 GHz AP started: zero station signal) | tree patch 0005 | C5 |
-| Host-mode Wi-Fi: RX filter sizes in bytes (965), peer RX statistics (966) and monitor metadata (967) requested, so host mode receives correctly and reports station signal | `overlay/.../nss/ath11k/999-999-rd03v2-965..967-*` | C4, C5 (host mode) |
-| ath11k: after a Q6 crash, skip the user-PD stop handshake nobody can answer (973), and report in-flight TX frames to mac80211 when the datapath is freed (974; ends the "Have pending ack frames!" warning on reload) | `overlay/.../nss/ath11k/999-999-rd03v2-973-*`, `-974-*` | C9 |
-| ath11k_ahb: in-place recovery after a Q6 root-PD crash. When the root PD restarts, its user PDs are spawned again and ath11k rebuilds both radios in a second or two, as v1.x did with its user-PD remoteprocs; a hw-restart of one radio restarts the root PD first, because a user PD spawned again on the root that ran it crashes the root. At most 6 respawns an hour (`respawn_max_per_hour`); `respawn_userpds=0` turns it off (975) | `overlay/.../nss/ath11k/999-999-rd03v2-975-*` | C9 |
-| ath11k with NSS Wi-Fi offload: what makes an in-place recovery work with the offload on. The shared ring-pointer state is cleared on restart (979, upstream f51e4b3b5574: the restarted firmware read the old head pointer of the NSS-filled RXDMA ring, a NOC error once traffic came), NSS is torn down after the crash-path IRQ quiesce (980), and the NSS VAP nodes and peers of the old instance are released before the recovery (981: without it the radios beaconed but no station completed a 4-way handshake, and unloading ath11k afterwards reset the board). From v1.x, as carried in kuncy7's ipq50xx-2026.10.12 | `overlay/.../nss/ath11k/999-999-rd03v2-979..981-*` | C9 |
-| ath11k_ahb: a fatal the root PD raises while it is being restarted for a hw-restart is absorbed by that planned restart, instead of restarting the root a second time under the user PD just spawned (983) | `overlay/.../nss/ath11k/999-999-rd03v2-983-*` | C9 |
-| ath11k: a restarted firmware gets the user's country again (982, kuncy7) | `overlay/.../nss/ath11k/999-999-rd03v2-982-*` | his 9966 (ipq50xx-2026.10.12) |
-| Memory, NSS Wi-Fi offload on this 256 MB board: kuncy7's optional NSS 256 MiB ath11k profile switched on (`CONFIG_ATH11K_NSS_MEM_PROFILE_256M`, his PR #21, off for every board in his releases: no host TX arrays NSS does not use, 4096 TX descriptors and completions per radio, private RXDMA page-frag caches), a private page-frag cache per CE RX pipe (984), and the per-CPU free page lists capped (`vm.percpu_pagelist_high_fraction=100`; 6-18 MB of free pages were parked there, uncounted). MemAvailable idle with both radios up: 42 MB, against 13-21 MB before and 34-35 MB on v1.14-nss | `config/rd03v2.config`, `overlay/.../nss/ath11k/999-999-rd03v2-984-*`, `overlay/.../etc/sysctl.d/13-rd03v2-pcp.conf` | [Memory](VALIDATION.md#memory-b19) |
-| ath11k: the channel in use follows a channel switch (985). OpenWrt applies a channel change with a CSA, and ath11k left `rx_channel` on the old channel: `iw survey dump` showed the old channel in use with frozen counters, and the watchdog took that for a stuck radio and reloaded ath11k a few minutes after every channel change | `overlay/.../nss/ath11k/999-999-rd03v2-985-*` | C10 |
-| ath11k: "pdev N successfully recovered" is logged outside ath11k's shared warning rate limit, which a crash's failed commands often use up; the watchdog's mesh rejoin reads that line (977) | `overlay/.../nss/ath11k/999-999-rd03v2-977-*` | C9 |
+| Host-mode Wi-Fi: RX filter sizes in bytes (965), peer RX statistics (966) and monitor metadata (967) requested, so host mode receives correctly and reports station signal | `overlay/.../nss-extra/ath11k/999-999-rd03v2-965..967-*` | C4, C5 (host mode) |
+| ath11k: in-flight TX frames are reported to mac80211 when the datapath is freed, which ends the "Have pending ack frames!" warning on a driver reload after a Q6 crash (974) | `overlay/.../nss-extra/ath11k/999-999-rd03v2-974-*` | C9 |
+| Memory, NSS Wi-Fi offload on this 256 MB board: kuncy7's optional NSS 256 MiB ath11k profile switched on (`CONFIG_ATH11K_NSS_MEM_PROFILE_256M`, his PR #21, off for every board in his releases: no host TX arrays NSS does not use, 4096 TX descriptors and completions per radio, private RXDMA page-frag caches), a private page-frag cache per CE RX pipe (984), and the per-CPU free page lists capped (`vm.percpu_pagelist_high_fraction=100`; 6-18 MB of free pages were parked there, uncounted). MemAvailable idle with both radios up: 42 MB, against 13-21 MB before and 34-35 MB on v1.14-nss | `config/rd03v2.config`, `overlay/.../nss-extra/ath11k/999-999-rd03v2-984-*`, `overlay/.../etc/sysctl.d/13-rd03v2-pcp.conf` | [Memory](VALIDATION.md#memory-b19) |
+| ath11k: the channel in use follows a channel switch (985). OpenWrt applies a channel change with a CSA, and ath11k left `rx_channel` on the old channel: `iw survey dump` showed the old channel in use with frozen counters, and the watchdog took that for a stuck radio and reloaded ath11k a few minutes after every channel change | `overlay/.../nss-extra/ath11k/999-999-rd03v2-985-*` | C10 |
+| ath11k: a mesh interface under NSS Wi-Fi offload is refused with a message that names the remedy (986). NSS mesh is not built for 256 MB boards; without this the NSS vdev create failed with a bare -22 | `overlay/.../nss-extra/ath11k/999-999-rd03v2-986-*` | #21 |
+| ath11k: "pdev N successfully recovered" is logged outside ath11k's shared warning rate limit, which a crash's failed commands often use up; the watchdog's mesh rejoin reads that line (977) | `overlay/.../nss-extra/ath11k/999-999-rd03v2-977-*` | C9 |
 | AN8855: room for a second 802.1Q tag in the switch's RX length (0959e). A VLAN on a WAN VLAN (QinQ, `wan.20.30`) is `[20][30]` on the wire, 1526 bytes at MTU 1500; the switch dropped every such frame in both directions, offloaded or not, so QinQ carried no full-size packets | `overlay/target/linux/qualcommax/patches-6.18/0959e-*` | C3 (QinQ) |
-| ECM package release 3: his sources as they are. Release 2 (rc1) carried our 0053, which kept QinQ off the NSS firmware; it is gone, QinQ is offloaded since 0959e | `tools/feed-overlay-v2.py` | C3 (QinQ) |
 | LuCI, full `wpad-mbedtls`, `i2c-tools` (for the NFC tool) in the image. `kmod-tun`, `kmod-inet-diag` and `kmod-nft-tproxy`, in the v1.x image, are in our repository instead (`apk add`) | `config/rd03v2.config` | as v1.x |
 | `luci-app-nss` in the image | `config/rd03v2.config` | his package; his image has no LuCI |
 | AmneziaWG (kmod, tools, LuCI) in our repository | `build.sh` (feed, `awg_pin`) | as v1.x, #39 |
-| ath11k: calibrated survey noise floor (the noise-floor half of 952) | `overlay/.../nss/ath11k/999-999-rd03v2-952-*` | v1.x 952 |
-| ath11k: crash-recovery fixes 955, 956, 960, 961, 962, 963 | `overlay/.../nss/ath11k/999-999-rd03v2-9xx-*` | v1.x, #15 |
-| ath11k: UK 5.8 GHz band (964) | `overlay/.../nss/ath11k/999-999-rd03v2-964-*` | v1.x, #34 |
+| ath11k: calibrated survey noise floor (the noise-floor half of 952) | `overlay/.../nss-extra/ath11k/999-999-rd03v2-952-*` | v1.x 952 |
+| ath11k: UK 5.8 GHz band (964) | `overlay/.../nss-extra/ath11k/999-999-rd03v2-964-*` | v1.x, #34 |
 | smp2p: clear cached inbound bits across a Q6 restart (0918), so `rmmod`/`insmod` and crash recovery can start the Q6 again | `overlay/target/linux/qualcommax/patches-6.18/0918-*` | v1.x 0918, moved into his `wcss_sec_start()` |
 | Wi-Fi watchdog, ported to his single `q6wcss` remoteproc, **acting by default** (`dryrun=0`, `reload=1`, `inplace` unset = off: it reloads ath11k rather than resetting one radio). It leaves a root-PD crash to the kernel's respawn (both Wi-Fi modes) and steps in when the radios are not back 120 s later, or the respawn was suppressed. An upgrade from an earlier candidate is migrated to `dryrun=0` | `overlay/.../usr/sbin/rd03v2-watchdog`, `overlay/.../uci-defaults/96-rd03v2-watchdog-defaults` | v1.x, #15 |
 | hostapd sends the first 4-way handshake message 8 times (`wpa_pairwise_update_count=8` on every AP interface, once). NSS holds a radio's RX for a few seconds after an in-place recovery; without it 7 of 22 rejoins failed the handshake and backed off 10 s, with it 0 of 22 | `overlay/.../uci-defaults/97-rd03v2-four-way-retries` | v1.x, #25; C9 |
 | First-boot Wi-Fi settings apply: both radio sections are written before any other uci-defaults script, as OpenWrt writes them. ath11k loads a minute into the first boot (after the NSS arm), so a first-boot script found no radio to configure: an install from stock with `--wifi-ssid` ended with both radios off | `overlay/.../uci-defaults/01-rd03v2-wireless` | C1 |
-| An empty or unreadable `/etc/board.json` is generated again at boot. An unclean reboot can leave it empty (wifi-detect rewrites it without fsync), and OpenWrt only generates a missing one: the radios then stayed down on every boot ("PHY is undefined") | `overlay/.../lib/preinit/81_rd03v2_board_json` | C9 |
 | apk pins for the packages he changes without a version bump | `overlay/.../uci-defaults/95-rd03v2-apk-pins` | see [Packages](#packages) |
 | Migration of v1.x settings | `overlay/.../uci-defaults/00-rd03v2-migrate-v1x` | see [Upgrading from v1.x](#upgrading-from-v1x) |
 | Our signing key, our repository first in `distfeeds.list` | `build.sh`, `keys/` | |
 
-Our ath11k patches sort after all of his (`999-999-rd03v2-*` in the NSS directory, which is
-applied last), so each can be dropped on its own once his tree covers it.
+Our ath11k patches go in `patches/nss-extra/ath11k` and sort after all of his there
+(`999-999-rd03v2-*`; that directory is applied after `patches/nss`), so each can be dropped on
+its own once his tree covers it.
 `tools/check-mac80211-series.sh` applies his whole mac80211 series plus ours without fuzz;
 OpenWrt itself would accept a fuzzy hunk.
 
@@ -71,6 +63,14 @@ OpenWrt itself would accept a fuzzy hunk.
 - Winbond W25N01KW NAND (v1.x 0413; his 0415), the gpio12 `pwm2` pinctrl function (his
   0306, the patch we sent upstream), the gpio-button-hotplug IRQ fix (now upstream) and this
   board's `uboot-envtools` entry.
+- What v2 carried until his ipq50xx-2026.10.15 for crash recovery and boot: tree patches 0003
+  (PPPoE re-dial, his `b2b6b3fff8`), 0006 (cfg80211 DFS state, his `238d307610`) and 0007
+  (radio retry, his `dff118f852`); ath11k 955, 956, 960-963 and 982 (his `nss-extra` 9960-9966,
+  the same code), 980 and 981 (his 977 and 978), 975 and 983 (his 976: user-PD respawn for his
+  multi-PD QCN6122, including the restarts the driver asks for), 979 (in backports 7.2) and 973
+  (his reworked user-PD stop); the frame-mode guard of #24 (his nss-tools passes `frame_mode=2`
+  wherever it loads ath11k, `942926b47d`); and `/etc/board.json` in tmpfs (his wifi-scripts),
+  which our former `81_rd03v2_board_json` worked around.
 - Board data: the calibration payloads the firmware loads are byte-identical in our v1.x
   `ipq-wifi` files, his tree and his image (both radios; ours only adds an alias without
   the variant), so his files are used as they are (C7).
@@ -88,7 +88,7 @@ OpenWrt itself would accept a fuzzy hunk.
   the management frames alone (952b) was dropped: it would have put them 24-31 dB above
   the station signal of the same client.
 - v1.x's multi-PD remoteproc patches, 951 (smallbuffers), 957, 999-994/995: his tree has its
-  own driver and memory profiles.
+  own multi-PD support (openwrt/openwrt#25393 for the QCN6122) and memory profiles.
 
 ## Packages
 

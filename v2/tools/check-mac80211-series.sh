@@ -57,7 +57,7 @@ for d in "${dirs[@]}"; do
 	[ -s "$PD/$d/series" ] && die "$d has a series file; this check does not handle it"
 	for f in $(cd "$PD/$d" && LC_ALL=C ls -1 | LC_ALL=C sort); do
 		out=$(patch -p1 -F0 --no-backup-if-mismatch -i "$PD/$d/$f" 2>&1) || {
-			echo "FAIL $d/$f"; echo "$out" | grep -E 'FAILED|rej|malformed' | sed 's/^/    /'; bad=1; break 2; }
+			echo "FAIL $d/$f"; { echo "$out" | grep -E 'FAILED|rej|malformed' || echo "$out" | tail -5; } | sed 's/^/    /'; bad=1; break 2; }
 		git add -A && $G commit -qm "$d/$f"
 		n=$((n + 1))
 	done

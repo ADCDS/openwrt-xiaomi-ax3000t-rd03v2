@@ -20,6 +20,9 @@ chk() {  # chk <label> <actual> <expected>
 	if [ "$2" = "$3" ]; then echo "PASS $1"; else echo "FAIL $1: got '$2', want '$3'"; fail=$((fail + 1)); fi
 }
 yes_() { "$@" >/dev/null 2>&1 && echo yes || echo no; }  # yes_ <command>: yes/no for chk
+# scratch on disk: the mac80211 series check unpacks and patches a whole backports tree
+export TMPDIR=${TMPDIR:-${RD03V2_WS:-$(cd "$(dirname "$0")/../../.." && pwd)}/v2-tmp}
+mkdir -p "$TMPDIR"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 
 echo "=== provenance"
@@ -118,8 +121,9 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 	for u in 00-rd03v2-migrate-v1x 01-rd03v2-wireless 95-rd03v2-apk-pins 97-rd03v2-four-way-retries; do
 		chk "uci-defaults $u" "$(yes_ sh -n "$X/etc/uci-defaults/$u")" yes
 	done
-	# an empty /etc/board.json after an unclean reboot is generated again
-	chk "preinit 81_rd03v2_board_json" "$(yes_ sh -n "$X/lib/preinit/81_rd03v2_board_json")" yes
+	# /etc/board.json lives in tmpfs (his wifi-scripts), so an unclean reboot cannot leave it
+	# empty on flash; our former 81_rd03v2_board_json is gone
+	chk "/etc/board.json links to the runtime copy" "$(readlink "$X/etc/board.json" 2>/dev/null)" /tmp/sysinfo/board.json
 	chk "apk pins match build.sh's copies" \
 		"$(sed -n "s/^PINS='\(.*\)'\$/\1/p" "$X/etc/uci-defaults/95-rd03v2-apk-pins" 2>/dev/null)" \
 		"$(sed -n "s/^PINS='\(.*\)'\$/\1/p" "$OV/target/linux/qualcommax/ipq50xx/base-files/etc/uci-defaults/95-rd03v2-apk-pins")"
@@ -184,10 +188,15 @@ if [ -z "$BP" ]; then
 		fail=$((fail + 1))
 	fi
 fi
-for p in "$OV"/package/kernel/mac80211/patches/nss/ath11k/*.patch; do
+# our ath11k patches, wherever the overlay puts them (patches/nss-extra/ath11k since his
+# ipq50xx-2026.10.15); none found means this check became vacuous
+n_ath=0
+for p in "$OV"/package/kernel/mac80211/patches/nss/ath11k/*.patch "$OV"/package/kernel/mac80211/patches/nss-extra/ath11k/*.patch; do
 	[ -e "$p" ] || continue
+	n_ath=$((n_ath + 1))
 	chk "mac80211 $(basename "$p")" "$([ -n "$BP" ] && fp "$p" "$BP/drivers/net/wireless/ath/ath11k" || echo no)" yes
 done
+chk "our ath11k patches found in the overlay" "$([ "$n_ath" -gt 0 ] && echo yes || echo none)" yes
 for p in "$OV"/target/linux/qualcommax/patches-6.18/*.patch; do
 	[ -e "$p" ] || continue
 	chk "kernel $(basename "$p")" "$([ -n "$LX" ] && fp "$p" "$LX/drivers" || echo no)" yes
