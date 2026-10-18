@@ -78,7 +78,7 @@
 # neuter it.
 #
 # rd03v2-watchdog --check runs one step against a fake tree under $ROOT (see
-# check() at the end), for v2/tools/test-watchdog.sh.
+# check() at the end), for tools/test-watchdog.sh.
 
 INTERVAL=30
 STATE_BAD_LIMIT=2      # consecutive bad rproc samples before acting (~60s)
