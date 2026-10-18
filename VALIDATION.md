@@ -35,7 +35,7 @@ differs from its test build only in its version stamp and repository address.
 | rc1 (b21 sources) | the release candidate built from b21 |
 | rc1 | the release candidate: b21 plus 985 (the channel in use follows a channel switch); `kmod-tun`, `kmod-inet-diag` and `kmod-nft-tproxy` moved from the image to our repository |
 | rc1 (final) | rc1 plus 986 (clear mesh error) and 995 (frame_mode guard), built fresh from the lean branch; flashed to NAND |
-| b22 | his `ipq50xx-2026.10.15-2`: 16 of our patches dropped as his (see [the README](README.md#already-in-his-tree-not-carried)), our 10 ath11k patches in `patches/nss-extra` |
+| b22 | his `ipq50xx-2026.10.15-2`: 16 of our patches dropped as his (see [the README](docs/what-this-port-adds.md#already-in-his-tree-not-carried)), our 10 ath11k patches in `patches/nss-extra` |
 | v2.0.0 | the release: b22's sources without `81_rd03v2_board_json` (his `/etc/board.json` is in tmpfs), built fresh |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
@@ -69,7 +69,7 @@ His 10.15 release under v2: mac80211 backports 7.2 with his ath11k series in
 `patches/nss` and `patches/nss-extra`, multi-PD for the QCN6122 with his own user-PD
 respawn (his 976), NSS firmware 12.5 for the 256 MB group, kernel 6.18.55, and a
 reworked wifi-scripts that keeps `/etc/board.json` in tmpfs. What v2 dropped as his,
-and what it still carries, is in the [README](README.md#what-v2-adds-to-his-release).
+and what it still carries, is in the [README](docs/what-this-port-adds.md).
 
 **First boot (b22).** NSS firmware `NSS.FW.12.5-210-MP.R`. Both radios keep their
 device paths (`soc@0/c000000.wifi`, `soc@0/b00a040.wifi`), so saved configurations

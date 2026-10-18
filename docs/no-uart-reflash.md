@@ -67,7 +67,7 @@ layout the working system boots from.
    `sysupgrade -f /tmp/config-backup.tar.gz /tmp/new.bin`. It reformats both
    UBIs, writes kernel and rootfs, restores the config, and reboots into the
    final system. A v1.x configuration is migrated on the first boot of v2
-   ([upgrading from v1.x](../README.md#upgrading-from-v1x)).
+   ([upgrading from v1.x](upgrading-from-v1.md)).
 
 ## Gotchas
 
