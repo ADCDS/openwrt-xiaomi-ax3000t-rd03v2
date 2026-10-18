@@ -387,7 +387,7 @@ LED state in sysfs, the boot id):
 
 From our repository, signed with our key, on the image of the same build:
 WireGuard and AmneziaWG (tools, LuCI protocols) installed and carried traffic
-(WireGuard, 4 streams: 109 / 300 Mbit/s up / down on the LAN tunnel), the SQM
+(WireGuard, 4 streams between the router itself and a PC: 109 / 300 Mbit/s up / down), the SQM
 LuCI page and its NSS qdisc script installed, and an `apk upgrade` simulation
 kept every pinned package of his tree (b9).
 
@@ -404,6 +404,11 @@ AmneziaWG on v2.0.0 (#39), installed from the published repository with
 | Full tunnel taken down | no IPv4 default route left: the tunnel's route had replaced the WAN's (both metric 0). With `network.wan.metric=10` both stay and the WAN takes over |
 | Peer changed, then a network reload | not applied until the interface restarts |
 | `apk del` of the three packages | all 11 removed; package list and `/etc/config` identical to before |
+
+WireGuard on v2.0.0 (#45), with `apk add luci-proto-wireguard` from the published repository
+(11 packages, installed while OpenWrt's feeds answered 503: our repository carries the
+userspace too): handshake after `/etc/init.d/network restart`, a LAN client through it at
+36 / 67 Mbit/s up / down (host path, CPU-bound), removed cleanly.
 
 ## C15: hardening
 
