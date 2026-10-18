@@ -44,7 +44,17 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
 
 - **802.11s mesh needs host Wi-Fi mode** (`nss.general.wifi_offload='0'`). With NSS Wi-Fi
   offload on, a mesh interface does not come up and takes its radio's AP down until it is
-  removed.
+  removed. v2.0.0 resets in host mode whenever a device connects: use v2.0.1 or later (#47).
+- **A client (station) interface puts Wi-Fi in host mode**, on both radios, from the next boot
+  (#48). Under NSS Wi-Fi offload a station cannot send frames larger than about 860 bytes, so a
+  WISP or repeater uplink would carry no uploads. Reboot after adding one; `nss-status` says
+  when a reboot is needed. In host mode, uploads from 5 GHz clients reach about 190-210 Mbit/s
+  instead of 280-300.
+- **A pairwise key rekey reconnects the client** (`wpa_deny_ptk0_rekey`, default 1, #49).
+  Neither radio can replace the key in place: as an AP, a rekey stalled traffic for 16-31 s
+  and ended in a deauthentication. With the option the client reconnects instead, in about a
+  second. As a client of an AP that rekeys, the router reconnects by itself, in about 5 s,
+  instead of waiting for the AP to give up on the handshake.
 - **No multi-day soak yet.** Memory held at 40-42 MB available through 100 minutes of Wi-Fi
   traffic, firmware-crash recoveries and driver reloads.
 - **2.4 GHz signal readings are checked to about ±10 dB only.** 5 GHz agrees with the test

@@ -1,6 +1,6 @@
 # v2 validation
 
-What v2.0.0 was tested on before release, and what it was not. Everything
+What v2.0.0 and v2.0.1 were tested on before release, and what they were not. Everything
 here ran on one Xiaomi AX3000T (RD03v2, 256 MB), installed on NAND, with:
 
 - a wired client on a LAN port (1 GbE), the WAN port on an upstream LAN with
@@ -37,6 +37,7 @@ differs from its test build only in its version stamp and repository address.
 | rc1 (final) | rc1 plus 986 (clear mesh error) and 995 (frame_mode guard), built fresh from the lean branch; flashed to NAND |
 | b22 | his `ipq50xx-2026.10.15-2`: 16 of our patches dropped as his (see [the README](docs/what-this-port-adds.md#already-in-his-tree-not-carried)), our 10 ath11k patches in `patches/nss-extra` |
 | v2.0.0 | the release: b22's sources without `81_rd03v2_board_json` (his `/etc/board.json` is in tmpfs), built fresh |
+| v2.0.1 | v2.0.0 plus 987 (host Wi-Fi mode, #47) and tree patches 0008 (a station keeps Wi-Fi on the host path, #48) and 0009 (`wpa_deny_ptk0_rekey`, #49), built fresh; see [v2.0.1](#v201) |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -50,7 +51,7 @@ by hand on rc1 (C8, C14).
 | C1 | Install, upgrade and rollback paths, stock firmware both ways | see below | b5-b21 | stock 2.0.28 -> v2.0.0 with the reworked installer, its Wi-Fi and root settings applied; back to stock with `revert.py` (v2.0.0, b22) |
 | C2 | Reboots, half of them power cuts | pass: 20 / 20 (b9), 4 / 4 (rc1-a) | b9, rc1-a | pass: 2 / 2 reboots, 2 / 2 power cuts (v2.0.0) |
 | C3 | Wired through NSS: NAT, WAN VLAN, PPPoE on a WAN VLAN, QinQ, IPv6 over QinQ | pass, all offloaded, 923-941 Mbit/s | b9, b19 | pass, all offloaded, 915-937 Mbit/s (b22) |
-| C4 | Wi-Fi, both modes, both bands | pass (b9, b16, b19, rc1 each build); 2.4 GHz needs the test client's Bluetooth off, see below | b9-rc1 | pass: 274 / 324 on 5 GHz, 39 / 58 on 2.4 GHz (v2.0.0); 276 / 341 on 5 GHz (b22) |
+| C4 | Wi-Fi, both modes, both bands | pass (b9, b16, b19, rc1 each build); 2.4 GHz needs the test client's Bluetooth off, see below | b9-rc1 | pass: 274 / 324 on 5 GHz, 39 / 58 on 2.4 GHz (v2.0.0); 276 / 341 on 5 GHz (b22). Host mode first measured on v2.0.1: 186 / 294 on 5 GHz (upload below v1.14), 36 / 58 on 2.4 GHz |
 | C5 | Signal and noise floor in dBm | pass on 5 GHz (within 3 dB); 2.4 GHz within about 10 dB; v1.x reads 24-31 dB high | rc1 | noise floor -96 / -91 dBm (b22); otherwise not re-run: same ath11k conversion and patches |
 | C6 | Regulatory: GB, US, DE, both Wi-Fi modes | pass | b9 | GB channel 149 at 23 dBm, kept through two recoveries (b22, #34); US and DE not re-run |
 | C7 | Board data | byte-identical to v1.x and kuncy7 | - | board data and Wi-Fi firmware byte-identical to rc1's (b22) |
@@ -62,6 +63,52 @@ by hand on rc1 (C8, C14).
 | C13 | Upgrade from a realistic v1.x install | pass | b16 | not re-run; the migration's assumptions checked against his nss-tools |
 | C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 | not re-run (no hardware or device tree change) |
 | C15 | Package signature failures | pass, 8 checks | b9 | not re-run (same signing) |
+
+## v2.0.1
+
+v2.0.0 plus three Wi-Fi fixes, built fresh: `verify-v2` 154 / 154 (eight new checks: the
+three patches, the image's scripts and defaults, and a source check that IPQ5018's RX
+descriptor table has every 802.11 header function the RX path calls). Installed on NAND as an
+update from v2.0.0 through the RAM installer, settings kept: every configuration file
+byte-identical afterwards, 201 packages, NSS offload on, both APs, no warning, 42 MB available.
+Also v2.0.1 -> v2.0.0 -> v2.0.1, same result.
+
+**Host Wi-Fi mode (#47).** v2.0.0 reset the board whenever a station associated in host mode;
+VALIDATION had not run host mode on the 10.15-2 base. v2.0.1, `nss.general.wifi_offload='0'`:
+a client retrying across the reboot (a reboot loop on v2.0.0) associates on 5 GHz and on
+2.4 GHz (MCS 7), no oops. 802.11s mesh in host mode, open mesh on 5 GHz with an MT7981 router
+as the peer: peer link established at -49 dBm, 20 / 20 pings and 10 / 10 at 1400 bytes. C4 in
+host mode, first time on this base: 186 / 294 Mbit/s on 5 GHz, 36 / 58 on 2.4 GHz. 5 GHz
+uploads are below v1.14 plain's 273 Mbit/s (b18 on the 10.09 base: 257).
+
+**PTK rekey (#49).** Bench 5 GHz AP with `wpa_ptk_rekey=15`, 60 s TCP download to the client:
+
+| Mode | v2.0.0 | v2.0.1 (default `wpa_deny_ptk0_rekey=1`) |
+|---|---|---|
+| NSS offload | 16 s below 5 Mbit/s, 232 Mbit/s, a deauthentication after each failed rekey | 1 s, 322 Mbit/s: 4 rekeys, 4 immediate reconnects |
+| host | crashed (with 987 alone: 31 s, 122 Mbit/s) | 0 s, 267 Mbit/s |
+
+As a station of an AP rekeying every 20 s (90 s upload): no failed handshake and no EAPOL-Key
+timeout on the AP; each rekey costs about 5 s (22 s of 90 below 1 Mbit/s, v2.0.0 21 s with the
+AP timing out and deauthenticating the station).
+
+**Station interface (#48).** Upstream AP on 2.4 GHz, the bench's station on radio0 in the WAN
+zone. Added without a reboot, so on the NSS path: `nss-status` warns that a reboot is needed,
+and the bug shows (upload 0.16 Mbit/s; forwarded pings of 1000 bytes 80 % lost, 1400 bytes
+90 %). After a reboot Wi-Fi is on the host path (logged with the reason): upload 47.5 Mbit/s,
+download 40.9, pings up to 1472 bytes without loss. `nss.general.wifi_offload_sta='1'` keeps
+the NSS path. Host mode with a station logs `tx completion mismatch` lines from his TX
+accounting patch; on this 256 MB build that counter only feeds the message.
+
+**C4, NSS offload:** 297 / 345 and 294 / 348 Mbit/s on 5 GHz (pass); 2.4 GHz download 58
+(pass), upload 20-24 (below 90 %). The 2.4 GHz upload varies by boot on both releases: v2.0.0
+gave 29-38 Mbit/s right after a flash and 22-25 after a plain reboot, v2.0.1 20-28 over two
+boots; the client then cannot send UDP faster than about 22 Mbit/s, and the bench receives
+all of it. Host mode gives 25-43 in the same hour.
+
+**Smoke:** wired NAT 941 / 941 Mbit/s, offloaded (ECM, CPU 87 % idle); `kmod-tun` from the
+build's signed index installs and loads; 2 reboots clean. Not re-run for v2.0.1: crash
+recovery (C9), power cuts, VLAN / PPPoE / QinQ.
 
 ## On ipq50xx-2026.10.15-2 (b22, v2.0.0)
 
@@ -202,6 +249,8 @@ and 3/3 hashes.
 
 | Build, mode | 5 GHz up / down | 2.4 GHz up / down | v1.14 reference (5 / 2.4 GHz) |
 |---|---|---|---|
+| v2.0.1, NSS offload | 297 / 345, 294 / 348 | 24 / 58, 20 / 58 (channel 6, Bluetooth off; the upload varies by boot, see [v2.0.1](#v201)) | 288 / 345, 29 / 45 (v1.14-nss) |
+| v2.0.1, host | 186 / 294 | 36 / 58 (channel 6, Bluetooth off) | 273 / 236, 32 / 48 (v1.14 plain) |
 | rc1 (b19 sources), NSS offload | 287 / 338 | 32 / 55 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
 | rc1, NSS offload | 298 / 349 | 44 / 58 (channel 6) | 288 / 345, 29 / 45 (v1.14-nss) |
 | rc1 (b21 sources), NSS offload | 287 / 346, 290 / 338 | 50 / 60 (channel 6, Bluetooth off); 25 / 37 with it streaming audio | 288 / 345, 29 / 45 (v1.14-nss) |
