@@ -30,16 +30,16 @@
 # the locked release, else his CI run's start + 4 min (GitHub API), when feeds update has run.
 set -euo pipefail
 NEW=${1:?usage: $0 <release tag, e.g. ipq50xx-2026.10.09>}
-cd "$(dirname "$0")/../.."
-REPO=$PWD V2=$PWD/v2
+cd "$(dirname "$0")/.."
+REPO=$PWD V2=$PWD
 WS=${RD03V2_WS:-$(dirname "$REPO")}
 . "$V2/upstream.lock"
 NSS_MIRROR=${V2_NSS_MIRROR:-$WS/mirrors/nss-packages.git}
 GROUP=256m  # his CI board group of the AX3000T v2
 UP_REPO=$(sed -E 's#^https://github.com/##; s#\.git$##' <<<"$UPSTREAM_URL")
 die() { echo "bump-upstream: $*" >&2; exit 1; }
-[ -z "$(git -C "$REPO" status --porcelain -- v2/upstream.lock v2/feeds.lock)" ] ||
-	die "v2/upstream.lock or v2/feeds.lock has uncommitted changes"
+[ -z "$(git -C "$REPO" status --porcelain -- upstream.lock feeds.lock)" ] ||
+	die "upstream.lock or feeds.lock has uncommitted changes"
 
 # 1. mirrors, from his repositories (no --prune: what we built on stays)
 git -C "$MIRROR" fetch -q "$UPSTREAM_URL" "+refs/tags/$NEW:refs/tags/$NEW" '+refs/heads/*:refs/heads/*'
@@ -113,7 +113,7 @@ grep -q "^COMMIT=$C\$" "$V2/upstream.lock" || die "could not rewrite upstream.lo
 	if [ -n "$FEEDS_FROM" ]; then
 		echo "# <feed> <commit>: his $FEEDS_FROM of $NEW"
 	else
-		echo "# <feed> <commit>: v2/tools/freeze-feeds.sh <his feeds.conf.default> $FEEDS_FROZEN_AT"
+		echo "# <feed> <commit>: tools/freeze-feeds.sh <his feeds.conf.default> $FEEDS_FROZEN_AT"
 	fi
 	for f in $his_feeds; do grep "^$f " <<<"$new_feeds"; done
 	awk 'NR > 1' "$V2/feeds.lock" | awk -v his="$his_feeds" '
@@ -121,7 +121,7 @@ grep -q "^COMMIT=$C\$" "$V2/upstream.lock" || die "could not rewrite upstream.lo
 		/^#/ { c = c $0 "\n"; next }
 		!($1 in skip) { printf "%s%s\n", c, $0 } { c = "" }'
 } > "$V2/feeds.lock.new" && mv "$V2/feeds.lock.new" "$V2/feeds.lock"
-git -C "$REPO" --no-pager diff --stat -- v2/upstream.lock v2/feeds.lock
+git -C "$REPO" --no-pager diff --stat -- upstream.lock feeds.lock
 
 # 3. prepare a scratch tree, on disk: a prepared kernel does not fit the tmpfs /tmp
 SCRATCH=${V2_SCRATCH:-$WS/v2-builds}
@@ -148,4 +148,4 @@ for p in $ours; do  # not vacuous: each must show up as applied
 done
 echo "kernel: our patches ($(echo $ours)) apply without fuzz"
 rm -rf "$W"
-echo "bump-upstream: $NEW prepared; next: a full build (TAG=DEV-<name> v2/build.sh), verify, bench smoke test"
+echo "bump-upstream: $NEW prepared; next: a full build (TAG=DEV-<name> ./build.sh), verify, bench smoke test"

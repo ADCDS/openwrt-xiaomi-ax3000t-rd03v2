@@ -7,8 +7,8 @@ import subprocess
 import tempfile
 import unittest
 
-REPO = Path(__file__).resolve().parents[2]
-INIT = REPO / 'v2/overlay/target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog'
+REPO = Path(__file__).resolve().parents[1]
+INIT = REPO / 'overlay/target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-watchdog'
 SHELL = ['/bin/sh']
 RFS = None
 

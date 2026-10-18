@@ -99,7 +99,7 @@ Nothing in this tree can change what the firmware returns:
 
 ## The fix: patch 964
 
-[`964-wifi-ath11k-add-the-UK-5.8-GHz-band-missing-from-the-fw-regdb.patch`](../v2/overlay/package/kernel/mac80211/patches/nss/ath11k/999-999-rd03v2-964-wifi-ath11k-add-the-UK-5.8-GHz-band-missing-from-the-fw-regdb.patch)
+[`964-wifi-ath11k-add-the-UK-5.8-GHz-band-missing-from-the-fw-regdb.patch`](../overlay/package/kernel/mac80211/patches/nss-extra/ath11k/999-999-rd03v2-964-wifi-ath11k-add-the-UK-5.8-GHz-band-missing-from-the-fw-regdb.patch)
 adds a small table of bands a regulator permits and the firmware database
 omits, and appends a matching entry to the rules ath11k builds from the
 firmware event. The entry applies only:

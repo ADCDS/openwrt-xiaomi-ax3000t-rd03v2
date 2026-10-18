@@ -17,7 +17,7 @@
 #   images it also regenerates are thrown away and the tree is put back exactly
 #   as it was, so mkrelease-v2.sh still sees one coherent tree.
 #
-#   Usage:  v2/tools/wifi-initramfs.sh /path/to/finished/v2/tree
+#   Usage:  tools/wifi-initramfs.sh /path/to/finished/v2/tree
 #   (finish-build-v2.sh runs it through wifi-initramfs-v2.sh)
 #
 #   Leaves, next to the originals:

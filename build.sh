@@ -1,23 +1,23 @@
 #!/bin/bash
-# v2/build.sh: build the RD03v2 v2 image.
+# build.sh: build the RD03v2 v2 image.
 #
-#   v2 = kuncy7's openwrt-nss-edma release (v2/upstream.lock)
-#      + our changes to his files   (v2/tree-patches/*.patch, git am: no fuzz, fails loudly)
-#      + our new files               (v2/overlay/, copied without overwriting anything of his)
-#      + feeds pinned to commits     (v2/feeds.lock)
-#      + his CI config fragments plus ours (v2/config/), signed with our own key.
+#   v2 = kuncy7's openwrt-nss-edma release (upstream.lock)
+#      + our changes to his files   (tree-patches/*.patch, git am: no fuzz, fails loudly)
+#      + our new files               (overlay/, copied without overwriting anything of his)
+#      + feeds pinned to commits     (feeds.lock)
+#      + his CI config fragments plus ours (config/), signed with our own key.
 #
 # The image lists our package repository (kernel modules and our extras) plus OpenWrt's
 # official snapshot userspace feeds, like his CI does; the official target/kmods feeds are
 # left out because their kernel is not ours.
 #
-# Usage: TAG=<release or DEV-name> [JOBS=n] [PREPARE_ONLY=1] [TREE=dir] v2/build.sh
+# Usage: TAG=<release or DEV-name> [JOBS=n] [PREPARE_ONLY=1] [TREE=dir] ./build.sh
 #   V2_KEY_DIR    signing key dir (private-key.pem 0600 + public-key.pem)
 #   V2_DL         persistent download cache
 #   V2_REPO_URL   package repository URL baked into the image
 set -euo pipefail
-cd "$(dirname "$0")/.."
-REPO=$PWD V2=$PWD/v2
+cd "$(dirname "$0")"
+REPO=$PWD V2=$PWD
 # the workspace: this repository, plus mirrors/, keys/ and dl-v2/ next to it
 WS=${RD03V2_WS:-$(dirname "$REPO")}
 . "$V2/upstream.lock"
@@ -45,7 +45,7 @@ anchor() {
 openssl ec -in "$KEYDIR/private-key.pem" -pubout 2>/dev/null | cmp -s - "$KEYDIR/public-key.pem" ||
 	die "public-key.pem does not match private-key.pem"
 cmp -s "$KEYDIR/public-key.pem" "$V2/keys/public-key.pem" ||
-	die "the signing key is not the one committed in v2/keys/public-key.pem"
+	die "the signing key is not the one committed in keys/public-key.pem"
 
 # 1. his tree at the locked commit (full history: getver.sh derives the revision from it).
 # The pinned commits come from our forks (upstream.lock) when a local mirror lacks them, so a
@@ -59,7 +59,7 @@ fill_mirror() {  # fill_mirror <mirror> <fork URL> <commit>
 	git -C "$1" cat-file -e "$3^{commit}" 2>/dev/null || die "rd03v2/$RELEASE in $2 does not contain $3"
 }
 NSS_COMMIT=$(awk '$1 == "nss" { print $2 }' "$V2/feeds.lock")
-[ -n "$NSS_COMMIT" ] || die "v2/feeds.lock has no nss line"
+[ -n "$NSS_COMMIT" ] || die "feeds.lock has no nss line"
 fill_mirror "$MIRROR" "$URL" "$COMMIT"
 fill_mirror "$NSS_MIRROR" "$NSS_URL" "$NSS_COMMIT"
 git clone -q --no-checkout "$MIRROR" "$TREE"

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Finish an already prepared, uniquely named v2 tree without discarding it.
 set -euo pipefail
-REPO=$(cd "$(dirname "$0")/../.." && pwd); V2=$REPO/v2
+REPO=$(cd "$(dirname "$0")/.." && pwd); V2=$REPO
 WS=${RD03V2_WS:-$(dirname "$REPO")}
 . "$V2/upstream.lock"
 TREE=$(cd "${1:?usage: $0 <prepared v2 tree>}" && pwd)

@@ -13,13 +13,13 @@ while [ $# -gt 0 ]; do
 done
 [ $# = 1 ] || { echo "usage: $0 [--local --expect-repo-url URL --out DIR] <tree>" >&2; exit 2; }
 TREE=$(cd "$1" && pwd)
-REPO=$(cd "$(dirname "$0")/../.." && pwd); V2=$REPO/v2
+REPO=$(cd "$(dirname "$0")/.." && pwd); V2=$REPO
 T=$TREE/bin/targets/qualcommax/ipq50xx
 P=openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2
 die() { echo "mkrelease-v2: $*" >&2; exit 1; }
 "$V2/tools/verify-v2.sh" --tree "$TREE" > "$TREE/verify-release.txt" 2>&1 || die "tree verification failed: $TREE/verify-release.txt"
 # scratch on disk, not in a RAM /tmp that other work can fill (as finish-build-v2.sh)
-export TMPDIR=${TMPDIR:-${RD03V2_WS:-$(cd "$(dirname "$0")/../../.." && pwd)}/v2-tmp}
+export TMPDIR=${TMPDIR:-${RD03V2_WS:-$(cd "$(dirname "$0")/../.." && pwd)}/v2-tmp}
 mkdir -p "$TMPDIR"
 X=$(mktemp -d); STAGE=''
 cleanup() { rm -rf "$X"; [ -z "$STAGE" ] || rm -rf "$STAGE"; }

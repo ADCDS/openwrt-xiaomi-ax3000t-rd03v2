@@ -13,7 +13,7 @@ import tempfile
 import urllib.parse
 import urllib.request
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[1]
 PREFIX = 'openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2'
 BOARD = 'xiaomi,mi-router-ax3000t-v2'
 
@@ -115,7 +115,7 @@ def verify_packages(directory, apk, keys, expected_kernel=None):
 
 
 def initramfs_file(image, name):
-    return run([REPO / 'v2/tools/initramfs-extract.sh', image, name]).decode()
+    return run([REPO / 'tools/initramfs-extract.sh', image, name]).decode()
 
 
 def verify_release(directory, apk, keys):
@@ -138,12 +138,12 @@ def verify_release(directory, apk, keys):
         root = unpack_root(directory / (PREFIX + '-squashfs-sysupgrade.bin'), work)
         identity = stamp((root / 'etc/rd03v2-release').read_text())
         installed = manifest((root / 'lib/apk/db/installed').read_text())
-        lock = (REPO / 'v2/upstream.lock').read_text()
+        lock = (REPO / 'upstream.lock').read_text()
         revision = re.search(r'^COMMIT=(\S+)', lock, re.M).group(1)
         base_release = re.search(r'^RELEASE=(\S+)', lock, re.M).group(1)
         require(identity['RD03V2_BASE'] == f'kuncy7/openwrt-nss-edma {base_release} {revision}',
                 'release provenance matches the pinned upstream')
-        for entry in (REPO / 'v2/config/image-must-have.txt').read_text().splitlines():
+        for entry in (REPO / 'config/image-must-have.txt').read_text().splitlines():
             entry = entry.strip()
             if not entry or entry.startswith('#'):
                 continue
@@ -161,7 +161,7 @@ def verify_release(directory, apk, keys):
                 os.access(root / 'usr/sbin/i2ctransfer', os.X_OK) and
                 (root / 'etc/rc.d/S99nfc').is_symlink(), 'NFC tools and service present')
         require((root / 'usr/sbin/nfc').read_bytes() ==
-                (REPO / 'v2/overlay/target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc').read_bytes(),
+                (REPO / 'overlay/target/linux/qualcommax/ipq50xx/base-files/usr/sbin/nfc').read_bytes(),
                 'NFC tool matches the reviewed source including private transfer errors')
         keep = root / 'lib/upgrade/keep.d/rd03v2-watchdog'
         require(keep.is_file() and keep.read_text().splitlines() == ['/etc/rd03v2-watchdog.disable'],
@@ -252,7 +252,7 @@ def verify_release(directory, apk, keys):
                 'stats_disable_default=0' in statistics and
                 'config_get stats_disable opt stats_disable "$stats_disable_default"' in statistics,
                 'RD03v2 basic statistics default preserves explicit override')
-        run(['python3', REPO / 'v2/tools/test-pbuf-policy.py',
+        run(['python3', REPO / 'tools/test-pbuf-policy.py',
              root / 'etc/init.d/qca-nss-pbuf'])
         modules = list((root / 'lib/modules').glob('*/ath11k.ko'))
         require(len(modules) == 1 and
@@ -317,7 +317,7 @@ def verify_device(directory, ssh_command, apk, keys):
     world = run(prefix + ['cat /etc/apk/world']).decode().splitlines()
     actual_installed = manifest(run(prefix + ['cat /lib/apk/db/installed']).decode())
     require(actual_installed.get('kernel') == installed['kernel'], 'installed kernel vermagic')
-    config = REPO / 'v2/overlay/target/linux/qualcommax/ipq50xx/base-files/etc/uci-defaults/95-rd03v2-apk-pins'
+    config = REPO / 'overlay/target/linux/qualcommax/ipq50xx/base-files/etc/uci-defaults/95-rd03v2-apk-pins'
     pins = re.search(r"^PINS='([^']+)'", config.read_text(), re.M).group(1).split()
     for name in pins:
         require(f'{name}={installed[name]}' in world, 'installed pin: ' + name)
@@ -338,7 +338,7 @@ def main():
     parser.add_argument('directory', type=Path)
     parser.add_argument('--apk', type=Path, default=Path(os.environ.get('V2_APK',
                         REPO / 'openwrt-v2/staging_dir/host/bin/apk')))
-    parser.add_argument('--keys', type=Path, default=REPO / 'v2/keys')
+    parser.add_argument('--keys', type=Path, default=REPO / 'keys')
     parser.add_argument('--base-url')
     parser.add_argument('--ssh-command')
     import sys

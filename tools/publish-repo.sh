@@ -14,8 +14,8 @@ if [ "${1:-}" = --local-dir ]; then
 	LOCAL_DIR=$(realpath -m "${2:?set a local web root}"); shift 2
 fi
 TREE=$(cd "${1:?usage: $0 <finished v2 build tree> [pages worktree]}" && pwd)
-cd "$(dirname "$0")/../.."
-REPO=$PWD V2=$PWD/v2
+cd "$(dirname "$0")/.."
+REPO=$PWD V2=$PWD
 WT=${2:-$REPO/../pages-worktree}
 T=$TREE/bin/targets/qualcommax/ipq50xx
 P=openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2
@@ -31,7 +31,7 @@ unsquashfs -q -d "$X/r" "$X/root.sqfs" etc/rd03v2-release >/dev/null 2>&1 || :
 TAG=$RD03V2_TAG
 case "$TAG" in '') die 'empty release tag';; DEV-*) [ -n "$LOCAL_DIR" ] || die "development build ($TAG)";; esac
 "$TREE/staging_dir/host/bin/apk" verify --keys-dir "$V2/keys" "$T/packages/packages.adb" >/dev/null 2>&1 ||
-	die "the package index does not verify against v2/keys/public-key.pem"
+	die "the package index does not verify against keys/public-key.pem"
 if [ -n "$LOCAL_DIR" ]; then
 	python3 "$V2/tools/verify-artifacts.py" --packages "$T/packages" --apk "$TREE/staging_dir/host/bin/apk" > "$X/packages-check.txt" ||
 		die 'package verification failed'

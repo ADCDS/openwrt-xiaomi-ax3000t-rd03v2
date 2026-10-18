@@ -2,7 +2,7 @@
 # test-watchdog.sh: drive the v2 rd03v2-watchdog through its --check mode
 # against a fake board, one scenario at a time, and check what it decided.
 #
-#   v2/tools/test-watchdog.sh [--env host|target|both] [--rootfs DIR] [--keep] [SCENARIO...]
+#   tools/test-watchdog.sh [--env host|target|both] [--rootfs DIR] [--keep] [SCENARIO...]
 #
 # The watchdog runs under BusyBox ash with nothing of the host's but the stubs:
 #   host    the build host's busybox (sh and every applet);

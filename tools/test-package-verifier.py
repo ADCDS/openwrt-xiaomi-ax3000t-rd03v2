@@ -11,14 +11,14 @@ import sys
 import tempfile
 import zlib
 
-repo = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location('verifier', repo / 'v2/tools/verify-artifacts.py')
+repo = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location('verifier', repo / 'tools/verify-artifacts.py')
 verifier = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(verifier)
 tree = Path(sys.argv[1]).resolve()
 packages = tree / 'bin/targets/qualcommax/ipq50xx/packages'
 apk = tree / 'staging_dir/host/bin/apk'
-keys = repo / 'v2/keys'
+keys = repo / 'keys'
 private_key = repo.parent / 'keys/v2/private-key.pem'
 
 

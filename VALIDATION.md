@@ -19,7 +19,7 @@ those changes touch ran again: see
 [On ipq50xx-2026.10.15-2](#on-ipq50xx-20261015-2-b22-v200).
 
 Each result names the build it ran on. The test builds (`v2.0.0-local.bN`) come
-from the same tree as the release, built with `v2/build.sh`; a release build
+from the same tree as the release, built with `build.sh`; a release build
 differs from its test build only in its version stamp and repository address.
 
 | Build | What it adds |

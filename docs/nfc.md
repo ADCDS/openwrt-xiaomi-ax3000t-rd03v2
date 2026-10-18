@@ -175,7 +175,7 @@ reflash, until something clears it. A guest network is a good candidate for
 
 ## Tested
 
-On v2 ([VALIDATION](../v2/VALIDATION.md), C8 and C13): the tag answers at `0x57`
+On v2 ([VALIDATION](../VALIDATION.md), C8 and C13): the tag answers at `0x57`
 on `i2c-0`; the first boot clears the record stock left; in `wifi` mode the tag
 holds the configured network, and an Android phone tapped on the router joins it
 without the password being typed; in `clear` mode the phone reports an empty tag;

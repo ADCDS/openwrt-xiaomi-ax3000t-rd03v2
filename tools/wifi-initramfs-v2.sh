@@ -1,7 +1,7 @@
 #!/bin/bash
 # Reuse the reversible image pass; v2's early RAM service disables NSS.
 set -euo pipefail
-REPO=$(cd "$(dirname "$0")/../.." && pwd)
+REPO=$(cd "$(dirname "$0")/.." && pwd)
 TREE=$(cd "${1:?usage: $0 <finished v2 tree>}" && pwd)
 [ -x "$TREE/target/linux/qualcommax/ipq50xx/base-files/etc/init.d/rd03v2-installer" ] || {
 	echo 'wifi-initramfs-v2: missing early RAM installer service' >&2; exit 1;
@@ -21,4 +21,4 @@ if [ "${V2_HEAVY_LOCK_HELD:-0}" != 1 ]; then
 fi
 available=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
 [ "$available" -ge "${V2_MIN_MEM_KB:-4194304}" ] || { echo "wifi-initramfs-v2: less than ${V2_MIN_MEM_KB:-4194304} kB available (V2_MIN_MEM_KB)" >&2; exit 1; }
-exec "$REPO/v2/tools/wifi-initramfs.sh" "$TREE"
+exec "$REPO/tools/wifi-initramfs.sh" "$TREE"

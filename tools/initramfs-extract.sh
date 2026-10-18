@@ -12,9 +12,9 @@
 #   second. wifi-initramfs.sh and verify-artifacts.py both gate on this.
 #
 #   Usage:
-#     v2/tools/initramfs-extract.sh IMAGE etc/rc.local     # print one file
-#     v2/tools/initramfs-extract.sh IMAGE --list           # list the cpio
-#     v2/tools/initramfs-extract.sh IMAGE --cpio > out.cpio
+#     tools/initramfs-extract.sh IMAGE etc/rc.local     # print one file
+#     tools/initramfs-extract.sh IMAGE --list           # list the cpio
+#     tools/initramfs-extract.sh IMAGE --cpio > out.cpio
 #
 #   IMAGE may be a FIT uImage (…-initramfs-uImage.itb) or the UBI wrapper
 #   (…-initramfs-factory.ubi); both carry the same kernel and the same embedded

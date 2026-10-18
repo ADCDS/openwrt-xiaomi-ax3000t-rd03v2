@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Verify the pinned NSS feed, and apply new files from v2/feed-overlay/ if there are any.
+"""Verify the pinned NSS feed, and apply new files from feed-overlay/ if there are any.
 
-The NSS feed is used as he pins it. v2/feed-overlay/ (absent now) holds new files only, never a
+The NSS feed is used as he pins it. feed-overlay/ (absent now) holds new files only, never a
 change to one of his: an earlier candidate carried an ECM patch there and raised ECM's package
 release so its packages were not taken for that candidate's; his ECM has moved well past that
 release since. With --check, the prepared feed must be the pinned commit plus the overlay

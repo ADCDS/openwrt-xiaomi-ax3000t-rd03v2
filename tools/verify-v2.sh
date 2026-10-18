@@ -21,7 +21,7 @@ chk() {  # chk <label> <actual> <expected>
 }
 yes_() { "$@" >/dev/null 2>&1 && echo yes || echo no; }  # yes_ <command>: yes/no for chk
 # scratch on disk: the mac80211 series check unpacks and patches a whole backports tree
-export TMPDIR=${TMPDIR:-${RD03V2_WS:-$(cd "$(dirname "$0")/../../.." && pwd)}/v2-tmp}
+export TMPDIR=${TMPDIR:-${RD03V2_WS:-$(cd "$(dirname "$0")/../.." && pwd)}/v2-tmp}
 mkdir -p "$TMPDIR"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 
