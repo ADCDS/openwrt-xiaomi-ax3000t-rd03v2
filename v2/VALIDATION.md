@@ -1,8 +1,7 @@
 # v2 validation
 
-What the v2 release candidate was tested on before release, and what it was
-not. Everything here ran on one Xiaomi AX3000T (RD03v2, 256 MB), installed on
-NAND, with:
+What v2.0.0 was tested on before release, and what it was not. Everything
+here ran on one Xiaomi AX3000T (RD03v2, 256 MB), installed on NAND, with:
 
 - a wired client on a LAN port (1 GbE), the WAN port on an upstream LAN with
   internet access, and a PPPoE server on a WAN VLAN;
@@ -11,10 +10,17 @@ NAND, with:
 - references measured on the same bench: v1.14 and v1.14-nss of this port
   ("B"), and kuncy7's `ipq50xx-2026.10.09` image as he publishes it ("K").
 
+v2.0.0 is built on kuncy7's `ipq50xx-2026.10.15-2`. Most checks first ran on
+his `ipq50xx-2026.10.09` (builds b5-b21 and the rc1 candidate builds). His 10.15
+release changed almost everything under Wi-Fi: mac80211 backports 7.2, multi-PD
+for the QCN6122 with his own user-PD respawn, NSS firmware 12.5, kernel 6.18.55
+and a reworked wifi-scripts. On that base (b22, then the v2.0.0 build) the checks
+those changes touch ran again: see
+[On ipq50xx-2026.10.15-2](#on-ipq50xx-20261015-2-b22-v200).
+
 Each result names the build it ran on. The test builds (`v2.0.0-local.bN`) come
-from the same tree as the release candidate, built with `v2/build.sh`; a release
-candidate build differs from its test build only in its version stamp and
-repository address.
+from the same tree as the release, built with `v2/build.sh`; a release build
+differs from its test build only in its version stamp and repository address.
 
 | Build | What it adds |
 |---|---|
@@ -29,31 +35,108 @@ repository address.
 | rc1 (b21 sources) | the release candidate built from b21 |
 | rc1 | the release candidate: b21 plus 985 (the channel in use follows a channel switch); `kmod-tun`, `kmod-inet-diag` and `kmod-nft-tproxy` moved from the image to our repository |
 | rc1 (final) | rc1 plus 986 (clear mesh error) and 995 (frame_mode guard), built fresh from the lean branch; flashed to NAND |
+| b22 | his `ipq50xx-2026.10.15-2`: 16 of our patches dropped as his (see [the README](README.md#already-in-his-tree-not-carried)), our 10 ath11k patches in `patches/nss-extra` |
+| v2.0.0 | the release: b22's sources without `81_rd03v2_board_json` (his `/etc/board.json` is in tmpfs), built fresh |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
 distance. The reset button, the LEDs and an NFC tap with a phone were checked
-by hand on the release candidate (C8, C14).
+by hand on rc1 (C8, C14).
 
 ## Summary
 
-| | Check | Result | Build |
-|---|---|---|---|
-| C1 | Install, upgrade and rollback paths, stock firmware both ways | see below | b5-b21 |
-| C2 | Reboots, half of them power cuts | pass: 20 / 20 (b9), 4 / 4 (rc1-a) | b9, rc1-a |
-| C3 | Wired through NSS: NAT, WAN VLAN, PPPoE on a WAN VLAN, QinQ, IPv6 over QinQ | pass, all offloaded, 923-941 Mbit/s | b9, b19 |
-| C4 | Wi-Fi, both modes, both bands | pass (b9, b16, b19, rc1 each build); 2.4 GHz needs the test client's Bluetooth off, see below | b9-rc1 |
-| C5 | Signal and noise floor in dBm | pass on 5 GHz (within 3 dB); 2.4 GHz within about 10 dB; v1.x reads 24-31 dB high | rc1 |
-| C6 | Regulatory: GB, US, DE, both Wi-Fi modes | pass | b9 |
-| C7 | Board data | byte-identical to v1.x and kuncy7 | - |
-| C8 | NFC tag | pass, including a phone tap in both modes | b9, rc1 |
-| C9 | Recovery from Q6 firmware crashes, both Wi-Fi modes | pass, in place; a DFS AP stays up (b21, rc1); **2 board resets in 45 recoveries with a station passing traffic, cause not found** | b18-rc1 |
-| C10 | Watchdog against user actions | pass | b16 |
-| C11 | Memory | 42 MB available idle, 34-36 MB in use, no drift; a multi-day soak not run | b19 |
-| C12 | Packages from our repository, tunnels, SQM | pass | b9 |
-| C13 | Upgrade from a realistic v1.x install | pass | b16 |
-| C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 |
-| C15 | Package signature failures | pass, 8 checks | b9 |
+| | Check | Result (10.09 builds) | Build | On 10.15-2 |
+|---|---|---|---|---|
+| C1 | Install, upgrade and rollback paths, stock firmware both ways | see below | b5-b21 | stock 2.0.28 -> v2.0.0 with the reworked installer, its Wi-Fi and root settings applied; back to stock with `revert.py` (v2.0.0, b22) |
+| C2 | Reboots, half of them power cuts | pass: 20 / 20 (b9), 4 / 4 (rc1-a) | b9, rc1-a | pass: 2 / 2 reboots, 2 / 2 power cuts (v2.0.0) |
+| C3 | Wired through NSS: NAT, WAN VLAN, PPPoE on a WAN VLAN, QinQ, IPv6 over QinQ | pass, all offloaded, 923-941 Mbit/s | b9, b19 | pass, all offloaded, 915-937 Mbit/s (b22) |
+| C4 | Wi-Fi, both modes, both bands | pass (b9, b16, b19, rc1 each build); 2.4 GHz needs the test client's Bluetooth off, see below | b9-rc1 | pass: 274 / 324 on 5 GHz, 39 / 58 on 2.4 GHz (v2.0.0); 276 / 341 on 5 GHz (b22) |
+| C5 | Signal and noise floor in dBm | pass on 5 GHz (within 3 dB); 2.4 GHz within about 10 dB; v1.x reads 24-31 dB high | rc1 | noise floor -96 / -91 dBm (b22); otherwise not re-run: same ath11k conversion and patches |
+| C6 | Regulatory: GB, US, DE, both Wi-Fi modes | pass | b9 | GB channel 149 at 23 dBm, kept through two recoveries (b22, #34); US and DE not re-run |
+| C7 | Board data | byte-identical to v1.x and kuncy7 | - | board data and Wi-Fi firmware byte-identical to rc1's (b22) |
+| C8 | NFC tag | pass, including a phone tap in both modes | b9, rc1 | the tag holds the configured network, in sync (b22); the phone tap not repeated |
+| C9 | Recovery from Q6 firmware crashes, both Wi-Fi modes | pass, in place; a DFS AP stays up (b21, rc1); **2 board resets in 45 recoveries with a station passing traffic, cause not found** | b18-rc1 | pass, in place, about 20 events with no reset and no warning; a DFS AP stays up (b22, v2.0.0) |
+| C10 | Watchdog against user actions | pass | b16 | pass (b22) |
+| C11 | Memory | 42 MB available idle, 34-36 MB in use, no drift; a multi-day soak not run | b19 | 42 MB available idle at 5 / 15 / 25 min; 100 min of Wi-Fi traffic: flat at 40 MB (b22) |
+| C12 | Packages from our repository, tunnels, SQM | pass | b9 | kmods and AmneziaWG from the build's repository (b22) |
+| C13 | Upgrade from a realistic v1.x install | pass | b16 | not re-run; the migration's assumptions checked against his nss-tools |
+| C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 | not re-run (no hardware or device tree change) |
+| C15 | Package signature failures | pass, 8 checks | b9 | not re-run (same signing) |
+
+## On ipq50xx-2026.10.15-2 (b22, v2.0.0)
+
+His 10.15 release under v2: mac80211 backports 7.2 with his ath11k series in
+`patches/nss` and `patches/nss-extra`, multi-PD for the QCN6122 with his own user-PD
+respawn (his 976), NSS firmware 12.5 for the 256 MB group, kernel 6.18.55, and a
+reworked wifi-scripts that keeps `/etc/board.json` in tmpfs. What v2 dropped as his,
+and what it still carries, is in the [README](README.md#what-v2-adds-to-his-release).
+
+**First boot (b22).** NSS firmware `NSS.FW.12.5-210-MP.R`. Both radios keep their
+device paths (`soc@0/c000000.wifi`, `soc@0/b00a040.wifi`), so saved configurations
+still match. The watchdog arms with `respawn=1` (his `ath11k_ahb` has no
+`respawn_userpds` parameter and always respawns), Q6 crash dumps are disabled by our
+policy, no kernel warning, 42 MB available at 2.5 min.
+
+**C3 wired (b22)**, 4 streams each way, Mbit/s, every flow offloaded (ECM
+`accel_mode=2`), nothing from the WAN on the LAN:
+
+| Path | Up / down |
+|---|---|
+| QinQ (`wan.20.30`), twice | 929 / 935, 927 / 936 |
+| IPv6 over QinQ, routed | 915 / 923 |
+| WAN VLAN (`wan.20`) | 930 / 937 |
+| Untagged WAN, NAT44 | 933 / 937 |
+| PPPoE on `wan.20` | 926 / 934 |
+
+**C9 crash recovery (b22)**, NSS offload:
+- A station on 2.4 GHz pinging the router, a hw-restart every 75 s: 11 of 11 in place.
+  With a client profile that reconnects on its own, 8 of 8 rejoined: after 1.9-5.6 s,
+  and once after 22.9 s, when the client received the AP's deauthentication (reason 7)
+  before it noticed the restart. The radios come back in 1-2 s now, so a client does
+  not always see the restart as a lost beacon. rc1 took about 6 s.
+- A 5 GHz assert, a 5 GHz hw-restart and a 2.4 GHz assert, each with a station: in
+  place, the station kept its link.
+- A 5 GHz AP on DFS channel 52 (HE80, after the 60 s CAC), assert and hw-restart:
+  5260 MHz stayed available, the AP kept carrier and channel to +120 s.
+- About 16 events: no board reset, no kernel warning, no "UserPD stop wait timed
+  out"; the watchdog recorded each root-PD crash as recovered by the kernel's respawn.
+
+**C10 (b22).** `wifi down` and a radio disabled in UCI: "taken down on purpose",
+nothing done. `rmmod ath11k_ahb ath11k` by hand: detected (`q6wcss=offline`), ath11k
+reloaded, both radios back, same boot.
+
+**C11 (b22).** Idle, both radios up, no clients: MemAvailable 42 / 42 / 42 MB at
+5 / 15 / 25 min, SUnreclaim 35 MB. Then 100 minutes of TCP both ways at 50 Mbit/s each,
+5 GHz client to the wired client (34.9 GB each way, all delivered): MemAvailable stayed at
+40 MB and SUnreclaim at 36 MB from the first sample to the last, and 5 min after the client
+left; no warning, no OOM, same boot. rc1 settled at 34-36 MB after client traffic.
+
+**Packages and closed issues (b22).** `kmod-tun`, `kmod-inet-diag`,
+`kmod-nft-tproxy`, `kmod-nft-queue` and `kmod-nfnetlink-queue` install from the
+build's repository and load (#37); AmneziaWG installs and its module loads on
+demand (#39). #23: station and AP RX counters follow 100 pings on both bands. #34:
+above. #18: a slow 5 GHz receiver (HT20) under 2 and 8 TCP streams and 900 Mbit/s of
+UDP, then Wi-Fi to WAN both ways: no stall, no OOM, no warning; MemAvailable fell to
+19.5 MB under that load and came back. #11: `vlan_filtering` on, a reboot with it on
+and off again, the host path kept. #7: the wired-to-Wi-Fi roam carries downstream
+unicast from the first packet. #24: `frame_mode=1` set by hand comes up as 2 (his
+nss-tools sets it where it loads ath11k) and clients associate. #21: as before (986).
+
+**On the v2.0.0 build.** `verify-v2` 146 / 146. The bench was taken back to stock 2.0.28
+with `revert.py` (b22's RAM installer; the setup wizard back), then v2.0.0 installed
+from stock with the reworked xiaomi-openwrt-install: the plain selection (`standard`)
+picked the v2 images of a v2 tag, and the installer's settings applied on the first
+boot (SSID, WPA2 key and country BR on both radios, both APs up, the root password set,
+`wpa_pairwise_update_count=8` on both APs; NFC at its default, `clear`). Then:
+- C2: 2 reboots and 2 power cuts, each back with both APs on their channels, the
+  settings kept, `/etc/board.json` valid through its link to the tmpfs copy, no
+  warning, 41-42 MB available; after a power cut UBIFS replays its journal ("recovery
+  needed", "recovery completed" 0.2 s later).
+- C9: two 2.4 GHz hw-restarts with a station (back after 4.9 and 4.5 s, no failed
+  handshake) and a 5 GHz assert with a station (in place, the link kept), same boot, no
+  warning.
+- C4: 5 GHz 273.6 / 323.7 Mbit/s, 2.4 GHz 39.0 / 57.5 Mbit/s (channel 6, the test
+  client's Bluetooth connected), 3 / 3 hashes on both bands: pass against v1.14-nss.
 
 ## C1: install, upgrade and rollback
 
@@ -328,9 +411,10 @@ memory recovered. Three findings:
   256 MB board) and takes that radio's AP down while configured; patch 986 now
   logs the cause and the remedy, and mesh works in host mode. A regression from
   v1.11's NSS mesh. See Known issues in the README.
-- **#24**: fixed - patch 995 forces `frame_mode` to ethernet (2) under NSS, so a
-  manual `frame_mode=1` no longer brings up APs no client can join. Verified: set
-  to 1, the driver forced 2 and a client associated.
+- **#24**: fixed on rc1 by our patch 995 (ethernet `frame_mode` under NSS): set
+  to 1, the driver forced 2 and a client associated. On 10.15-2 his nss-tools sets
+  `frame_mode=2` wherever it loads ath11k, 995 is gone, and the same check passes
+  (b22).
 - **#36** (ECM/mwan3 IPv6 stall) was not reproduced on the bench; v2's ECM has
   no FIB-rule notifier, so the full mwan3 + PPPoE rig would be needed to settle it.
 

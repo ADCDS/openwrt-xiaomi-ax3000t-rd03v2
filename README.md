@@ -11,7 +11,7 @@ firmware. Check your hardware revision before flashing.
 This is v2 of the port: a pinned release of
 [kuncy7/openwrt-nss-edma](https://github.com/kuncy7/openwrt-nss-edma) (kernel 6.18, NSS on
 mainline stmmac) with this port's additions on top, and OpenWrt's own snapshot package
-feeds. **Status: release candidate.**
+feeds. **Status: released (v2.0.0).**
 
 - [v2/README.md](v2/README.md): what v2 adds to kuncy7's release, packages, upgrading from
   v1.x, known issues and building.

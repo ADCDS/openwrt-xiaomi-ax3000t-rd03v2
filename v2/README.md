@@ -1,6 +1,6 @@
 # RD03v2 v2: kuncy7's NSS tree plus this port's extras
 
-**Status: release candidate.** What was tested on hardware, and what was not, is in
+**Status: released (v2.0.0).** What was tested on hardware, and what was not, is in
 [VALIDATION.md](VALIDATION.md).
 
 v2 builds the Xiaomi AX3000T v2 (RD03v2) image from a pinned release of
@@ -137,14 +137,15 @@ usteer or DAWN settings, scripts) need the same amount taken off.
 
 ## Known issues
 
-- **The board reset twice after an in-place Wi-Fi recovery with a client passing traffic.**
-  45 hw-restarts of the 2.4 GHz radio with a station pinging the router recovered in place
-  and the station rejoined after about 6 s; in 2 of them, both in the first hour after an
-  install from stock, the board stopped 23-24 s after the restart and rebooted. Not seen in
-  the 43 runs after those, and the cause is not known (VALIDATION, C9). A Q6 firmware crash
-  is rare in normal use; if one resets the board, the reboot brings the radios back.
+- **On the earlier base, the board reset twice after an in-place Wi-Fi recovery.** On
+  kuncy7's `ipq50xx-2026.10.09` (the rc1 builds), 2 of 45 hw-restarts with a station passing
+  traffic were followed by a board reset 23-24 s later; the cause was not found. On
+  `ipq50xx-2026.10.15-2`, which v2.0.0 is built on and which recovers through his own
+  multi-PD respawn, none of about 20 induced crashes with stations attached reset the board
+  (VALIDATION, C9). A Q6 firmware crash is rare in normal use; if one resets the board, the
+  reboot brings the radios back.
 - **A multi-day soak of v2 was not run.** MemAvailable is 42 MB idle with both radios up and
-  NSS offload, and settles at 34-36 MB once Wi-Fi clients have carried traffic; repeated
+  NSS offload, and stayed at 40 MB through 100 minutes of Wi-Fi traffic both ways; repeated
   client sessions, in-place recoveries and driver reloads did not make it drift (VALIDATION).
 - **Signal on 2.4 GHz is checked to about ±10 dB only.** 5 GHz is reciprocal with the test
   client within 3 dB (C5), but the test client's own 2.4 GHz readings jump by about 20 dB
