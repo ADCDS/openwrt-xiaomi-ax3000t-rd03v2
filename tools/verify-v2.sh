@@ -115,6 +115,18 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 		"$(grep -cF 'stats_disable_default=0' "$X/etc/init.d/qca-nss-pbuf")" 1
 	chk "statistics policy preserves explicit UCI override" \
 		"$(grep -cF 'config_get stats_disable opt stats_disable "$stats_disable_default"' "$X/etc/init.d/qca-nss-pbuf")" 1
+	# a station interface keeps Wi-Fi on the host path (0008, #48): one decision for the
+	# service and nss-dwmac-up
+	chk "station keeps Wi-Fi on the host path (0008)" \
+		"$(grep -lF 'nss_dwmac_wifi_offload' "$X/lib/nss/functions.sh" "$X/etc/init.d/nss" "$X/usr/sbin/nss-dwmac-up" 2>/dev/null | wc -l)" 3
+	chk "NSS script syntax" \
+		"$(yes_ sh -c 'for f; do sh -n "$f" || exit 1; done' _ "$X/lib/nss/functions.sh" "$X/etc/init.d/nss" "$X/usr/sbin/nss-dwmac-up" "$X/usr/sbin/nss-status")" yes
+	# PTK0 rekey becomes a reconnect by default, AP and station (0009, #49)
+	chk "wpa_deny_ptk0_rekey defaults to 1 (0009)" \
+		"$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["properties"]["wpa_deny_ptk0_rekey"]["default"])' \
+			"$X/usr/share/schema/wireless.wifi-iface.json" 2>/dev/null)" 1
+	chk "wpa_deny_ptk0_rekey reaches hostapd and wpa_supplicant" \
+		"$(grep -lF "wpa_deny_ptk0_rekey" "$X/usr/share/ucode/wifi/ap.uc" "$X/usr/share/ucode/wifi/supplicant.uc" 2>/dev/null | wc -l)" 2
 	chk "early Q6 policy service" "$(yes_ test -L "$X/etc/rc.d/S18rd03v2-q6")" yes
 	chk "early RAM installer service" "$(yes_ test -L "$X/etc/rc.d/S17rd03v2-installer")" yes
 	# first-boot scripts

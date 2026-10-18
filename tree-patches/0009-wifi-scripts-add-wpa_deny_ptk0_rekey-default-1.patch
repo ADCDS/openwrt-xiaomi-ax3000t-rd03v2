@@ -1,0 +1,75 @@
+From 5773d3c196d9407f564c4e3a631e939186824f9f Mon Sep 17 00:00:00 2001
+From: Adriel Santos <adriel@adriel.eu>
+Date: Sun, 18 Oct 2026 15:21:08 -0300
+Subject: [PATCH 2/2] wifi-scripts: add wpa_deny_ptk0_rekey, default 1
+
+Neither RD03v2 radio (ath11k, IPQ5018 and QCN6122) advertises
+CAN_REPLACE_PTK0 or Extended Key ID, so mac80211 replaces the pairwise
+key in place on a PTK rekey, and on this firmware the rekey fails in
+both roles. As an AP with wpa_ptk_rekey set, the rekey M1 never reaches
+the client: 16 s (NSS Wi-Fi offload) to 31 s (host Wi-Fi) of a 60 s TCP
+download below 5 Mbit/s, ending in a deauth. As a station whose upstream
+AP rekeys, the station logs "can't safely do that" and the AP times out
+waiting for M4 and deauths it.
+
+hostapd and wpa_supplicant have the workaround: wpa_deny_ptk0_rekey=1
+disconnects and reconnects instead of rekeying in place, unless the
+driver says it can replace a PTK safely. Measured with it: the AP-role
+outage drops to 0-1 s, and the station has no EAPOL-Key timeouts.
+
+Add the option to the wifi-iface schema (0, 1 or 2, default 1) and pass
+it to hostapd for AP interfaces and to the network block of station
+interfaces. A driver with safe PTK0 rekeys is unaffected by 1.
+
+Refs: ADCDS/openwrt-xiaomi-ax3000t-rd03v2#49
+---
+ .../files-ucode/usr/share/schema/wireless.wifi-iface.json   | 6 ++++++
+ .../wifi-scripts/files-ucode/usr/share/ucode/wifi/ap.uc     | 2 +-
+ .../files-ucode/usr/share/ucode/wifi/supplicant.uc          | 1 +
+ 3 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/package/network/config/wifi-scripts/files-ucode/usr/share/schema/wireless.wifi-iface.json b/package/network/config/wifi-scripts/files-ucode/usr/share/schema/wireless.wifi-iface.json
+index c23b80218a..2c1a19498c 100644
+--- a/package/network/config/wifi-scripts/files-ucode/usr/share/schema/wireless.wifi-iface.json
++++ b/package/network/config/wifi-scripts/files-ucode/usr/share/schema/wireless.wifi-iface.json
+@@ -1193,6 +1193,12 @@
+ 			"description": "WNM-Sleep Mode GTK/IGTK workaround",
+ 			"type": "boolean"
+ 		},
++		"wpa_deny_ptk0_rekey": {
++			"description": "PTK0 rekey workaround: 0 = always rekey, 1 = disconnect and reconnect instead unless the driver can replace a PTK safely, 2 = always disconnect and reconnect instead",
++			"type": "number",
++			"enum": [ 0, 1, 2 ],
++			"default": 1
++		},
+ 		"wpa_disable_eapol_key_retries": {
+ 			"description": "Workaround for key reinstallation attacks",
+ 			"type": "boolean",
+diff --git a/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/ap.uc b/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/ap.uc
+index de474351f9..e4f0503bc3 100644
+--- a/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/ap.uc
++++ b/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/ap.uc
+@@ -348,7 +348,7 @@ function iface_auth_type(config, band, eht) {
+ 
+ 	append_vars(config, [
+ 		'sae_require_mfp', 'sae_password_file', 'sae_pwe', 'sae_groups', 'sae_track_password', 'time_advertisement', 'time_zone',
+-		'wpa_group_rekey', 'wpa_ptk_rekey', 'wpa_gmk_rekey', 'wpa_strict_rekey',
++		'wpa_group_rekey', 'wpa_ptk_rekey', 'wpa_deny_ptk0_rekey', 'wpa_gmk_rekey', 'wpa_strict_rekey',
+ 		'macaddr_acl', 'wpa_psk_radius', 'wpa_psk', 'wpa_passphrase', 'wpa_psk_file',
+ 		'eapol_version', 'dynamic_vlan', 'radius_request_cui', 'eap_reauth_period',
+ 		'radius_das_client', 'radius_das_port', 'owe_groups', 'owe_ptk_workaround', 'own_ip_addr', 'dynamic_own_ip_addr',
+diff --git a/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/supplicant.uc b/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/supplicant.uc
+index 2bd83df3c7..4eb61354ad 100644
+--- a/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/supplicant.uc
++++ b/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/supplicant.uc
+@@ -113,6 +113,7 @@ function setup_sta(data, config, phy_features) {
+ 	switch(config.mode) {
+ 	case 'sta':
+ 		set_default(config, 'multi_ap_backhaul_sta', config.multi_ap);
++		network_append('wpa_deny_ptk0_rekey', config.wpa_deny_ptk0_rekey);
+ 		break;
+ 
+ 	case 'adhoc':
+-- 
+2.47.3
+
