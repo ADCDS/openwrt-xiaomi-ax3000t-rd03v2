@@ -59,6 +59,7 @@ Details are in [VALIDATION.md](VALIDATION.md).
 - [What this port adds to kuncy7's release](docs/what-this-port-adds.md), and what it no
   longer carries because his tree has it
 - [Packages](docs/packages.md): the repositories, kernel modules and pinned packages
+- [AmneziaWG](docs/amneziawg.md): install, LuCI import, full tunnel
 - [Upgrading from v1.x](docs/upgrading-from-v1.md)
 - [Building](docs/building.md)
 - [VALIDATION.md](VALIDATION.md): what was tested on hardware, and what was not

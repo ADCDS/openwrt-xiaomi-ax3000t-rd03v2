@@ -58,7 +58,7 @@ by hand on rc1 (C8, C14).
 | C9 | Recovery from Q6 firmware crashes, both Wi-Fi modes | pass, in place; a DFS AP stays up (b21, rc1); **2 board resets in 45 recoveries with a station passing traffic, cause not found** | b18-rc1 | pass, in place, about 20 events with no reset and no warning; a DFS AP stays up (b22, v2.0.0) |
 | C10 | Watchdog against user actions | pass | b16 | pass (b22) |
 | C11 | Memory | 42 MB available idle, 34-36 MB in use, no drift; a multi-day soak not run | b19 | 42 MB available idle at 5 / 15 / 25 min; 100 min of Wi-Fi traffic: flat at 40 MB (b22) |
-| C12 | Packages from our repository, tunnels, SQM | pass | b9 | kmods and AmneziaWG from the build's repository (b22) |
+| C12 | Packages from our repository, tunnels, SQM | pass | b9 | kmods and AmneziaWG from the build's repository (b22); AmneziaWG from the published repository, with traffic, a reboot and the LuCI import (v2.0.0) |
 | C13 | Upgrade from a realistic v1.x install | pass | b16 | not re-run; the migration's assumptions checked against his nss-tools |
 | C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 | not re-run (no hardware or device tree change) |
 | C15 | Package signature failures | pass, 8 checks | b9 | not re-run (same signing) |
@@ -390,6 +390,20 @@ WireGuard and AmneziaWG (tools, LuCI protocols) installed and carried traffic
 (WireGuard, 4 streams: 109 / 300 Mbit/s up / down on the LAN tunnel), the SQM
 LuCI page and its NSS qdisc script installed, and an `apk upgrade` simulation
 kept every pinned package of his tree (b9).
+
+AmneziaWG on v2.0.0 (#39), installed from the published repository with
+`apk add kmod-amneziawg amneziawg-tools luci-proto-amneziawg` (11 packages):
+
+| Check | Result |
+|---|---|
+| AWG 2.0 tunnel (S3/S4, H ranges, I1) to `amneziawg-go` on a PC, after `/etc/init.d/network restart` | handshake; a LAN client through it at 49 / 31 Mbit/s down / up, CPU saturated |
+| Ordinary WAN NAT with the tunnel up | 941 / 938 Mbit/s, CPU 95 % idle: still offloaded |
+| Reboot with the tunnel configured | up at about 28 s uptime, handshake, LAN ping through it |
+| LuCI "Load configuration…" (headless browser, staged with Save, then reverted) | keys, address, DNS, every AWG 2.0 field and the peer staged; Route Allowed IPs left off |
+| Full tunnel (`0.0.0.0/0`, `route_allowed_ips`) | default route on the tunnel, LAN traffic enters it, the endpoint stays on the WAN, handshake holds |
+| Full tunnel taken down | no IPv4 default route left: the tunnel's route had replaced the WAN's (both metric 0). With `network.wan.metric=10` both stay and the WAN takes over |
+| Peer changed, then a network reload | not applied until the interface restarts |
+| `apk del` of the three packages | all 11 removed; package list and `/etc/config` identical to before |
 
 ## C15: hardening
 
