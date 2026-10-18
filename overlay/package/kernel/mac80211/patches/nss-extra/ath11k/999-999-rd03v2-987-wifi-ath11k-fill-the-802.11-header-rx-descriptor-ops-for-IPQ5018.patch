@@ -1,0 +1,28 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: fill the 802.11 header rx descriptor ops for IPQ5018
+
+999-233 ("Disable rx_header tlv for 2K SKB") rebuilds the 802.11 header from
+the rx descriptor and adds four hw_ops for it, but only to the IPQ8074 and
+QCN9074 tables. ipq5018_ops (used by IPQ5018 and QCN6122) already reads the
+QCN9074 descriptor layout for every other field and leaves these NULL.
+
+In ethernet decap (frame_mode=2), which the host Wi-Fi path now uses as
+well, the first EAPOL frame after association (and multicast PN checks)
+calls them: the kernel jumps to address 0 and the board resets each time a
+station associates. Use the QCN9074 accessors, as for the other fields.
+
+Refs: ADCDS/openwrt-xiaomi-ax3000t-rd03v2#47
+---
+--- a/drivers/net/wireless/ath/ath11k/hw.c
++++ b/drivers/net/wireless/ath/ath11k/hw.c
+@@ -1476,6 +1476,10 @@
+ 	.rx_desc_get_mpdu_ppdu_id = ath11k_hw_qcn9074_rx_desc_get_mpdu_ppdu_id,
+ 	.rx_desc_set_msdu_len = ath11k_hw_qcn9074_rx_desc_set_msdu_len,
+ 	.rx_desc_get_attention = ath11k_hw_qcn9074_rx_desc_get_attention,
++	.rx_desc_get_mpdu_frame_ctl = ath11k_hw_qcn9074_rx_desc_get_mpdu_frame_ctl,
++	.rx_desc_dot11_hdr_fields_valid = ath11k_hw_qcn9074_rx_desc_dot11_hdr_fields_valid,
++	.rx_desc_get_dot11_hdr = ath11k_hw_qcn9074_rx_desc_get_dot11_hdr,
++	.rx_desc_get_crypto_header = ath11k_hw_qcn9074_rx_desc_get_crypto_hdr,
+ 	.reo_setup = ath11k_hw_ipq5018_reo_setup,
+ 	.rx_desc_get_msdu_payload = ath11k_hw_qcn9074_rx_desc_get_msdu_payload,
+ 	.mpdu_info_get_peerid = ath11k_hw_qcn9074_mpdu_info_get_peerid,
