@@ -1,0 +1,166 @@
+From 7a021489cb1755e7f71a5f204ba16fb2fd6fa728 Mon Sep 17 00:00:00 2001
+From: Adriel Santos <adriel@adriel.eu>
+Date: Sun, 18 Oct 2026 15:15:44 -0300
+Subject: [PATCH 1/2] nss-tools: keep ipq50xx Wi-Fi on the host path for
+ station interfaces
+
+Under NSS Wi-Fi offload, a station (client) interface on the RD03v2
+(IPQ5018 + QCN6122, NSS firmware 12.5) cannot send frames larger than
+about 860 bytes: forwarded pings of 500 bytes pass, 860 bytes lose half,
+1000 bytes and up are all lost, TCP uploads through the station carry
+nothing, and its TX rate falls from MCS 4 to 1.0 Mbit/s and stays there.
+Downloads still work. Stopping ECM changes nothing, so it is the NSS
+Wi-Fi data path itself. The same station in host mode uploads normally.
+A WISP or repeater uplink is unusable that way.
+
+The ipq50xx service now keeps Wi-Fi on the host path when an enabled
+wireless interface on an enabled radio is in station mode, the way his
+ipq807x nss.init already does for a mesh interface the firmware cannot
+offload. The decision is one helper, nss_dwmac_wifi_offload, that both
+nss-dwmac.init and nss-dwmac-up call, so they cannot disagree.
+nss.general.wifi_offload_sta='1' keeps the offload, for testing a fix.
+ath11k loads once per boot, so nss-status warns when a station is
+configured while Wi-Fi runs on the NSS path, and says to reboot.
+
+Refs: ADCDS/openwrt-xiaomi-ax3000t-rd03v2#48
+---
+ package/nss/nss-tools/files/functions.sh   | 39 ++++++++++++++++++++++
+ package/nss/nss-tools/files/nss-dwmac-up   |  4 +--
+ package/nss/nss-tools/files/nss-dwmac.init |  9 +++--
+ package/nss/nss-tools/files/nss-status     | 16 +++++++++
+ 4 files changed, 64 insertions(+), 4 deletions(-)
+
+diff --git a/package/nss/nss-tools/files/functions.sh b/package/nss/nss-tools/files/functions.sh
+index 609ce76368..0891ceeadb 100644
+--- a/package/nss/nss-tools/files/functions.sh
++++ b/package/nss/nss-tools/files/functions.sh
+@@ -29,6 +29,45 @@ nss_mesh_state() {
+ 	esac
+ }
+ 
++# Station (client) interfaces. Sets NSS_STA_CFG=1 when an enabled wireless
++# vif on an enabled radio is in station mode, i.e. a WISP or repeater
++# uplink. Always returns 0 (nss-dwmac-up runs under set -e).
++nss_sta_state() {
++	local s dev
++	NSS_STA_CFG=0
++	for s in $(uci -q -X show wireless | sed -n "s/^wireless\.\([^.=]*\)\.mode='sta'\$/\1/p"); do
++		case "$(uci -q get "wireless.$s.disabled")" in 1|yes|on|true|enabled) continue ;; esac
++		dev="$(uci -q get "wireless.$s.device")"
++		case "$(uci -q get "wireless.$dev.disabled")" in 1|yes|on|true|enabled) continue ;; esac
++		NSS_STA_CFG=1
++		break
++	done
++	return 0
++}
++
++# Wi-Fi data path on ipq50xx, the decision nss-dwmac.init and nss-dwmac-up
++# both take: NSS_WIFI_OFFLOAD=1 when ath11k loads on the NSS path.
++# nss.general.wifi_offload='1' asks for it. A configured station interface
++# keeps Wi-Fi on the host path instead (NSS_WIFI_STA_HOST=1): under NSS
++# Wi-Fi offload an IPQ5018/QCN6122 station cannot send frames larger than
++# about 860 bytes - TCP uploads through it stall and its TX rate falls to
++# 1 Mbit/s (openwrt-xiaomi-ax3000t-rd03v2 #48). nss.general.wifi_offload_sta
++# ='1' keeps the offload anyway, to test a fix. ath11k loads once per boot,
++# so a change takes effect at the next boot. Always returns 0.
++nss_dwmac_wifi_offload() {
++	NSS_WIFI_OFFLOAD=0
++	NSS_WIFI_STA_HOST=0
++	[ "$(uci -q get nss.general.wifi_offload)" = 1 ] || return 0
++	NSS_WIFI_OFFLOAD=1
++	[ "$(uci -q get nss.general.wifi_offload_sta)" = 1 ] && return 0
++	nss_sta_state
++	if [ "$NSS_STA_CFG" = 1 ]; then
++		NSS_WIFI_OFFLOAD=0
++		NSS_WIFI_STA_HOST=1
++	fi
++	return 0
++}
++
+ # poll_until <seconds> <command...>: run the command once per second until
+ # it succeeds or the timeout elapses; returns the last status.
+ poll_until() {
+diff --git a/package/nss/nss-tools/files/nss-dwmac-up b/package/nss/nss-tools/files/nss-dwmac-up
+index 99f4cb2380..cb45dd42eb 100644
+--- a/package/nss/nss-tools/files/nss-dwmac-up
++++ b/package/nss/nss-tools/files/nss-dwmac-up
+@@ -81,8 +81,8 @@ fi
+ # Wi-Fi offload is loaded from here, not from the service, because ath11k
+ # checks the NSS core state when it registers wifili (see the note in the
+ # init script). WIFI_DEFERRED is set when the service left it to us.
+-WIFI_OFFLOAD="$(uci -q get nss.general.wifi_offload)" || WIFI_OFFLOAD=''
+-[ "$WIFI_OFFLOAD" = "1" ] || WIFI_OFFLOAD=0
++nss_dwmac_wifi_offload
++WIFI_OFFLOAD="$NSS_WIFI_OFFLOAD"
+ WIFI_LOADED_HERE=0
+ 
+ # Size the firmware's packet-buffer pools. This has to happen after the arm,
+diff --git a/package/nss/nss-tools/files/nss-dwmac.init b/package/nss/nss-tools/files/nss-dwmac.init
+index ac5bc28d9a..d88d733ded 100644
+--- a/package/nss/nss-tools/files/nss-dwmac.init
++++ b/package/nss/nss-tools/files/nss-dwmac.init
+@@ -230,8 +230,13 @@ start_service() {
+ 		return 1
+ 	fi
+ 
+-	wifi_offload="$(uci -q get nss.general.wifi_offload)"
+-	[ "$wifi_offload" = "1" ] || wifi_offload=0
++	# nss.general.wifi_offload, unless a station interface is configured
++	# (see nss_dwmac_wifi_offload); nss-dwmac-up takes the same decision.
++	nss_dwmac_wifi_offload
++	wifi_offload="$NSS_WIFI_OFFLOAD"
++	if [ "$NSS_WIFI_STA_HOST" = 1 ]; then
++		logger -t nss "client (station) interface configured: Wi-Fi stays on the host path, where a station can send full-size frames (rd03v2 #48; nss.general.wifi_offload_sta='1' overrides)"
++	fi
+ 
+ 	if [ "$(uci -q get nss.general.enabled)" = "0" ]; then
+ 		logger -t nss "NSS bring-up disabled via uci (nss.general.enabled=0), staying on the host stack"
+diff --git a/package/nss/nss-tools/files/nss-status b/package/nss/nss-tools/files/nss-status
+index 89c21d62a6..4c6c6bf84a 100755
+--- a/package/nss/nss-tools/files/nss-status
++++ b/package/nss/nss-tools/files/nss-status
+@@ -60,6 +60,18 @@ for f in "$R"/sys/kernel/debug/ath11k/*/dbg_infra/links; do
+ 	grep -q "^link id" "$f" 2>/dev/null && mesh_vdev=1
+ done
+ 
++# Station interfaces keep ipq50xx Wi-Fi on the host path at boot
++# (nss_dwmac_wifi_offload); sta_late=1 when one is configured but Wi-Fi is on
++# the NSS path anyway because it was added after boot.
++sta_cfg=0
++sta_late=0
++if [ "$GLUE_KIND" = dwmac ]; then
++	nss_sta_state
++	sta_cfg=$NSS_STA_CFG
++	[ "$sta_cfg" = 1 ] && [ "$(uci -q get nss.general.wifi_offload_sta)" != 1 ] &&
++		[ "$(cat "$MOD/ath11k/parameters/nss_offload" 2>/dev/null)" = 1 ] && sta_late=1
++fi
++
+ fw_mask=$(cat "$GLUE/fw_mask" 2>/dev/null)
+ # The dwmac glue prints the mask with %#lx, which renders an empty mask as a
+ # bare "0" rather than "0x0".
+@@ -376,6 +388,7 @@ if [ "$JSON" = 1 ]; then
+ 	"modules":{"bridge_mgr":$bridge_mgr,"pppoe":$pppoe_mgr},
+ 	"wifi_offload":$wifi_offload,
+ 	"mesh":{"configured":$mesh_cfg,"offloaded":$mesh_vdev,"fw_capable":$mesh_capable},
++	"sta":{"configured":$sta_cfg,"needs_reboot":$sta_late},
+ 	"kernel_log":{"warns":$kwarns,"oopses":$koops},
+ 	"sqm":{"active":$sqm_active,"device":"$sqm_dev","shaping_device":"$sqm_phys","lanes":$sqm_lanes,"igs":$ijson,
+ 	"shaper_fault":$sfjson,
+@@ -573,11 +586,14 @@ case "$wifi_offload" in
+ 	        echo "  Wi-Fi:       host mode (mesh configured; firmware supports mesh offload - armed by nss-up)"
+ 	    elif [ "$mesh_cfg" = 1 ]; then
+ 	        echo "  Wi-Fi:       host mode (mesh configured; mesh offload needs the 11.4 NSS firmware and a mesh-enabled build)"
++	    elif [ "$sta_cfg" = 1 ]; then
++	        echo "  Wi-Fi:       host mode (client interface configured)"
+ 	    else
+ 	        echo "  Wi-Fi:       host mode"
+ 	    fi ;;
+ 	*)  echo "  Wi-Fi:       ath11k not loaded" ;;
+ esac
++[ "$sta_late" = 1 ] && echo "  WARN:        a client (station) interface is configured while Wi-Fi is on the NSS path, where it cannot send large frames - reboot to move Wi-Fi to the host path"
+ [ -n "$fw_mem_modes" ] && echo "  fw mem mode:$fw_mem_modes (from the device tree)"
+ if [ "$sqm_active" = 1 ]; then
+ 	igs_human=$(echo "$igs_ports" | sed 's/\([a-z0-9]*\):1/\1/g; s/\([a-z0-9]*\):0/\1(MISSING)/g')
+-- 
+2.47.3
+
