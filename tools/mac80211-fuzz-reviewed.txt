@@ -1,0 +1,15 @@
+# His mac80211 patches that check-mac80211-series.sh applies with patch's default fuzz, each
+# after a review of where its fuzzed hunks land. One line per patch:
+#   <sha256 of the patch file> <directory/file under package/kernel/mac80211/patches>
+# The hash ties the review to that exact patch: when he changes it, it is checked strictly
+# again. A patch of ours (in the overlay) never qualifies.
+#
+# ipq50xx-2026.10.19: his merge of OpenWrt main brought ath11k/953 (IPQ9574 support), applied
+# before his nss series, which moves the context of these three (unchanged since 10.15-2) in
+# hw.c, hw.h and core.c. Reviewed by applying the series as OpenWrt does and comparing the
+# patched ath11k source with v2.0.1's: the differences are the IPQ9574 additions and one line
+# of his 237-006 moved from qca6390_ops into ipq9574_ops; the IPQ5018 and QCN6122 parameters
+# and ipq5018_ops are byte-identical.
+6b69400f43ccc59ff939f9ea225704357ca77e94da5299f2e7100c0f4c51c716 nss/ath11k/068-ath11k-add-rx-histogram-stats.patch
+afe6b17365a27974c39ad0cdd1e2d01bf437d724de1f7e481301bb1c2edd7366 nss/ath11k/207-ath11k-Enable-256_512MB-profiles.patch
+178195ae91b4ad539f87fa96fc17798526bd3e431470c4819da9bdc4dc1fc8ac nss/ath11k/999-233-ath11k-Disable-rx_header-tlv-for-2K-SKB.patch

@@ -10,13 +10,24 @@
 # check runs before the build (and from bump-upstream.sh). It leaves the patched source in
 # <workdir>/src, a git repository with one commit per patch, for inspection.
 #
-# Exit status: 0 all patches applied without fuzz, 1 otherwise.
+# The one exception: a patch of his listed in mac80211-fuzz-reviewed.txt with its sha256 gets
+# patch's default fuzz, after a review of where it lands. Ours never do.
+#
+# Exit status: 0 all patches applied without fuzz (or with reviewed fuzz), 1 otherwise.
 set -euo pipefail
 TREE=$(cd "${1:?usage: $0 <tree> [workdir]}" && pwd)
 WORK=${2:-$(mktemp -d)}
 MK=$TREE/package/kernel/mac80211/Makefile
 PD=$TREE/package/kernel/mac80211/patches
+V2=$(cd "$(dirname "$0")/.." && pwd)
+REVIEWED=$V2/tools/mac80211-fuzz-reviewed.txt
 die() { echo "check-mac80211-series: $*" >&2; exit 1; }
+# reviewed <dir/file>: listed with this exact content, and not one of ours (the overlay's)
+reviewed() {
+	[ -e "$V2/overlay/package/kernel/mac80211/patches/$1" ] && return 1
+	local h; h=$(sha256sum "$PD/$1" | cut -d' ' -f1)
+	grep -vE '^\s*(#|$)' "$REVIEWED" 2>/dev/null | grep -qxF "$h $1"
+}
 
 # PKG_VERSION is either the version or derived from PKG_SOURCE_VERSION
 srcver=$(sed -n 's/^PKG_SOURCE_VERSION:=//p' "$MK")
@@ -51,16 +62,25 @@ rm -rf "$WORK/src"; mkdir -p "$WORK/src"; cd "$WORK/src"
 tar --zstd -xf "$tarball" --strip-components=1 2>/dev/null || tar -xf "$tarball" --strip-components=1
 G="git -c user.name=check -c user.email=check@localhost"
 git init -q && git add -A && $G commit -qm "backports-$ver"
-n=0 bad=0
+n=0 nf=0 bad=0
 for d in "${dirs[@]}"; do
 	[ -d "$PD/$d" ] || continue
 	[ -s "$PD/$d/series" ] && die "$d has a series file; this check does not handle it"
 	for f in $(cd "$PD/$d" && LC_ALL=C ls -1 | LC_ALL=C sort); do
-		out=$(patch -p1 -F0 --no-backup-if-mismatch -i "$PD/$d/$f" 2>&1) || {
+		fuzz=-F0
+		reviewed "$d/$f" && fuzz=
+		out=$(patch -p1 $fuzz --no-backup-if-mismatch -i "$PD/$d/$f" 2>&1) || {
 			echo "FAIL $d/$f"; { echo "$out" | grep -E 'FAILED|rej|malformed' || echo "$out" | tail -5; } | sed 's/^/    /'; bad=1; break 2; }
+		if [ -z "$fuzz" ]; then
+			if grep -q 'with fuzz' <<<"$out"; then
+				nf=$((nf + 1)); echo "NOTE $d/$f applies with reviewed fuzz"
+			else
+				echo "NOTE $d/$f is listed as reviewed but needs no fuzz now: drop its line"
+			fi
+		fi
 		git add -A && $G commit -qm "$d/$f"
 		n=$((n + 1))
 	done
 done
 [ $bad = 0 ] || exit 1
-echo "mac80211 $ver: $n patches applied without fuzz (${dirs[*]}); source in $WORK/src"
+echo "mac80211 $ver: $n patches applied, $nf of his with reviewed fuzz, none of ours (${dirs[*]}); source in $WORK/src"
