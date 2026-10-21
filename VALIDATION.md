@@ -1,6 +1,6 @@
 # v2 validation
 
-What v2.0.0 and v2.0.1 were tested on before release, and what they were not. Everything
+What v2.0.0, v2.0.1 and v2.0.2 were tested on before release, and what they were not. Everything
 here ran on one Xiaomi AX3000T (RD03v2, 256 MB), installed on NAND, with:
 
 - a wired client on a LAN port (1 GbE), the WAN port on an upstream LAN with
@@ -16,7 +16,8 @@ release changed almost everything under Wi-Fi: mac80211 backports 7.2, multi-PD
 for the QCN6122 with his own user-PD respawn, NSS firmware 12.5, kernel 6.18.55
 and a reworked wifi-scripts. On that base (b22, then the v2.0.0 build) the checks
 those changes touch ran again: see
-[On ipq50xx-2026.10.15-2](#on-ipq50xx-20261015-2-b22-v200).
+[On ipq50xx-2026.10.15-2](#on-ipq50xx-20261015-2-b22-v200). v2.0.2 moves to his
+`ipq50xx-2026.10.19`: see [v2.0.2](#v202).
 
 Each result names the build it ran on. The test builds (`v2.0.0-local.bN`) come
 from the same tree as the release, built with `build.sh`; a release build
@@ -38,6 +39,8 @@ differs from its test build only in its version stamp and repository address.
 | b22 | his `ipq50xx-2026.10.15-2`: 16 of our patches dropped as his (see [the README](docs/what-this-port-adds.md#already-in-his-tree-not-carried)), our 10 ath11k patches in `patches/nss-extra` |
 | v2.0.0 | the release: b22's sources without `81_rd03v2_board_json` (his `/etc/board.json` is in tmpfs), built fresh |
 | v2.0.1 | v2.0.0 plus 987 (host Wi-Fi mode, #47) and tree patches 0008 (a station keeps Wi-Fi on the host path, #48) and 0009 (`wpa_deny_ptk0_rekey`, #49), built fresh; see [v2.0.1](#v201) |
+| v2.0.2-local.b2 | v2.0.1's sources on his `ipq50xx-2026.10.19` (0008 refreshed), plus tree patches 0010 (json-c cleanup fixes, #50) and 0011 (libffi in the core tree); b1, the same without 0011, stopped at python3 |
+| v2.0.2 | the release: b2's sources, built fresh; see [v2.0.2](#v202) |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -63,6 +66,60 @@ by hand on rc1 (C8, C14).
 | C13 | Upgrade from a realistic v1.x install | pass | b16 | not re-run; the migration's assumptions checked against his nss-tools |
 | C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 | not re-run (no hardware or device tree change) |
 | C15 | Package signature failures | pass, 8 checks | b9 | not re-run (same signing) |
+
+## v2.0.2
+
+v2.0.1 moved to his `ipq50xx-2026.10.19`, plus the json-c fixes for #50. The checks ran on
+v2.0.2-local.b2, built from the release's sources (it differs only in its stamp and
+repository address). `verify-v2` 156 / 156 (two new: tree patches 0010 and 0011). Each
+number below was measured against v2.0.1 on the same bench in the same hour.
+
+**His 10.19 under v2.** Same kernel (6.18.55, the same kernel package version) and NSS
+firmware (12.5); qca8k fixes and the kmod-sched split; ECM rebuilds a multicast flow of a
+tag_8021q bridge on a membership change; libjson-c 0.19-r2. Tree patch 0008 refreshed: his
+nss-tools moved the lines around it, ours unchanged, and his nss-tools tests pass with it
+(nss-status 64 / 64). Our eleven ath11k patches and our kernel patches 0918 and 0959e apply
+without fuzz.
+
+- **Wi-Fi driver.** His merge of OpenWrt main adds IPQ9574 support (ath11k 953) before his
+  NSS series, which moves the context of three of his patches (068, 207, 999-233); they apply
+  with fuzz, as OpenWrt applies them. The ath11k source the series produces, compared with
+  v2.0.1's: the IPQ9574 additions, and three hunks of his 237-006 that each land one ops
+  struct early (no fuzz reported), so the IPQ9574 ops gain a line the QCA6390 ops lose (no
+  board of his uses either with NSS); the IPQ5018 and QCN6122 parameters and `ipq5018_ops`
+  are byte-identical. The three are listed by sha256 in `tools/mac80211-fuzz-reviewed.txt`.
+- **C7.** `lib/firmware` is byte-identical to v2.0.1's (41 files: ath11k firmware, both
+  radios' board data, NSS firmware), though `ipq-wifi` and `ath11k-firmware` were repackaged.
+- **libffi.** His CI built 10.19 with a packages feed from after libffi moved to OpenWrt's
+  core tree (the commit its feeds buildinfo records, which `feeds.lock` pins), and his tree
+  predates the move. b1 stopped there: `i2c-tools` builds the target python3, whose `_ctypes`
+  needs `ffi.h`. Tree patch 0011 carries OpenWrt's package.
+
+**Install.** From v2.0.1 through the RAM installer, settings kept: every configuration file
+byte-identical afterwards (46 in the backup), 201 packages, libjson-c 0.19-r3, NSS offload
+on with Wi-Fi offloaded (wifili), both APs, no kernel warning, 44.8 MB available at 72 s.
+
+**#50.** `rpcd` data size, LuCI logins through uhttpd's JSON-RPC, each session destroyed:
+
+| | start | after 80 logins |
+|---|---|---|
+| v2.0.1 | 704 kB | 14,812 kB (+1.4 MB per 8, never freed) |
+| v2.0.2 | 520 kB | 540 kB (20 kB of warm-up in the first 24 logins, then flat) |
+
+64 logins over `ubus` on v2.0.2: 540 kB throughout. Empty sessions (no ACL parsing) were flat
+on both.
+
+| Check | v2.0.1 | v2.0.2 |
+|---|---|---|
+| C3 wired NAT, 4 streams, up / down | 941 / 941 Mbit/s, CPU 90-92 % idle | 941 / 941 Mbit/s, CPU 92-94 % idle, flows in ECM |
+| C4 5 GHz, NSS offload, up / down | 270 / 307 | 245-274 / 308-312 (three runs) |
+| C4 2.4 GHz, NSS offload, up / down | 37 / 51 | 48 / 57 |
+
+**Smoke:** `kmod-tun` from the build's signed index alone installs, loads and uninstalls;
+2 reboots clean (both APs within about 62 s, no warning, 43 MB available). Not re-run for
+v2.0.2: crash recovery (C9), power cuts, VLAN / PPPoE / QinQ, IPv6, host Wi-Fi mode and mesh,
+the station and rekey tests of v2.0.1, regulatory, NFC, buttons and LEDs. The multicast path
+his ECM change touches was not tested.
 
 ## v2.0.1
 

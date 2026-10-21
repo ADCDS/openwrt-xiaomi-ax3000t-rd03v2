@@ -20,6 +20,8 @@ port adds what follows: tree patches (`tree-patches/`, applied with `git am`), n
 | ath11k: host Wi-Fi mode no longer resets the board when a station associates (987). His NSS patch set rebuilds the 802.11 header from the RX descriptor through four driver functions it fills in for IPQ8074 and QCN9074 only, and his 10.15-2 runs host mode with ethernet decap too, so on IPQ5018 the first EAPOL frame called a NULL function. 987 uses the QCN9074 ones, which IPQ5018 already uses for every other descriptor field | `overlay/.../nss-extra/ath11k/999-999-rd03v2-987-*` | #47 |
 | Wi-Fi stays on the host path while a client (station) interface is configured. Under NSS Wi-Fi offload a station cannot send frames over about 860 bytes: uploads through a WISP or repeater uplink stall and its TX rate falls to 1 Mbit/s. `nss.general.wifi_offload_sta='1'` keeps the offload; ath11k loads once per boot, so a change needs a reboot (`nss-status` says so) | tree patch 0008 | #48 |
 | PTK rekeys become a disconnect and reconnect (`wpa_deny_ptk0_rekey`, default 1, AP and station interfaces). Neither radio can replace a pairwise key in place: a rekey stalled traffic for 16-31 s and ended in a deauth; with the option the outage is 0-1 s as an AP. `option wpa_deny_ptk0_rekey '0'` on a `wifi-iface` restores the in-place rekey | tree patch 0009 | #49, #13 |
+| libjson-c: the two json-c 0.19 object-cleanup fixes his 0.19-r2 lacks (json-c `3aa996b5` and `0c3a5a19`, as OpenWrt's `102f4eebca`, 0.19-r3). His r2 has the leak fix itself (json-c `f291fa81`), which makes a free real that `assert()` compiled out; these two keep it safe: the user-delete callback runs once, and the iterative cleanup no longer reads application userdata as a parent object. On v2.0.0 and v2.0.1 rpcd grew by about 175 KiB per LuCI login | tree patch 0010 | #50 |
+| libffi in the core tree, as OpenWrt main has it (`9b835ec626`). His CI built 10.19 with a packages feed from after libffi left it (the commit `feeds.lock` pins), but his tree predates its arrival in core, so that combination has no libffi. His image does not need it; ours does, through `i2c-tools`, whose `python3-smbus` builds the target python3. Goes when his tree merges it | tree patch 0011 | build |
 | ath11k: "pdev N successfully recovered" is logged outside ath11k's shared warning rate limit, which a crash's failed commands often use up; the watchdog's mesh rejoin reads that line (977) | `overlay/.../nss-extra/ath11k/999-999-rd03v2-977-*` | C9 |
 | AN8855: room for a second 802.1Q tag in the switch's RX length (0959e). A VLAN on a WAN VLAN (QinQ, `wan.20.30`) is `[20][30]` on the wire, 1526 bytes at MTU 1500; the switch dropped every such frame in both directions, offloaded or not, so QinQ carried no full-size packets | `overlay/target/linux/qualcommax/patches-6.18/0959e-*` | C3 (QinQ) |
 | LuCI, full `wpad-mbedtls`, `i2c-tools` (for the NFC tool) in the image. `kmod-tun`, `kmod-inet-diag` and `kmod-nft-tproxy`, in the v1.x image, are in our repository instead (`apk add`) | `config/rd03v2.config` | as v1.x |
@@ -39,7 +41,9 @@ Our ath11k patches go in `patches/nss-extra/ath11k` and sort after all of his th
 (`999-999-rd03v2-*`; that directory is applied after `patches/nss`), so each can be dropped on
 its own once his tree covers it.
 `tools/check-mac80211-series.sh` applies his whole mac80211 series plus ours without fuzz;
-OpenWrt itself would accept a fuzzy hunk.
+OpenWrt itself would accept a fuzzy hunk. The exception is a patch of his listed with its
+sha256 in `tools/mac80211-fuzz-reviewed.txt`, after a review of where it lands: since his
+10.19, three of his whose context OpenWrt's IPQ9574 support moved. Ours never qualify.
 
 ## Already in his tree (not carried)
 
@@ -61,6 +65,8 @@ OpenWrt itself would accept a fuzzy hunk.
   (his reworked user-PD stop); the frame-mode guard of #24 (his nss-tools passes `frame_mode=2`
   wherever it loads ath11k, `942926b47d`); and `/etc/board.json` in tmpfs (his wifi-scripts),
   which our former `81_rd03v2_board_json` worked around.
+- The json-c 0.19 leak in `json_object_put()` (#50): his libjson-c 0.19-r2 (json-c
+  `f291fa81`); tree patch 0010 adds the two follow-up fixes.
 - Board data: the calibration payloads the firmware loads are byte-identical in our v1.x
   `ipq-wifi` files, his tree and his image (both radios; ours only adds an alias without
   the variant), so his files are used as they are (C7).

@@ -55,6 +55,8 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
   and ended in a deauthentication. With the option the client reconnects instead, in about a
   second. As a client of an AP that rekeys, the router reconnects by itself, in about 5 s,
   instead of waiting for the AP to give up on the handshake.
+- **On v2.0.0 and v2.0.1, every LuCI login leaks about 175 KiB of `rpcd` memory** (json-c
+  0.19, #50), until `rpcd` restarts. Fixed in v2.0.2.
 - **No multi-day soak yet.** Memory held at 40-42 MB available through 100 minutes of Wi-Fi
   traffic, firmware-crash recoveries and driver reloads.
 - **2.4 GHz signal readings are checked to about ±10 dB only.** 5 GHz agrees with the test
