@@ -63,8 +63,9 @@ echo "build: $(( $(date +%s) - start )) s"
 python3 "$V2/tools/copy-repo-packages.py" "$TREE"
 (cd "$TREE" && make package/index >"$TREE/index.log" 2>&1) || die "make package/index failed"
 
-# 10. the beaconing -wifi installer pair, from this build (we hold the heavy-workload lock)
-V2_HEAVY_LOCK_HELD=1 JOBS=$JOBS "$V2/tools/wifi-initramfs-v2.sh" "$TREE" >"$TREE/wifi-initramfs.log" 2>&1 ||
+# 10. the beaconing -wifi installer pair, from this build (we hold the heavy-workload lock);
+# wifi-initramfs.sh takes 1 or 2 jobs, whatever the build used
+V2_HEAVY_LOCK_HELD=1 JOBS=$(( JOBS < 2 ? JOBS : 2 )) "$V2/tools/wifi-initramfs-v2.sh" "$TREE" >"$TREE/wifi-initramfs.log" 2>&1 ||
 	die "the -wifi installer pass failed (see $TREE/wifi-initramfs.log)"
 
 # 11. check what we built
