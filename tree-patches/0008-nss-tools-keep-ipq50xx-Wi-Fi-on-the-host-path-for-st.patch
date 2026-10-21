@@ -1,8 +1,8 @@
-From 7a021489cb1755e7f71a5f204ba16fb2fd6fa728 Mon Sep 17 00:00:00 2001
+From fbe71eb81dd1f05859d6a1c64b0ed59cf2ed2a63 Mon Sep 17 00:00:00 2001
 From: Adriel Santos <adriel@adriel.eu>
 Date: Sun, 18 Oct 2026 15:15:44 -0300
-Subject: [PATCH 1/2] nss-tools: keep ipq50xx Wi-Fi on the host path for
- station interfaces
+Subject: [PATCH] nss-tools: keep ipq50xx Wi-Fi on the host path for station
+ interfaces
 
 Under NSS Wi-Fi offload, a station (client) interface on the RD03v2
 (IPQ5018 + QCN6122, NSS firmware 12.5) cannot send frames larger than
@@ -31,11 +31,11 @@ Refs: ADCDS/openwrt-xiaomi-ax3000t-rd03v2#48
  4 files changed, 64 insertions(+), 4 deletions(-)
 
 diff --git a/package/nss/nss-tools/files/functions.sh b/package/nss/nss-tools/files/functions.sh
-index 609ce76368..0891ceeadb 100644
+index 57551b2360..36e7707e0e 100644
 --- a/package/nss/nss-tools/files/functions.sh
 +++ b/package/nss/nss-tools/files/functions.sh
-@@ -29,6 +29,45 @@ nss_mesh_state() {
- 	esac
+@@ -34,6 +34,45 @@ nss_mesh_state() {
+ 	return 0
  }
  
 +# Station (client) interfaces. Sets NSS_STA_CFG=1 when an enabled wireless
@@ -81,7 +81,7 @@ index 609ce76368..0891ceeadb 100644
  # it succeeds or the timeout elapses; returns the last status.
  poll_until() {
 diff --git a/package/nss/nss-tools/files/nss-dwmac-up b/package/nss/nss-tools/files/nss-dwmac-up
-index 99f4cb2380..cb45dd42eb 100644
+index 08e8ba7c46..039dd74ffb 100644
 --- a/package/nss/nss-tools/files/nss-dwmac-up
 +++ b/package/nss/nss-tools/files/nss-dwmac-up
 @@ -81,8 +81,8 @@ fi
@@ -116,7 +116,7 @@ index ac5bc28d9a..d88d733ded 100644
  	if [ "$(uci -q get nss.general.enabled)" = "0" ]; then
  		logger -t nss "NSS bring-up disabled via uci (nss.general.enabled=0), staying on the host stack"
 diff --git a/package/nss/nss-tools/files/nss-status b/package/nss/nss-tools/files/nss-status
-index 89c21d62a6..4c6c6bf84a 100755
+index 948d03de0a..164e966514 100755
 --- a/package/nss/nss-tools/files/nss-status
 +++ b/package/nss/nss-tools/files/nss-status
 @@ -60,6 +60,18 @@ for f in "$R"/sys/kernel/debug/ath11k/*/dbg_infra/links; do
@@ -138,18 +138,18 @@ index 89c21d62a6..4c6c6bf84a 100755
  fw_mask=$(cat "$GLUE/fw_mask" 2>/dev/null)
  # The dwmac glue prints the mask with %#lx, which renders an empty mask as a
  # bare "0" rather than "0x0".
-@@ -376,6 +388,7 @@ if [ "$JSON" = 1 ]; then
+@@ -381,6 +393,7 @@ if [ "$JSON" = 1 ]; then
  	"modules":{"bridge_mgr":$bridge_mgr,"pppoe":$pppoe_mgr},
  	"wifi_offload":$wifi_offload,
  	"mesh":{"configured":$mesh_cfg,"offloaded":$mesh_vdev,"fw_capable":$mesh_capable},
 +	"sta":{"configured":$sta_cfg,"needs_reboot":$sta_late},
  	"kernel_log":{"warns":$kwarns,"oopses":$koops},
- 	"sqm":{"active":$sqm_active,"device":"$sqm_dev","shaping_device":"$sqm_phys","lanes":$sqm_lanes,"igs":$ijson,
+ 	"sqm":{"enabled":$sqm_enabled,"active":$sqm_active,"device":"$sqm_dev","shaping_device":"$sqm_phys","lanes":$sqm_lanes,"igs":$ijson,
  	"shaper_fault":$sfjson,
-@@ -573,11 +586,14 @@ case "$wifi_offload" in
+@@ -578,11 +591,14 @@ case "$wifi_offload" in
  	        echo "  Wi-Fi:       host mode (mesh configured; firmware supports mesh offload - armed by nss-up)"
  	    elif [ "$mesh_cfg" = 1 ]; then
- 	        echo "  Wi-Fi:       host mode (mesh configured; mesh offload needs the 11.4 NSS firmware and a mesh-enabled build)"
+ 	        echo "  Wi-Fi:       host mode (mesh configured; this firmware or build has no NSS mesh offload)"
 +	    elif [ "$sta_cfg" = 1 ]; then
 +	        echo "  Wi-Fi:       host mode (client interface configured)"
  	    else

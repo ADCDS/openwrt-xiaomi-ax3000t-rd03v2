@@ -1,10 +1,10 @@
-# <feed> <commit>: his feeds-256m.buildinfo of ipq50xx-2026.10.15-2
-packages d5545ad20d449e1e853e043c72a07853f50ccd05
-luci b0cead459cfb434f2b2066e03f36c5bf39a583e7
+# <feed> <commit>: his feeds-256m.buildinfo of ipq50xx-2026.10.19
+packages 70ac3a84406cab03865c55be84de960af815436a
+luci 0a601b651af34ae4a83dd89f417dccdc474ec348
 routing 4b9891b9136259f93294a424507ed24c5e8c1cbd
 telephony 5d68d53c160a325ea9d03fce393e051573bcc736
 video 6917907d4d6c670cf85be525d23216595655061d
-nss 84e4f0c0e8eb6b580fc7ea130f1cb2c7090ca2ad
+nss a8e0e5cc073eb5d832dae84c7fcdd514078f7957
 # Not one of his feeds: build.sh adds it. Same pin as v1.x (branch v1); its sources are
 # pinned to commits by awg_pin in build.sh.
 amneziawg 03b62269e2edc168504f057cffaafda11b25ed92

@@ -9,8 +9,8 @@ NSS_URL=https://github.com/ADCDS/nss-packages.git
 UPSTREAM_URL=https://github.com/kuncy7/openwrt-nss-edma.git
 UPSTREAM_NSS_URL=https://github.com/kuncy7/nss-packages.git
 MIRROR=${V2_UPSTREAM_MIRROR:-${RD03V2_WS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/mirrors/openwrt-nss-edma.git}
-RELEASE=ipq50xx-2026.10.15-2
-COMMIT=dff118f8521d26d462e3e71335cd8e9bf9c959ac
+RELEASE=ipq50xx-2026.10.19
+COMMIT=900aedbd99676c884b09d3138ddc98cf7cd839d0
 # Where feeds.lock's commits come from: FEEDS_FROM names the feeds buildinfo his CI attached
 # to the release (the exact commits it built our board group with); without one, FEEDS_FROZEN_AT
 # freezes each feed at that time (tools/freeze-feeds.sh).
