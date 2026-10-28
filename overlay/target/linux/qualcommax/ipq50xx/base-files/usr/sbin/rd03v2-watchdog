@@ -28,9 +28,16 @@
 #      the root PD and both radios come back in a few seconds; see
 #      inplace_on() for why it is not the default);
 #   2. ath11k driver reload, both radios, as nss-dwmac-up loads it at boot -
-#      unless the uci option reload is 0. It needs smp2p patch 0918: without
-#      it the Q6 restart times out, which is why his NSS service
-#      (/etc/init.d/nss) calls a reload of ath11k on IPQ5018 "not an option";
+#      unless the uci option reload is 0, and only in host Wi-Fi mode. It
+#      needs smp2p patch 0918: without it the Q6 restart times out, which is
+#      why his NSS service (/etc/init.d/nss) calls a reload of ath11k on
+#      IPQ5018 "not an option". With NSS Wi-Fi offload the radios do come
+#      back, but not their data path: the NSS firmware keeps the state of the
+#      unloaded driver, and until a reboot no client or station completes a
+#      4-way handshake on either radio (an ath11k reset afterwards does not
+#      help). The radios look healthy, so the reload would end the chain on a
+#      box nobody can join. So once ath11k has run with offload in this boot,
+#      the chain goes on to the reboot;
 #   3. reboot.
 #
 # A root PD crash ("crash detected in q6wcss") is the kernel's to recover when
@@ -544,12 +551,29 @@ offload_now() {
 	fi
 }
 
+# Have ath11k's radios been probed with NSS Wi-Fi offload in this boot? Loading
+# ath11k_ahb again after that is what the NSS firmware does not survive (see
+# the top of this file); a first probe, in a boot where it never came up, is
+# fine. note_nss_probe records it at arming and on every sample.
+note_nss_probe() {
+	[ -e "$STATE_DIR/nss-probed" ] && return 0
+	if [ -d "$SYS/module/ath11k_ahb" ] && [ "$(offload_now)" = 1 ]; then
+		: > "$STATE_DIR/nss-probed"
+	fi
+	return 0
+}
+nss_reload_unsafe() {
+	note_nss_probe
+	[ -e "$STATE_DIR/nss-probed" ]
+}
+
 # Step 1 allowed? Only with uci inplace 1. With the user-PD respawn the reset
-# restarts the root PD and both radios come back in place. The driver reload stays the default
-# step: it rebuilds both radios from scratch and recovered every time it was
-# tested, while an earlier reset (before 979-981) once left the 2.4 GHz radio
-# beaconing and deaf to authentication. Never after a root PD crash: that one
-# is the kernel's (see sample()).
+# restarts the root PD and both radios come back in place. In host mode the driver
+# reload stays the default step: it rebuilds both radios from scratch and
+# recovered every time it was tested, while an earlier reset (before 979-981)
+# once left the 2.4 GHz radio beaconing and deaf to authentication. With NSS
+# offload there is no reload (see the top of this file). Never after a root PD
+# crash: that one is the kernel's (see sample()).
 inplace_on() {
 	[ "$ROOT_CRASH" = 1 ] && return 1
 	[ "$CFG_INPLACE" = 1 ]
@@ -997,7 +1021,7 @@ recovered() {
 dry_plan() {
 	dp_steps=""
 	inplace_on && ath11k_bound && dp_steps="ath11k reset of ${2% } -> "
-	[ "$CFG_RELOAD" = 1 ] && dp_steps="${dp_steps}ath11k reload (nss_offload=$(offload_now)) -> "
+	[ "$CFG_RELOAD" = 1 ] && ! nss_reload_unsafe && dp_steps="${dp_steps}ath11k reload (nss_offload=$(offload_now)) -> "
 	reboot_hold
 	dp_steps="${dp_steps}reboot${HOLD:+ (held: $HOLD)}"
 	log "DRY-RUN: would try, until the radios are healthy: $dp_steps"
@@ -1044,6 +1068,10 @@ handle() {
 	fi
 	if [ "$CFG_RELOAD" != 1 ]; then
 		give_up "$reason (driver reload off)" "$evid"
+		return
+	fi
+	if nss_reload_unsafe; then
+		give_up "$reason (a driver reload does not recover NSS Wi-Fi offload)" "$evid"
 		return
 	fi
 	try_driver_reload
@@ -1222,6 +1250,7 @@ arm() {
 	q6_rproc > /dev/null || log "no q6wcss remoteproc; watching the radios only"
 	suppressions_baseline
 	respawn_kernel && ar_respawn=1 || ar_respawn=0
+	note_nss_probe
 	touch "$STATE_DIR/armed"
 	log "armed (interval=${INTERVAL}s, rproc_limit=$STATE_BAD_LIMIT, freeze_limit=$FREEZE_LIMIT, radios: $(expected phys | tr '\n' ' '), nss_offload=$(offload_now), dryrun=$CFG_DRYRUN, inplace=$CFG_INPLACE, reload=$CFG_RELOAD, respawn=$ar_respawn)"
 }
@@ -1229,6 +1258,7 @@ arm() {
 # One sample, every INTERVAL seconds once armed.
 sample() {
 	load_config
+	note_nss_probe
 	q6_crash_events
 	if [ "$CFG_ENABLED" != 1 ] || [ -e "$DISABLE_FILE" ] || radios_intentionally_down; then
 		cancel_actions

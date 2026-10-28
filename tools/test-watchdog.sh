@@ -387,6 +387,13 @@ new_world() {
 	NSTEP=0
 }
 
+# host_mode: Wi-Fi on the host path (ath11k nss_offload=0, no NSS Wi-Fi plane),
+# where a driver reload is still a recovery step. Before board.
+host_mode() {
+	w offload 0; unw nss_started
+	printf "config nss 'general'\n\toption enabled '1'\n\toption wifi_offload '0'\n" > "$ROOT/etc/config/nss"
+}
+
 # step: one --check run (arms on the first of a boot, else one sample).
 step() {
 	NSTEP=$((NSTEP + 1))
@@ -430,12 +437,12 @@ sc_healthy() {  # nothing wrong: no incident, no action
 	refute calls 'wd '
 }
 
-sc_q6_crashed() {  # Q6 crashed: a reload cannot boot it (kept power reference), so reboot
-	new_world q6-crashed; wdconf 0; step; up 700; step
+sc_q6_crashed() {  # host mode, Q6 crashed: a reload cannot boot it (kept power reference), so reboot
+	new_world q6-crashed; host_mode; board; wdconf 0; step; up 700; step
 	w q6 crashed; board
 	steps 2
 	expect log 'detected: remoteproc not running: q6wcss=crashed'
-	expect log 'ath11k reset off \(inplace=auto, nss_offload=1\)'
+	expect log 'ath11k reset off \(inplace=auto, nss_offload=0\)'
 	expect calls 'wd wifi down'
 	expect calls 'wd rmmod ath11k_ahb'
 	expect calls 'wd rmmod ath11k$'
@@ -448,25 +455,35 @@ sc_q6_crashed() {  # Q6 crashed: a reload cannot boot it (kept power reference),
 	expect evid 'rebooting: '
 }
 
-sc_user_rmmod() {  # ath11k unloaded by hand: reloaded as nss-dwmac-up loads it, offload restored
-	new_world user-rmmod; wdconf 0; step; up 700; step
+sc_user_rmmod() {  # host mode, ath11k unloaded by hand: loaded again as nss-dwmac-up loads it
+	new_world user-rmmod; host_mode; board; wdconf 0; step; up 700; step
 	user rmmod ath11k_ahb; user rmmod ath11k
 	expect_world q6 offline
 	steps 2
 	expect log 'detected: remoteproc not running: q6wcss=offline'
-	expect log 'reloading ath11k \(nss_offload=1\)'
+	expect log 'reloading ath11k \(nss_offload=0\)'
 	refute calls 'wd rmmod'
 	expect calls 'wd modprobe ath11k$'
 	expect calls 'wd modprobe ath11k_ahb'
 	expect calls 'wd modprobe ath11k_pci'
 	expect calls 'wd wifi up$'
-	expect_world probe_offload 1
+	expect_world probe_offload 0
 	expect log 'RECOVERED in place via driver reload: remoteproc not running'
 	refute calls 'wd (insmod|reboot)'
 }
 
-sc_phy_missing() {  # a radio's phy gone: driver reload (offload on: no ath11k reset)
-	new_world phy-missing; wdconf 0; step; up 700; step
+sc_user_rmmod_nss() {  # NSS offload, ath11k unloaded by hand: a load would leave no handshake working, so reboot
+	new_world user-rmmod-nss; wdconf 0; step; up 700; step
+	user rmmod ath11k_ahb; user rmmod ath11k
+	steps 2
+	expect log 'detected: remoteproc not running: q6wcss=offline'
+	refute calls 'wd (rmmod|modprobe|insmod)'
+	expect log 'REBOOTING: remoteproc not running: q6wcss=offline \(a driver reload does not recover NSS Wi-Fi offload\)'
+	expect calls 'wd reboot $'
+}
+
+sc_phy_missing() {  # host mode, a radio's phy gone: driver reload (inplace unset: no ath11k reset)
+	new_world phy-missing; host_mode; board; wdconf 0; step; up 700; step
 	w nophy_b00a040.wifi; w heal_reload; board
 	steps 2
 	expect log 'detected: radio missing: b00a040.wifi\(no phy\)'
@@ -477,8 +494,8 @@ sc_phy_missing() {  # a radio's phy gone: driver reload (offload on: no ath11k r
 	refute calls 'wd reboot'
 }
 
-sc_iface_lost() {  # interfaces gone while netifd wants them up: driver reload
-	new_world iface-lost; wdconf 0; step; up 700; step
+sc_iface_lost() {  # host mode, interfaces gone while netifd wants them up: driver reload
+	new_world iface-lost; host_mode; board; wdconf 0; step; up 700; step
 	w noif_c000000.wifi; w heal_reload; board
 	steps 3
 	refute log 'detected'
@@ -506,8 +523,8 @@ sc_radio_disabled() {  # radio disabled in /etc/config/wireless: not an incident
 	refute calls 'wd '
 }
 
-sc_stopped_radio_kept_down() {  # wifi down radio0, then radio1 freezes: the reload leaves radio0 down
-	new_world stopped-radio; wdconf 0; step; up 700; step
+sc_stopped_radio_kept_down() {  # host mode, wifi down radio0, then radio1 freezes: the reload leaves radio0 down
+	new_world stopped-radio; host_mode; board; wdconf 0; step; up 700; step
 	user wifi down radio0
 	steps 2
 	expect log 'c000000.wifi was taken down on purpose'
@@ -522,8 +539,8 @@ sc_stopped_radio_kept_down() {  # wifi down radio0, then radio1 freezes: the rel
 	expect_world autostart_radio0 false
 }
 
-sc_freeze() {  # survey frozen, no stations: driver reload with offload on
-	new_world freeze; wdconf 0; step; up 700; step
+sc_freeze() {  # host mode, survey frozen, no stations: driver reload
+	new_world freeze; host_mode; board; wdconf 0; step; up 700; step
 	w frozen_c000000.wifi; w heal_reload
 	steps 3
 	refute log 'detected'
@@ -531,6 +548,19 @@ sc_freeze() {  # survey frozen, no stations: driver reload with offload on
 	expect log 'detected: survey freeze: phy0-ap0\(active=[0-9]+\)'
 	refute calls 'debugfs'
 	expect log 'RECOVERED in place via driver reload: survey freeze'
+}
+
+sc_freeze_nss() {  # NSS offload, survey frozen: no reload (NSS does not survive it), a reboot
+	new_world freeze-nss; wdconf 0; step; up 700; step
+	w frozen_c000000.wifi; w heal_reload
+	until_log 'detected' 6
+	expect log 'detected: survey freeze: phy0-ap0\(active=[0-9]+\)'
+	expect log 'ath11k reset off \(inplace=auto, nss_offload=1\)'
+	refute calls 'wd (wifi|rmmod|modprobe|debugfs)'
+	expect log 'REBOOTING: survey freeze:.*\(a driver reload does not recover NSS Wi-Fi offload\) \(evidence'
+	expect calls 'wd reboot $'
+	evidence > "$ROOT/evid"
+	expect evid 'in-place recovery failed: .*a driver reload does not recover NSS Wi-Fi offload'
 }
 
 sc_freeze_rx() {  # survey frozen but stations passing frames: no incident
@@ -580,14 +610,14 @@ sc_inplace_auto_respawn() {  # 975, uci inplace 1, no offload: one reset recover
 	expect log 'RECOVERED in place via ath11k reset'
 	refute calls 'wd (rmmod|modprobe|reboot)'
 }
-sc_inplace_auto_respawn_nss() {  # 975, offload on, inplace unset: no ath11k reset, a reload
+sc_inplace_auto_respawn_nss() {  # 975, offload on, inplace unset: no ath11k reset, no reload: a reboot
 	new_world inplace-auto-respawn-nss; w respawn; board; wdconf 0; step; up 700; step
 	expect log 'armed .*nss_offload=1, .*respawn=1\)'
 	w frozen_c000000.wifi; w frozen_b00a040.wifi; w heal_reload
 	until_log 'detected' 6
 	expect log 'ath11k reset off \(inplace=auto, nss_offload=1\)'
-	refute calls 'wd debugfs'
-	expect log 'RECOVERED in place via driver reload'
+	refute calls 'wd (debugfs|rmmod|modprobe)'
+	expect log 'REBOOTING: .*\(a driver reload does not recover NSS Wi-Fi offload\)'
 }
 sc_inplace_forced() {  # uci inplace 1 with offload on: the ath11k reset is tried first
 	new_world inplace-forced; wdconf 0 1; step; up 700; step
@@ -638,8 +668,8 @@ sc_min_uptime() {  # incident in the first 10 min: evidence and log only
     no evidence file"
 }
 
-sc_hold_after_watchdog_boot() {  # after a watchdog reboot, one radio serving: reboot held until 1 h
-	new_world hold; wdconf 0
+sc_hold_after_watchdog_boot() {  # host mode, after a watchdog reboot, one radio serving: reboot held until 1 h
+	new_world hold; host_mode; board; wdconf 0
 	mkdir -p "$ROOT/overlay/rd03v2-watchdog"; echo "earlier incident" > "$ROOT/overlay/rd03v2-watchdog/rebooted"
 	step; up 900
 	[ -f "$ROOT/tmp/rd03v2-watchdog/watchdog-boot" ] || FAILS="$FAILS
@@ -668,8 +698,8 @@ sc_dead_reboot() {  # after a watchdog reboot, no radio serving: the 10 min suff
     dead-reboots is not 1"
 }
 
-sc_dead_reboot_cap() {  # ...but not a 4th time in a row: held, and ath11k put back meanwhile
-	new_world dead-cap; wdconf 0
+sc_dead_reboot_cap() {  # host mode, ...but not a 4th time in a row: held, and ath11k put back meanwhile
+	new_world dead-cap; host_mode; board; wdconf 0
 	mkdir -p "$ROOT/overlay/rd03v2-watchdog"; echo x > "$ROOT/overlay/rd03v2-watchdog/rebooted"
 	echo 3 > "$ROOT/overlay/rd03v2-watchdog/dead-reboots"
 	step; up 700; step
@@ -690,10 +720,10 @@ sc_dryrun_option() {  # the dry-run option: evidence and a plan, nothing done
 	expect log 'armed .*dryrun=1, inplace=auto, reload=1'
 	w frozen_c000000.wifi
 	until_log 'detected' 6
-	expect log 'DRY-RUN: would try, until the radios are healthy: ath11k reload \(nss_offload=1\) -> reboot$'
+	expect log 'DRY-RUN: would try, until the radios are healthy: reboot$'
 	refute calls 'wd '
 	evidence > "$ROOT/evid"
-	expect evid 'dry run, nothing done; would try: ath11k reload'
+	expect evid 'dry run, nothing done; would try: reboot'
 	expect evid 'config: dryrun=1 inplace=auto reload=1'
 	# the fault stays: reported again, but only after the dry-run pause
 	_n=0
@@ -804,7 +834,7 @@ sc_respawn_suppressed() {  # 975 left the user PDs down after repeated crashes: 
 	refute calls 'wd reboot'
 }
 sc_root_crash_running() {
- new_world root-running; wdconf 0 1; step; up 700; step
+ new_world root-running; host_mode; board; wdconf 0 1; step; up 700; step
  w frozen_c000000.wifi; w frozen_b00a040.wifi; w heal_reload; board
  echo '[ 701.123456] remoteproc remoteproc0: crash detected in q6wcss: type fatal error' >> "$ROOT/world/dmesg"
  step
@@ -856,7 +886,7 @@ sc_q6_policy_missing() {
 	[ "$_rc" = 1 ] || FAILS="$FAILS absent Q6 policy unexpectedly succeeded"
 }
 sc_root_crash_dryrun_retained() {
-	new_world root-dryrun; wdconf 1; step; up 700; step
+	new_world root-dryrun; host_mode; board; wdconf 1; step; up 700; step
 	echo '[ 701.000001] remoteproc remoteproc0: crash detected in q6wcss: type fatal error' >> "$ROOT/world/dmesg"
 	step
 	refute calls 'wd (wifi|rmmod|modprobe|reboot|debugfs)'
@@ -865,7 +895,7 @@ sc_root_crash_dryrun_retained() {
 	expect log 'RECOVERED in place via driver reload'
 }
 sc_root_crash_early() {
- new_world root-early; wdconf 0; step
+ new_world root-early; host_mode; board; wdconf 0; step
  echo '[ 150.000001] remoteproc remoteproc0: crash detected in q6wcss: type fatal error' >> "$ROOT/world/dmesg"
  up 200; step
  refute calls 'wd '
@@ -893,7 +923,7 @@ sc_running_disable_file() {
  [ ! -e "$ROOT/tmp/rd03v2-watchdog/reboot-pending" ] || FAILS="$FAILS held reboot remains after disable"
 }
 sc_crash_log_wrap() {
- new_world log-wrap; wdconf 0; step; up 700; step; w heal_reload
+ new_world log-wrap; host_mode; board; wdconf 0; step; up 700; step; w heal_reload
  echo '[ 701.000001] remoteproc remoteproc0: crash detected in q6wcss: type fatal error' > "$ROOT/world/dmesg"
  step; _before=$(count calls 'wd rmmod ath11k_ahb')
  echo '[ 100.000001] remoteproc remoteproc0: crash detected in q6wcss: type fatal error' > "$ROOT/world/dmesg"
@@ -904,8 +934,8 @@ sc_crash_log_wrap() {
  [ "$(count calls 'wd rmmod ath11k_ahb')" -gt "$_before" ] || FAILS="$FAILS new wrapped crash missed"
 }
 
-SCENARIOS="same_boot_receipt q6_policy_by_name q6_policy_invalid q6_policy_missing root_crash_dryrun_retained root_crash_running root_crash_respawned root_crash_respawn_nss root_crash_respawn_failed respawn_suppressed root_crash_early pending_to_dryrun running_disable_file crash_log_wrap healthy q6_crashed user_rmmod phy_missing iface_lost wifi_down radio_disabled
-stopped_radio_kept_down freeze freeze_rx offload_off_reset inplace_unset_host inplace_auto_respawn inplace_auto_respawn_nss inplace_forced reload_off rate_limit
+SCENARIOS="same_boot_receipt q6_policy_by_name q6_policy_invalid q6_policy_missing root_crash_dryrun_retained root_crash_running root_crash_respawned root_crash_respawn_nss root_crash_respawn_failed respawn_suppressed root_crash_early pending_to_dryrun running_disable_file crash_log_wrap healthy q6_crashed user_rmmod user_rmmod_nss phy_missing iface_lost wifi_down radio_disabled
+stopped_radio_kept_down freeze freeze_nss freeze_rx offload_off_reset inplace_unset_host inplace_auto_respawn inplace_auto_respawn_nss inplace_forced reload_off rate_limit
 min_uptime hold_after_watchdog_boot dead_reboot dead_reboot_cap shipped_default dryrun_option dryrun_offload_off
 disabled_file disabled_uci setup_failed no_wifi never_registers"
 
