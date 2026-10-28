@@ -35,6 +35,20 @@ for p in "$V2"/tree-patches/*.patch; do
 		sed 's/^Subject: \[PATCH[^]]*\] //')
 	chk "tree patch applied: $s" "$(grep -cxF "$s" <<<"$applied")" 1
 done
+# json-c object-cleanup fixes (#50) and libffi in the core tree: OpenWrt's 102f4eebca and
+# 9b835ec626, in his tree since his merge of OpenWrt main of 2026-10-21 (715267912c); our
+# former tree patches 0010 and 0011, kept as checks that his tree still provides them (blob ids
+# pinned, so an upstream change fails here for review)
+chk "his tree: json-c 003 user-delete fix (former 0010)" \
+	"$(git -C "$TREE" rev-parse "$COMMIT:package/libs/libjson-c/patches/003-clear-user-delete-after-calling-it.patch" 2>/dev/null)" \
+	550294e16ac0136c5ad47ccedef7fcb787efa895
+chk "his tree: json-c 004 userdata cleanup fix (former 0010)" \
+	"$(git -C "$TREE" rev-parse "$COMMIT:package/libs/libjson-c/patches/004-clear-userdata-during-object-cleanup.patch" 2>/dev/null)" \
+	8698b3eb5e0e3f09ff0f56ea2b649aa4d57bc0db
+chk "his tree: libffi in the core tree (former 0011)" \
+	"$(git -C "$TREE" rev-parse "$COMMIT:package/libs/libffi/Makefile" 2>/dev/null)" \
+	3a13f71c028bb4bdeff52b10c8a8b5f25aec85e6
+chk "libffi comes from the core tree only" "$(ls -d "$TREE"/package/feeds/*/libffi 2>/dev/null | wc -l)" 0
 grep -vE '^\s*(#|$)' "$V2/feeds.lock" | while read -r name rev; do
 	[ "$(git -C "$TREE/feeds/$name" rev-parse HEAD 2>/dev/null)" = "$rev" ] && echo "PASS feed $name" || echo "FAIL feed $name"
 done > "$W/feeds"; cat "$W/feeds"; fail=$((fail + $(grep -c '^FAIL' "$W/feeds")))
@@ -46,6 +60,8 @@ for c in CONFIG_ATH11K_MEM_PROFILE_256M=y CONFIG_NSS_MEM_PROFILE_LOW=y CONFIG_AT
 	CONFIG_NSS_FIRMWARE_VERSION_12_5=y; do
 	chk "$c" "$(grep -cxF "$c" "$TREE/.config")" 1
 done
+chk "libffi staged for the target python3 (former 0011)" \
+	"$(ls "$TREE"/staging_dir/target-*/usr/include/ffi.h 2>/dev/null | wc -l)" 1
 LX=$(ls -d "$TREE"/build_dir/target-*/linux-qualcommax_ipq50xx/linux-[0-9]* 2>/dev/null | head -1)
 KC=$LX/.config
 if [ -f "$KC" ]; then
@@ -111,6 +127,11 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 	# tree patch 0007)
 	chk "nss-dwmac-up retries a radio left down" \
 		"$(grep -cF 'asking netifd to set it up again' "$X/usr/sbin/nss-dwmac-up")" 1
+	# the image's json-c carries the #50 fixes (0.19-r3 or later; former tree patch 0010)
+	jc=$(sed -n 's/^libjson-c5 - //p' "$M")
+	case "$("$TREE/staging_dir/host/bin/apk" version -t "${jc:-0}" 0.19-r3 2>/dev/null)" in
+	'>'|'=') jc_ok=yes ;; *) jc_ok=no ;; esac
+	chk "image libjson-c5 $jc is 0.19-r3 or later (former 0010)" "$jc_ok" yes
 	chk "RD03v2 keeps basic station statistics by default (0005)" \
 		"$(grep -cF 'stats_disable_default=0' "$X/etc/init.d/qca-nss-pbuf")" 1
 	chk "statistics policy preserves explicit UCI override" \

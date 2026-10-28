@@ -1,9 +1,14 @@
 From: Adriel Santos <adriel@adriel.eu>
 Subject: [PATCH] wifi: ath11k: advertise buffer bytes in host RX filters
 
-The 256M profile has 512 refill-ring entries and 2048-byte host buffers.
-HTT rx_buf_size is a byte count. Correct host and monitor filters without
-changing ring entries, the compact NSS branch, or memory profiles.
+HTT rx_buf_size is a byte count, but the host and monitor RX filters pass
+DP_RXDMA_REFILL_RING_SIZE, a name that reads as a ring size. Under kuncy7's
+256M profile it was 512 until his c36db6321c, so the firmware was told
+512-byte buffers for 2048-byte ones (garbled host-path EAPOL, "invalid msdu
+len 16383"). He has since put the constant back to 2048 in every profile,
+so this no longer changes a value: it keeps the byte count explicit
+(DP_RX_BUFFER_SIZE) at the call sites, without touching ring entries, the
+compact NSS branch or the memory profiles.
 
 ---
 diff --git a/drivers/net/wireless/ath/ath11k/dp_rx.c b/drivers/net/wireless/ath/ath11k/dp_rx.c

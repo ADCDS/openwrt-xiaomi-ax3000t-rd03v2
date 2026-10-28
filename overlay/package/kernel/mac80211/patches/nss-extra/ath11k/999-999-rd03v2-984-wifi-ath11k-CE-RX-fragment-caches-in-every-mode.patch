@@ -1,0 +1,55 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: CE RX fragment caches in every mode, drained under ce_lock
+
+kuncy7's 999-997 gives each CE pipe its own RX page-frag cache, but only
+while the NSS 256 MiB profile is active (ab->nss.enabled). Host-mode Wi-Fi
+(nss_offload=0, forced with a station interface) keeps dev_alloc_skb() and
+the shared per-CPU chunks that ring buffers pin for minutes. Use the private
+cache in every mode, as rd03v2's former 984 did.
+
+999-997 drains the cache without ce_lock. The RX replenish timer is not
+stopped by ath11k_pcic_stop() (QCN6122) nor by
+ath11k_core_reconfigure_on_crash(), and it refills through
+ath11k_ce_rx_post_pipe(), which allocates from the same cache under
+ce_lock. page_frag_cache has no locking of its own, so take ce_lock around
+the drain too.
+
+---
+--- a/drivers/net/wireless/ath/ath11k/ce.c
++++ b/drivers/net/wireless/ath/ath11k/ce.c
+@@ -329,9 +329,6 @@
+ 	unsigned int len;
+ 	void *data;
+ 
+-	if (!ath11k_nss_256m_enabled(pipe->ab))
+-		return dev_alloc_skb(pipe->buf_sz);
+-
+ 	lockdep_assert_held(&pipe->ab->ce.ce_lock);
+ 
+ 	len = SKB_HEAD_ALIGN(pipe->buf_sz + NET_SKB_PAD);
+@@ -904,8 +901,13 @@
+ 		dev_kfree_skb_any(skb);
+ 	}
+ 
+-	/* Also when NSS was turned off for recovery: no-op if unused */
++	/* page_frag_alloc() on this cache runs under ce_lock, and the RX
++	 * replenish timer can still refill the pipe here: ath11k_pcic_stop()
++	 * and the crash path do not stop it. Drain under the same lock.
++	 */
++	spin_lock_bh(&ab->ce.ce_lock);
+ 	page_frag_cache_drain(&pipe->rx_frag_cache);
++	spin_unlock_bh(&ab->ce.ce_lock);
+ }
+ 
+ static void ath11k_ce_shadow_config(struct ath11k_base *ab)
+--- a/drivers/net/wireless/ath/ath11k/ce.h
++++ b/drivers/net/wireless/ath/ath11k/ce.h
+@@ -182,7 +182,7 @@
+ 	struct ath11k_ce_ring *dest_ring;
+ 	struct ath11k_ce_ring *status_ring;
+ 	u64 timestamp;
+-	/* NSS 256 MiB profile: RX buffers of this pipe only, under ce_lock */
++	/* RX buffers of this pipe only, in every mode; under ce_lock */
+ 	struct page_frag_cache rx_frag_cache;
+ };
+ 

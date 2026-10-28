@@ -17,6 +17,9 @@ helper = re.search(r'void ath11k_nss_ext_rx_stats\([^}]+?if \(ab->nss.enabled\)\
                    r'tlv_filter->rx_filter \|= ([^;]+);\s*else\s*'
                    r'tlv_filter->rx_filter \|= ([^;]+);', nss)
 hw = (root / 'hw.c').read_text()
+hw_header, ce = (root / 'hw.h').read_text(), (root / 'ce.c').read_text()
+ce_alloc = re.search(r'static struct sk_buff \*ath11k_ce_rx_alloc_skb\(.*?\n\}', ce, re.S)
+ce_alloc = ce_alloc[0] if ce_alloc else ''
 ipq5018 = re.search(r'const struct ath11k_hw_ops ipq5018_ops = \{(.*?)\n\};', hw, re.S)
 ipq5018 = ipq5018[1] if ipq5018 else ''
 dot11_called = [op for op in ('rx_desc_get_mpdu_frame_ctl', 'rx_desc_dot11_hdr_fields_valid',
@@ -51,7 +54,23 @@ checks = [
     ('monitor status buffer uses bytes', bool(re.search(r'HAL_RXDMA_MONITOR_STATUS,\s+DP_RX_BUFFER_SIZE,', tx))),
     ('host buffer remains 2048 bytes', bool(re.search(r'#define\s+DP_RX_BUFFER_SIZE\s+2048\b', header))),
     ('compact NSS buffer remains 1816 bytes', bool(re.search(r'#define\s+ATH11K_DP_RXDMA_NSS_REFILL_RING_SIZE\s+1816\b', profiles))),
-    ('low-memory ring remains 512 entries', bool(re.search(r'#define\s+ATH11K_DP_RXDMA_REFILL_RING_SIZE\s+512\b', profiles))),
+    # ATH11K_DP_RXDMA_REFILL_RING_SIZE is a buffer length (HTT rx_buf_size), not a ring size;
+    # his c36db6321c put it back to 2048 in every profile
+    ('refill buffer length is 2048 bytes in every profile',
+     set(re.findall(r'#define\s+ATH11K_DP_RXDMA_REFILL_RING_SIZE\s+(\d+)', hw_header)) == {'2048'}),
+    ('256M RXDMA buffer ring remains 512 entries', bool(re.search(
+        r'#ifdef CPTCFG_ATH11K_MEM_PROFILE_256M\s*#define\s+DP_RXDMA_BUF_RING_SIZE\s+512\b', header))),
+    ('QCN6122 RXDMA ring and NSS RX pool are 1024 entries (999-9901)',
+     bool(re.search(r'#define\s+DP_RXDMA_BUF_RING_SIZE_QCN6122\s+1024\b', header))
+     and 'dp->mac_id, ATH11K_DP_RXDMA_BUF_RING_SIZE(ab));' in rx
+     and 'WIFILI_RX_DESC_POOL_WEIGHT * ATH11K_DP_RXDMA_BUF_RING_SIZE(ab);' in nss),
+    ('TX completion filter reads the HTT status at byte 8 (244a)',
+     'status_desc = (void *)desc + HTT_TX_WBM_COMP_STATUS_OFFSET;' in tx
+     and '((struct htt_tx_wbm_completion *)desc) + HTT_TX_WBM_COMP_STATUS_OFFSET' not in tx),
+    ('CE RX fragment cache used in every mode (984 on 999-997)',
+     'page_frag_alloc(&pipe->rx_frag_cache' in ce_alloc and 'ath11k_nss_256m_enabled' not in ce_alloc),
+    ('CE RX fragment cache drained under ce_lock (984)', bool(re.search(
+        r'spin_lock_bh\(&ab->ce\.ce_lock\);\s*page_frag_cache_drain\(&pipe->rx_frag_cache\);', ce))),
     # his NSS set (999-233) rebuilds the 802.11 header from the RX descriptor through these ops
     # and calls them unguarded; a NULL one in ipq5018_ops oopses on the first EAPOL frame in
     # host Wi-Fi mode (987, rd03v2 #47)
