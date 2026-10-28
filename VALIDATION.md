@@ -250,16 +250,31 @@ On it, with the station on the NSS path unless noted:
 | A client's MAC moves from Wi-Fi to a LAN port and back (his DSA host FDB change) | traffic within 1 s each way, the bridge follows, no switch error |
 | Reboots | 2, everything up within about 63 s |
 
-Then the release itself, `verify-v2` 170 / 170, installed from the assets `mkrelease-v2`
-assembled (the same RAM-installer path, settings kept): 47 / 47 configuration files
-byte-identical, NSS with the station, both APs, no warning, the watchdog byte-identical to
-the source. UDP 20 Mbit/s for 30 s into the 5 GHz client: no loss, no assert; an assert on
-5 GHz recovered in place in 8.4 s. The watchdog's new step, end to end: with offload on,
-ath11k unloaded by hand; the watchdog detected the missing radios, did not reload, logged
-"REBOOTING: ... (a driver reload does not recover NSS Wi-Fi offload)" and rebooted; after it
-everything was back (NSS, station, both APs, 237 / 323 Mbit/s on 5 GHz). Its incident file
-gives the health as "healthy" there: no health check runs when the reload is skipped, as with
-`reload '0'`.
+Then a build with everything but the #53 fix (990), `verify-v2` 170 / 170, installed from
+its assets the same way: 47 / 47 configuration files byte-identical, NSS with the station,
+both APs, no warning. UDP 20 Mbit/s for 30 s into the 5 GHz client: no loss, no assert; an
+assert on 5 GHz recovered in place in 8.4 s. The watchdog's new step, end to end: with
+offload on, ath11k unloaded by hand; the watchdog detected the missing radios, did not
+reload, logged "REBOOTING: ... (a driver reload does not recover NSS Wi-Fi offload)" and
+rebooted; after it everything was back (NSS, station, both APs, 237 / 323 Mbit/s on 5 GHz).
+Its incident file gives the health as "healthy" there: no health check runs when the reload
+is skipped, as with `reload '0'`.
+
+Then the release itself, which adds 990 and nothing else to that image (the watchdog
+byte-identical), `verify-v2` 171 / 171, installed from the assets `mkrelease-v2` assembled
+(the same path, settings kept): 47 / 47 configuration files byte-identical, NSS with the
+station, both APs, no warning, 41 MB available.
+
+| Check | Result |
+|---|---|
+| #53, a client fragmenting at 256 bytes on 2.4 GHz | the fragment register holds 7; 2000 / 2000 pings of 1000 B, 0-2 % loss at 300-1472 B, 500 / 500 bridged to a wired host, 200 / 200 of 3000 B, a 10.5 Mbit/s upload, 3 reconnects; 157,459 fragments reassembled into 23,205 frames, `REO2FW_DEST_RING` empty |
+| #52, UDP 20 Mbit/s for 60 s into a client | 2.4 GHz and 5 GHz: 125,000 packets each, no loss, no assert; the same on 5 GHz in host mode |
+| C9, assert on 5 GHz | in place in 8.5 s |
+| C9, assert or hw-restart on 2.4 GHz (restarts both radios) | in place in 8.4-8.6 s. With a second client on the 2.4 GHz AP, 4 runs of 5 took 32.6-34.6 s: the 5 GHz client kept an association that carried nothing until hostapd's inactivity check dropped it, and it rejoined at once. The same with that client not fragmenting, so not 990; not checked on the build without it |
+| C4, client to a wired host | 234 / 322 Mbit/s on 5 GHz, 36.5 / 58.4 on 2.4 GHz |
+| Reboot | everything up at 85 s |
+| Host mode | the fragment register holds 0, fragments reach the exception ring, no stall; fragmented frames arrive late or not at all (1-100 % loss by run); memory settles at 34 MB |
+| Back to NSS, reboot | everything up, no warning |
 
 ## v2.0.2
 
