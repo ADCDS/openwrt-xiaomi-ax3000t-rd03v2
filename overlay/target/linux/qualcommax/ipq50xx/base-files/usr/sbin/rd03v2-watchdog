@@ -529,12 +529,23 @@ wifi_up() {
 	done
 }
 
+# Wi-Fi offload as nss-dwmac-up decides it at boot: its helper in
+# /lib/nss/functions.sh (nss_dwmac_wifi_offload), or wifi_offload alone where
+# an image has no such helper.
+nss_wifi_planned() {
+	if grep -q '^nss_dwmac_wifi_offload()' "$R/lib/nss/functions.sh" 2>/dev/null; then
+		( . "$R/lib/nss/functions.sh"; nss_dwmac_wifi_offload; [ "$NSS_WIFI_OFFLOAD" = 1 ] )
+	else
+		[ "$(uci -q get nss.general.wifi_offload)" = 1 ]
+	fi
+}
+
 # NSS Wi-Fi offload as this boot loaded ath11k: the module parameter while
 # ath11k is loaded (nss-dwmac-up writes it between loading ath11k and
 # ath11k_ahb), remembered for when it is not - an unload takes
 # /sys/module/ath11k with it. Before ath11k has been seen at all, what
-# nss-dwmac-up would decide: wifi_offload on, NSS not disabled, and the
-# firmware plane started.
+# nss-dwmac-up would decide: its own helper (wifi_offload, and a station with
+# wifi_offload_sta off), NSS not disabled, and the firmware plane started.
 offload_now() {
 	if [ -r "$NSSOFF" ]; then
 		case "$(cat "$NSSOFF" 2>/dev/null)" in 1|Y|y) echo 1 ;; *) echo 0 ;; esac \
@@ -542,7 +553,7 @@ offload_now() {
 	fi
 	if [ -s "$STATE_DIR/nss_offload" ]; then
 		cat "$STATE_DIR/nss_offload"
-	elif [ "$(uci -q get nss.general.wifi_offload)" = 1 ] &&
+	elif nss_wifi_planned &&
 	     [ "$(uci -q get nss.general.enabled)" != 0 ] &&
 	     grep -q started "$SYS/kernel/debug/qca-dwmac-nss/status" 2>/dev/null; then
 		echo 1
@@ -1071,6 +1082,7 @@ handle() {
 		return
 	fi
 	if nss_reload_unsafe; then
+		HEALTH_REASON='not checked (no driver reload with NSS Wi-Fi offload)'
 		give_up "$reason (a driver reload does not recover NSS Wi-Fi offload)" "$evid"
 		return
 	fi

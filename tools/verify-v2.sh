@@ -140,8 +140,25 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 	# the NSS path; nss.general.wifi_offload_sta=0 keeps Wi-Fi on the host path (#48 escape hatch)
 	chk "one Wi-Fi path decision for the service and nss-dwmac-up (0008)" \
 		"$(grep -lF 'nss_dwmac_wifi_offload' "$X/lib/nss/functions.sh" "$X/etc/init.d/nss" "$X/usr/sbin/nss-dwmac-up" 2>/dev/null | wc -l)" 3
-	chk "a station stays on the NSS path unless wifi_offload_sta=0 (0008)" \
-		"$(grep -cF '[ "$(uci -q get nss.general.wifi_offload_sta)" = 0 ] || return 0' "$X/lib/nss/functions.sh")" 1
+	# run the image's helper against a stub uci: one station configured, wifi_offload on,
+	# wifi_offload_sta unset / on / off in each spelling
+	cat > "$W/sta-opt.sh" <<'EOS'
+. "$1"
+uci() {
+	case "$*" in
+	'-q get nss.general.wifi_offload') echo 1 ;;
+	'-q get nss.general.wifi_offload_sta') [ -n "$V" ] && echo "$V" || return 1 ;;
+	'-q -X show wireless') echo "wireless.s1.mode='sta'" ;;
+	'-q get wireless.s1.device') echo radio1 ;;
+	*) return 1 ;;
+	esac
+}
+r=''
+for V in '' 1 yes 0 no off false disabled; do nss_dwmac_wifi_offload; r="$r$NSS_WIFI_OFFLOAD"; done
+echo "$r"
+EOS
+	chk "a station stays on the NSS path unless wifi_offload_sta is off, in any spelling (0008)" \
+		"$(sh "$W/sta-opt.sh" "$X/lib/nss/functions.sh" 2>&1)" 11100000
 	chk "NSS script syntax" \
 		"$(yes_ sh -c 'for f; do sh -n "$f" || exit 1; done' _ "$X/lib/nss/functions.sh" "$X/etc/init.d/nss" "$X/usr/sbin/nss-dwmac-up" "$X/usr/sbin/nss-status")" yes
 	# PTK0 rekey becomes a reconnect by default, AP and station (0009, #49)
@@ -210,11 +227,12 @@ fp() {  # fp <patch> <source dir>
 	l=$(grep -E '^\+[^+]' "$1" | cut -c2- | awk '{ if (length($0) > length(best)) best = $0 } END { print best }')
 	[ -n "$l" ] && grep -rqF -- "$l" "$2" && echo yes || echo no
 }
-BP=$(ls -d "$TREE"/build_dir/target-*/linux-qualcommax_ipq50xx/backports-[0-9]* 2>/dev/null | head -1)
+# Always re-apply the series, strictly, in scratch: the package build directory is gone after
+# compiling (his CI config sets AUTOREMOVE), and a prepared one may hold local extra patches.
+# That the series went into the build shows in the shipped ath11k.ko (the 964 immediates
+# above), since a patch that fails stops the build.
+BP=""
 if [ -z "$BP" ]; then
-	# His CI config sets AUTOREMOVE, which deletes package build directories after compiling.
-	# Re-apply the series instead, strictly; that it went into the build shows in the shipped
-	# ath11k.ko (the 964 immediates above), since a patch that fails stops the build.
 	if "$V2/tools/check-mac80211-series.sh" "$TREE" "$W/mac80211" > "$W/mac80211.log" 2>&1; then
 		BP=$W/mac80211/src
 		echo "INFO mac80211: build directory removed (AUTOREMOVE); $(tail -1 "$W/mac80211.log" | cut -d';' -f1)"

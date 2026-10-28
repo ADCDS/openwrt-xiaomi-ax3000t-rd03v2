@@ -794,6 +794,21 @@ sc_never_registers() {  # radios configured but ath11k never came up in this boo
 }
 
 
+sc_never_registers_sta_host() {  # ath11k never loaded this boot, a station and wifi_offload_sta 0: loaded on the host path, as nss-dwmac-up would
+	new_world never-registers-sta-host; wdconf 0
+	w core unloaded; w drv unloaded; w q6 offline; w heal_reload
+	printf "config nss 'general'\n\toption enabled '1'\n\toption wifi_offload '1'\n\toption wifi_offload_sta '0'\n" > "$ROOT/etc/config/nss"
+	printf "\nconfig wifi-iface 'wwan'\n\toption device 'radio1'\n\toption mode 'sta'\n\toption network 'wwan'\n" >> "$ROOT/etc/config/wireless"
+	mkdir -p "$ROOT/lib/nss"; cp "$RFS/lib/nss/functions.sh" "$ROOT/lib/nss/"
+	board
+	step
+	up 700; steps 2
+	expect log 'detected: radio missing: b00a040.wifi\(no phy\) c000000.wifi\(no phy\)'
+	expect log 'reloading ath11k \(nss_offload=0\)'
+	expect_world probe_offload 0
+	expect log 'RECOVERED in place via driver reload'
+}
+
 sc_root_crash_respawned() {  # 975, no offload: the kernel brings the radios back by itself
 	new_world root-respawned; w respawn; w offload 0; unw nss_started; printf "config nss 'general'\n\toption enabled '1'\n\toption wifi_offload '0'\n" > "$ROOT/etc/config/nss"; board; wdconf 0 0; step; up 700; step
 	expect log 'armed .*reload=1, respawn=1\)'
@@ -937,7 +952,7 @@ sc_crash_log_wrap() {
 SCENARIOS="same_boot_receipt q6_policy_by_name q6_policy_invalid q6_policy_missing root_crash_dryrun_retained root_crash_running root_crash_respawned root_crash_respawn_nss root_crash_respawn_failed respawn_suppressed root_crash_early pending_to_dryrun running_disable_file crash_log_wrap healthy q6_crashed user_rmmod user_rmmod_nss phy_missing iface_lost wifi_down radio_disabled
 stopped_radio_kept_down freeze freeze_nss freeze_rx offload_off_reset inplace_unset_host inplace_auto_respawn inplace_auto_respawn_nss inplace_forced reload_off rate_limit
 min_uptime hold_after_watchdog_boot dead_reboot dead_reboot_cap shipped_default dryrun_option dryrun_offload_off
-disabled_file disabled_uci setup_failed no_wifi never_registers"
+disabled_file disabled_uci setup_failed no_wifi never_registers never_registers_sta_host"
 
 run_env() {
 	CUR_ENV=$1

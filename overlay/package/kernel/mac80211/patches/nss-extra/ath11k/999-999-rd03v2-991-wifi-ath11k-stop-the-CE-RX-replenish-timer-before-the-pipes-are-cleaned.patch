@@ -1,0 +1,32 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: stop the CE RX replenish timer before the pipes are cleaned
+
+ath11k_ce_rx_replenish_retry() is armed when posting a CE RX buffer
+fails (an atomic allocation or a DMA mapping) and posts again from the
+timer. Only ath11k_ahb_stop() deletes it before ath11k_ce_cleanup_pipes().
+ath11k_pcic_stop() (QCN6122 on IPQ5018) and the firmware-crash recovery
+in ath11k_core_reconfigure_on_crash() call ath11k_ce_cleanup_pipes() with the timer
+still pending. Firing there, it posts into the rings being emptied, or,
+after ath11k_hal_srng_clear() in the crash path, dereferences the
+cleared ring pointers in ath11k_hal_srng_access_begin(): a NULL pointer
+dereference in softirq context. It needs a failed post first, which is
+most likely under memory pressure, on a 256 MB board during a crash.
+
+Delete the timer at the start of ath11k_ce_cleanup_pipes(), which covers
+every caller. None of them holds ce_lock, which the timer takes.
+---
+--- a/drivers/net/wireless/ath/ath11k/ce.c
++++ b/drivers/net/wireless/ath/ath11k/ce.c
+@@ -958,6 +958,12 @@
+ 	struct ath11k_ce_pipe *pipe;
+ 	int pipe_num;
+ 
++	/* A pending RX replenish retry would post into the rings being
++	 * emptied here, or, during firmware-crash recovery, into rings that
++	 * ath11k_hal_srng_clear() wipes next. Only ath11k_ahb_stop() stopped
++	 * it; QCN6122 (ath11k_pcic_stop()) and the crash path did not.
++	 */
++	timer_delete_sync(&ab->rx_replenish_retry);
+ 	ath11k_ce_stop_shadow_timers(ab);
+ 
+ 	for (pipe_num = 0; pipe_num < ab->hw_params.ce_count; pipe_num++) {

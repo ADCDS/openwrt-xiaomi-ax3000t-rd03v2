@@ -28,11 +28,13 @@ empty throughout. Writing 6 back on the same boot wedges the radio again.
 Program MISC_CTL with the destination this function already picks: the
 REO exception ring (0) in host mode, as WCN6750 does, and
 HAL_SRNG_REO_ALTERNATE_SELECT with NSS offload. GEN_ENABLE is written as
-before. In host mode the radio no longer wedges; fragmented frames get
-through, though ath11k's host reassembly delivers them late or drops some.
+before. The write is skipped for a register table without the offset.
+In host mode the radio no longer wedges, but ath11k's host reassembly
+loses most fragmented frames on this chip (late when delivered; not
+investigated).
 --- a/drivers/net/wireless/ath/ath11k/hw.c
 +++ b/drivers/net/wireless/ath/ath11k/hw.c
-@@ -1080,6 +1080,17 @@
+@@ -1080,6 +1080,22 @@
  		FIELD_PREP(HAL_REO1_GEN_ENABLE_AGING_FLUSH_ENABLE, 1);
  	ath11k_hif_write32(ab, reo_base + HAL_REO1_GEN_ENABLE, val);
  
@@ -41,16 +43,21 @@ through, though ath11k's host reassembly delivers them late or drops some.
 +	 * GEN_ENABLE above. Left alone, MISC_CTL keeps the firmware value 6:
 +	 * every rx fragment goes to REO2FW_DEST_RING, which nothing drains,
 +	 * and once its 63 entries are full the whole REO block stops.
++	 * A register table without hal_reo1_misc_ctl would point this at
++	 * GEN_ENABLE (offset 0), so it is skipped there.
 +	 */
-+	val = ath11k_hif_read32(ab, reo_base + HAL_REO1_MISC_CTL(ab));
-+	val &= ~HAL_REO1_MISC_CTL_FRAGMENT_DST_RING;
-+	val |= FIELD_PREP(HAL_REO1_MISC_CTL_FRAGMENT_DST_RING, frag_dest_ring);
-+	ath11k_hif_write32(ab, reo_base + HAL_REO1_MISC_CTL(ab), val);
++	if (HAL_REO1_MISC_CTL(ab)) {
++		val = ath11k_hif_read32(ab, reo_base + HAL_REO1_MISC_CTL(ab));
++		val &= ~HAL_REO1_MISC_CTL_FRAGMENT_DST_RING;
++		val |= FIELD_PREP(HAL_REO1_MISC_CTL_FRAGMENT_DST_RING,
++				  frag_dest_ring);
++		ath11k_hif_write32(ab, reo_base + HAL_REO1_MISC_CTL(ab), val);
++	}
 +
  	ath11k_hif_write32(ab, reo_base + HAL_REO1_AGING_THRESH_IX_0(ab),
  			   HAL_DEFAULT_REO_TIMEOUT_USEC);
  	ath11k_hif_write32(ab, reo_base + HAL_REO1_AGING_THRESH_IX_1(ab),
-@@ -3207,6 +3218,11 @@
+@@ -3207,6 +3223,11 @@
  	.hal_reo_status_ring_base_lsb = 0x00000504,
  	.hal_reo_status_hp = 0x00003070,
  
@@ -62,7 +69,7 @@ through, though ath11k's host reassembly delivers them late or drops some.
  	/* WCSS relative address */
  	.hal_seq_wcss_umac_ce0_src_reg = ATH11K_REG_TYPE_CE + 0x08400000
  		- HAL_IPQ5018_CE_WFSS_REG_BASE,
-@@ -3292,6 +3308,11 @@
+@@ -3292,6 +3313,11 @@
  	.hal_reo_status_ring_base_lsb = 0x00000504,
  	.hal_reo_status_hp = 0x00003070,
  

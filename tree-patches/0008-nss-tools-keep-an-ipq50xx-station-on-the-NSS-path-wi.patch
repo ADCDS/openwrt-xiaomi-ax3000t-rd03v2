@@ -1,4 +1,4 @@
-From 567d90198dd51b47754281f44fa3dd35c618408a Mon Sep 17 00:00:00 2001
+From 5fb68d2779fa7ecaea164e68aeff3603921d7a8f Mon Sep 17 00:00:00 2001
 From: Adriel Santos <adriel@adriel.eu>
 Date: Sun, 18 Oct 2026 15:15:44 -0300
 Subject: [PATCH] nss-tools: keep an ipq50xx station on the NSS path, with a
@@ -20,22 +20,23 @@ firmware assert on routed UDP to Wi-Fi clients, fixed separately).
 So a station now stays on the NSS path. The helper both nss-dwmac.init and
 nss-dwmac-up call (nss_dwmac_wifi_offload) still knows about stations:
 nss.general.wifi_offload_sta='0' keeps Wi-Fi on the host path while one is
-configured, as an escape hatch. ath11k loads once per boot, so nss-status
+configured, as an escape hatch (0, no, off, false and disabled all count).
+ath11k loads once per boot, so nss-status
 warns when that option is set but Wi-Fi is still on the NSS path.
 
 Refs: ADCDS/openwrt-xiaomi-ax3000t-rd03v2#48
 ---
- package/nss/nss-tools/files/functions.sh   | 37 ++++++++++++++++++++++
- package/nss/nss-tools/files/nss-dwmac-up   |  4 +--
- package/nss/nss-tools/files/nss-dwmac.init |  9 ++++--
- package/nss/nss-tools/files/nss-status     | 16 ++++++++++
- 4 files changed, 62 insertions(+), 4 deletions(-)
+ package/nss/nss-tools/files/functions.sh   | 46 ++++++++++++++++++++++
+ package/nss/nss-tools/files/nss-dwmac-up   |  4 +-
+ package/nss/nss-tools/files/nss-dwmac.init |  9 ++++-
+ package/nss/nss-tools/files/nss-status     | 16 ++++++++
+ 4 files changed, 71 insertions(+), 4 deletions(-)
 
 diff --git a/package/nss/nss-tools/files/functions.sh b/package/nss/nss-tools/files/functions.sh
-index 57551b2360..8a6f22cdd8 100644
+index 57551b2360..b8752c5114 100644
 --- a/package/nss/nss-tools/files/functions.sh
 +++ b/package/nss/nss-tools/files/functions.sh
-@@ -34,6 +34,43 @@ nss_mesh_state() {
+@@ -34,6 +34,52 @@ nss_mesh_state() {
  	return 0
  }
  
@@ -55,6 +56,15 @@ index 57551b2360..8a6f22cdd8 100644
 +	return 0
 +}
 +
++# nss.general.wifi_offload_sta set to off (0, no, off, false or disabled):
++# keep Wi-Fi on the host path while a station is configured.
++nss_wifi_sta_host_requested() {
++	case "$(uci -q get nss.general.wifi_offload_sta)" in
++	0|no|off|false|disabled) return 0 ;;
++	esac
++	return 1
++}
++
 +# Wi-Fi data path on ipq50xx, the decision nss-dwmac.init and nss-dwmac-up
 +# both take: NSS_WIFI_OFFLOAD=1 when ath11k loads on the NSS path.
 +# nss.general.wifi_offload='1' asks for it. A station (client) interface
@@ -67,7 +77,7 @@ index 57551b2360..8a6f22cdd8 100644
 +	NSS_WIFI_STA_HOST=0
 +	[ "$(uci -q get nss.general.wifi_offload)" = 1 ] || return 0
 +	NSS_WIFI_OFFLOAD=1
-+	[ "$(uci -q get nss.general.wifi_offload_sta)" = 0 ] || return 0
++	nss_wifi_sta_host_requested || return 0
 +	nss_sta_state
 +	if [ "$NSS_STA_CFG" = 1 ]; then
 +		NSS_WIFI_OFFLOAD=0
@@ -115,7 +125,7 @@ index ac5bc28d9a..1d1c50c1d3 100644
  	if [ "$(uci -q get nss.general.enabled)" = "0" ]; then
  		logger -t nss "NSS bring-up disabled via uci (nss.general.enabled=0), staying on the host stack"
 diff --git a/package/nss/nss-tools/files/nss-status b/package/nss/nss-tools/files/nss-status
-index fb3f6fd726..14bb87fb32 100755
+index fb3f6fd726..3ef7092509 100755
 --- a/package/nss/nss-tools/files/nss-status
 +++ b/package/nss/nss-tools/files/nss-status
 @@ -60,6 +60,18 @@ for f in "$R"/sys/kernel/debug/ath11k/*/dbg_infra/links; do
@@ -130,7 +140,7 @@ index fb3f6fd726..14bb87fb32 100755
 +if [ "$GLUE_KIND" = dwmac ]; then
 +	nss_sta_state
 +	sta_cfg=$NSS_STA_CFG
-+	[ "$sta_cfg" = 1 ] && [ "$(uci -q get nss.general.wifi_offload_sta)" = 0 ] &&
++	[ "$sta_cfg" = 1 ] && nss_wifi_sta_host_requested &&
 +		[ "$(cat "$MOD/ath11k/parameters/nss_offload" 2>/dev/null)" = 1 ] && sta_late=1
 +fi
 +
@@ -149,7 +159,7 @@ index fb3f6fd726..14bb87fb32 100755
  	        echo "  Wi-Fi:       host mode (mesh configured; firmware supports mesh offload - armed by nss-up)"
  	    elif [ "$mesh_cfg" = 1 ]; then
  	        echo "  Wi-Fi:       host mode (mesh configured; this firmware or build has no NSS mesh offload)"
-+	    elif [ "$sta_cfg" = 1 ] && [ "$(uci -q get nss.general.wifi_offload_sta)" = 0 ]; then
++	    elif [ "$sta_cfg" = 1 ] && nss_wifi_sta_host_requested; then
 +	        echo "  Wi-Fi:       host mode (client interface configured, wifi_offload_sta=0)"
  	    else
  	        echo "  Wi-Fi:       host mode"

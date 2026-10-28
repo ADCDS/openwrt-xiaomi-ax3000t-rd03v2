@@ -79,6 +79,17 @@ checks = [
     # his NSS set (999-233) rebuilds the 802.11 header from the RX descriptor through these ops
     # and calls them unguarded; a NULL one in ipq5018_ops oopses on the first EAPOL frame in
     # host Wi-Fi mode (987, rd03v2 #47)
+    # IPQ5018 and QCN6122 take the REO fragment destination from REO1_MISC_CTL (WCN6750 layout);
+    # left at the firmware's REO2FW_DEST_RING, 63 rx fragments stop the REO block (990, #53)
+    ('REO fragment destination written to MISC_CTL on IPQ5018 and QCN6122 (990)',
+     all(re.search(r'const struct ath11k_hw_regs ' + t + r' = \{[^}]*\.hal_reo1_misc_ctl = 0x000005d8,', hw)
+         for t in ('ipq5018_regs', 'qcn6122_regs'))
+     and bool(re.search(r'static void ath11k_hw_ipq5018_reo_setup\(.*?if \(HAL_REO1_MISC_CTL\(ab\)\) \{.*?'
+                        r'FIELD_PREP\(HAL_REO1_MISC_CTL_FRAGMENT_DST_RING,\s*frag_dest_ring\).*?\n\}', hw, re.S))),
+    # a pending RX replenish retry must not post into rings being cleaned or cleared (991)
+    ('CE RX replenish timer stopped before the pipes are cleaned (991)', bool(re.search(
+        r'void ath11k_ce_cleanup_pipes\(struct ath11k_base \*ab\)\s*\{[^}]*?timer_delete_sync\(&ab->rx_replenish_retry\);'
+        r'[^}]*?ath11k_ce_rx_pipe_cleanup\(', ce))),
     ('IPQ5018 ops fill the 802.11 header ops the RX path calls',
      all(re.search(r'\.' + op + r'\s*=', ipq5018) for op in dot11_called) if ipq5018 else False),
 ]
