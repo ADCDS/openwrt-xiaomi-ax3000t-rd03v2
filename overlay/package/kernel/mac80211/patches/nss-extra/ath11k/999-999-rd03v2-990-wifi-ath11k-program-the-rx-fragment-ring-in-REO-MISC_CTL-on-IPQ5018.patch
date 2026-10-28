@@ -1,0 +1,76 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: program the rx fragment ring in REO MISC_CTL on IPQ5018
+
+ath11k_hw_ipq5018_reo_setup() writes the REO fragment destination into
+the IPQ8074 field of REO1_GEN_ENABLE (bits 25:23). IPQ5018 and QCN6122
+have the REO register layout of WCN6750, which takes the fragment
+destination from REO1_MISC_CTL (offset 0x5d8, bits 20:17). That field is
+never written here, so it keeps the value the firmware sets at boot, 6:
+REO2FW_DEST_RING. Nothing drains that ring; its tail stays 0.
+
+So every received 802.11 fragment, from any station and in any mode, goes
+to REO2FW_DEST_RING. Once its 63 entries are full the whole REO block
+stops: RXDMA2REO_CMD_RING backs up, no data or EAPOL is received on that
+radio any more, REO commands fail with -ENOBUFS, and the queue descriptors
+of removed stations pile up until the box runs out of memory
+(openwrt-xiaomi-ax3000t-rd03v2 #53: a production AP wedged after 42 h; a
+client sending fragments wedges a radio in seconds).
+
+Measured with NSS offload: REO1_MISC_CTL reads 0x000c0000 after boot on
+both IPQ5018 (2.4 GHz) and QCN6122 (5 GHz). With a 2.4 GHz client at
+fragmentation threshold 256, 1000-byte pings fill REO2FW_DEST_RING after
+about a dozen and wedge the radio, whatever GEN_ENABLE holds (0 or 7).
+With 7 in MISC_CTL the fragments reach the NSS REO destination ring and
+NSS reassembles them: over 30 minutes of fragmented pings, TCP uploads and
+reconnects, 1.5 million fragments into 228,000 frames, REO2FW_DEST_RING
+empty throughout. Writing 6 back on the same boot wedges the radio again.
+
+Program MISC_CTL with the destination this function already picks: the
+REO exception ring (0) in host mode, as WCN6750 does, and
+HAL_SRNG_REO_ALTERNATE_SELECT with NSS offload. GEN_ENABLE is written as
+before. In host mode the radio no longer wedges; fragmented frames get
+through, though ath11k's host reassembly delivers them late or drops some.
+--- a/drivers/net/wireless/ath/ath11k/hw.c
++++ b/drivers/net/wireless/ath/ath11k/hw.c
+@@ -1080,6 +1080,17 @@
+ 		FIELD_PREP(HAL_REO1_GEN_ENABLE_AGING_FLUSH_ENABLE, 1);
+ 	ath11k_hif_write32(ab, reo_base + HAL_REO1_GEN_ENABLE, val);
+ 
++	/* IPQ5018 and QCN6122 take the fragment destination from
++	 * REO1_MISC_CTL, like WCN6750, not from the IPQ8074 field in
++	 * GEN_ENABLE above. Left alone, MISC_CTL keeps the firmware value 6:
++	 * every rx fragment goes to REO2FW_DEST_RING, which nothing drains,
++	 * and once its 63 entries are full the whole REO block stops.
++	 */
++	val = ath11k_hif_read32(ab, reo_base + HAL_REO1_MISC_CTL(ab));
++	val &= ~HAL_REO1_MISC_CTL_FRAGMENT_DST_RING;
++	val |= FIELD_PREP(HAL_REO1_MISC_CTL_FRAGMENT_DST_RING, frag_dest_ring);
++	ath11k_hif_write32(ab, reo_base + HAL_REO1_MISC_CTL(ab), val);
++
+ 	ath11k_hif_write32(ab, reo_base + HAL_REO1_AGING_THRESH_IX_0(ab),
+ 			   HAL_DEFAULT_REO_TIMEOUT_USEC);
+ 	ath11k_hif_write32(ab, reo_base + HAL_REO1_AGING_THRESH_IX_1(ab),
+@@ -3207,6 +3218,11 @@
+ 	.hal_reo_status_ring_base_lsb = 0x00000504,
+ 	.hal_reo_status_hp = 0x00003070,
+ 
++	/* REO misc control register, used for fragment
++	 * destination ring config (same REO layout as WCN6750).
++	 */
++	.hal_reo1_misc_ctl = 0x000005d8,
++
+ 	/* WCSS relative address */
+ 	.hal_seq_wcss_umac_ce0_src_reg = ATH11K_REG_TYPE_CE + 0x08400000
+ 		- HAL_IPQ5018_CE_WFSS_REG_BASE,
+@@ -3292,6 +3308,11 @@
+ 	.hal_reo_status_ring_base_lsb = 0x00000504,
+ 	.hal_reo_status_hp = 0x00003070,
+ 
++	/* REO misc control register, used for fragment
++	 * destination ring config (same REO layout as WCN6750).
++	 */
++	.hal_reo1_misc_ctl = 0x000005d8,
++
+ 	/* WCSS relative address */
+ 	.hal_seq_wcss_umac_ce0_src_reg = 0x01b80000,
+ 	.hal_seq_wcss_umac_ce0_dst_reg = 0x01b81000,

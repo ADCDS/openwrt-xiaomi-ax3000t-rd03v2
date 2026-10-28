@@ -54,6 +54,12 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
   YouTube over QUIC does it within seconds. ECM gave reply packets an uninitialised priority,
   which the driver passed on as an invalid traffic ID. Fixed in v2.1.0; on an older release,
   `echo 0 > /proc/sys/net/ecm/unidir_accel_en` avoids it and keeps wired offload.
+- **On v2.0.0 to v2.0.2, a Wi-Fi client that sends fragmented frames can stop its radio**
+  (#53): after 63 received 802.11 fragments that radio receives nothing more, its clients
+  drop off and cannot rejoin, and memory runs out within hours. Few clients ever fragment;
+  a v2.0.2 AP hit it after 42 hours. Only a reboot clears it. Fixed in v2.1.0: with NSS
+  Wi-Fi offload (the default) fragments are reassembled normally; in host Wi-Fi mode they
+  get through, but late or partly.
 - **With NSS Wi-Fi offload, reloading the Wi-Fi driver breaks Wi-Fi until a reboot**: the radios
   come back, but no client or station completes the WPA handshake on either radio. The
   watchdog reloaded the driver as a recovery step on v2.0.0 to v2.0.2; from v2.1.0 it reboots

@@ -74,8 +74,8 @@ by hand on rc1 (C8, C14).
 ## v2.1.0
 
 v2.0.2 moved to his `c3po-tag-8021q` branch head of 2026-10-27 (`c36db6321c`, after his
-`ipq50xx-2026.10.23`), plus the fix for #52, a station on the NSS path (#48) and a watchdog
-that reboots instead of reloading the driver under NSS offload. His tree has
+`ipq50xx-2026.10.23`), plus the fixes for #52 and #53, a station on the NSS path (#48) and a
+watchdog that reboots instead of reloading the driver under NSS offload. His tree has
 no release tag on this commit yet: `upstream.lock` pins the commit, and `feeds.lock` pins the
 package feeds as they were at its commit time, a combination his CI has not built. Every
 commit of his in the range that our build compiles was read before the bump (293 tree
@@ -143,6 +143,36 @@ station or the wired WAN; TCP, traffic to wired clients, and NSS Wi-Fi mode do n
   client on either band did not assert, with ECM offloading the flows. On b2 with the station
   on NSS (default ECM settings): 180,008 UDP packets to the 5 GHz client and 120,012 to the
   2.4 GHz client, and YouTube over QUIC; no assert.
+
+**#53 (a radio stops receiving after a client sends fragments).** A v2.0.2 AP's 2.4 GHz
+radio received nothing more after 42 hours, then ran out of memory. Read on that box:
+`REO2FW_DEST_RING`, a ring towards the firmware that nothing drains (its tail stays 0), was
+full with 63 entries, all 802.11 fragments from one station; behind it the whole REO block
+had stopped (`RXDMA2REO_CMD_RING` backed up, REO commands failing with -105, queue
+descriptors of departed stations piling up).
+
+- **Reproduced on the bench:** a client fragmenting at 256 bytes (a USB adapter whose
+  driver fragments in software, HT off so frames are not aggregated) wedges the radio in
+  seconds with 1000-byte pings; the ring dump matches the AP's.
+- **The cause:** on IPQ5018 and QCN6122 the REO takes the fragment destination from
+  `REO1_MISC_CTL` (offset 0x5d8, the WCN6750 layout these chips share), not from the IPQ8074
+  field in `GEN_ENABLE` that ath11k writes. Both radios read `0x000c0000` at boot: 6, the
+  firmware ring. A first fix that changed only `GEN_ENABLE` still wedged.
+- **The fix (990):** write the destination into `MISC_CTL`. On the 2.4 GHz radio with NSS
+  offload (DEV build, the release's patch):
+
+| Run | Result |
+|---|---|
+| 2000 pings of 1000 B; sizes 200-1472 B; 500 bridged to a wired host; 200 of 3000 B | 1999 / 2000; 0 % at every size; 500 / 500; 199 / 200 |
+| TCP upload, 30 s, fragmented | 11.4 Mbit/s |
+| 10 reconnects with fragmented traffic | all clean |
+| 30 min: 1000 fragmented pings a minute, an upload every 3 min, a reconnect every 5 | 29,984 / 30,000; 1.54 million fragments reassembled into 228,581 frames; `REO2FW_DEST_RING` empty, RX descriptors and `SUnreclaim` flat |
+| the field set back to 6 on the same boot | wedged again within 100 pings; only a reboot recovers |
+
+  In host mode (`wifi_offload='0'`) the fragments go to the host's REO exception ring and the
+  radio no longer wedges, but ath11k's host reassembly delivers them late (up to seconds) or
+  drops some. 5 GHz: the same register value at boot and after the fix; no 5 GHz client that
+  fragments was available. Which client fragmented on the reporter's AP is not known.
 
 **#48 (a station on the NSS path).** On v2.0.2, and on this base, an NSS station sends
 full-size frames:
