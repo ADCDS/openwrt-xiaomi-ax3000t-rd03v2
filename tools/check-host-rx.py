@@ -67,6 +67,11 @@ checks = [
     ('TX completion filter reads the HTT status at byte 8 (244a)',
      'status_desc = (void *)desc + HTT_TX_WBM_COMP_STATUS_OFFSET;' in tx
      and '((struct htt_tx_wbm_completion *)desc) + HTT_TX_WBM_COMP_STATUS_OFFSET' not in tx),
+    # an skb->priority above 7 must not become the TCL TID (rd03v2 #52: ECM's uninitialised
+    # QoS tag asserted the firmware with TIDs 8-15 in host Wi-Fi mode)
+    ('TX TID kept in 0-7 (988)',
+     'skb->priority & IEEE80211_QOS_CTL_TID_MASK' not in tx
+     and tx.count('skb->priority & IEEE80211_QOS_CTL_TAG1D_MASK') == 2),
     ('CE RX fragment cache used in every mode (984 on 999-997)',
      'page_frag_alloc(&pipe->rx_frag_cache' in ce_alloc and 'ath11k_nss_256m_enabled' not in ce_alloc),
     ('CE RX fragment cache drained under ce_lock (984)', bool(re.search(

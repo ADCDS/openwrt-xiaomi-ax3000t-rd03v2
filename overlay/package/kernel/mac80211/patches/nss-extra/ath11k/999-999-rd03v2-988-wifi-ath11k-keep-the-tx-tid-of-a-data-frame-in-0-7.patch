@@ -1,0 +1,45 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: keep the TX TID of a data frame in 0-7
+
+ath11k_dp_tx_get_tid() hands skb->priority & 0xf to the TCL as the TID,
+with TID override set. kuncy7's NSS set marks the hardware HAS_TX_QUEUE,
+so mac80211's 802.3 path never runs ieee80211_select_queue(), which would
+have reduced skb->priority to an 802.1D tag: whatever priority a frame
+carries reaches the firmware. A priority of 8-15 (here: ECM's
+uninitialised QoS tag on reply packets of a UDP connection) asserts the
+WLAN firmware's TX data engine (ar_wal_tx_send.c:22193, WLAN_TX_DE) on
+whichever radio sends the frame, host Wi-Fi mode only
+(openwrt-xiaomi-ax3000t-rd03v2 #52).
+
+Mask with IEEE80211_QOS_CTL_TAG1D_MASK: 0-7 are unchanged, and the
+256-263 form mac80211 uses to carry an 802.1D tag maps to the same TID.
+---
+diff --git a/drivers/net/wireless/ath/ath11k/dp_tx.c b/drivers/net/wireless/ath/ath11k/dp_tx.c
+index 09f0456..26d96d5 100644
+--- a/drivers/net/wireless/ath/ath11k/dp_tx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_tx.c
+@@ -46,15 +46,22 @@ static void ath11k_dp_tx_encap_nwifi(struct sk_buff *skb)
+ 
+ static u8 ath11k_dp_tx_get_tid(struct sk_buff *skb)
+ {
++	/* skb->priority is an 802.1D tag (0-7) here, or the 256-263 form that
++	 * mac80211 uses to carry one; TIDs 8-15 are not data TIDs. With
++	 * HAS_TX_QUEUE mac80211 does not re-classify an 802.3 frame, so a stray
++	 * priority (ECM, SO_PRIORITY, tc, nft meta priority) would otherwise
++	 * reach the TCL with TID override and assert the firmware
++	 * (ar_wal_tx_send.c, rd03v2 #52).
++	 */
+ 	struct ieee80211_hdr *hdr = (void *)skb->data;
+ 	struct ath11k_skb_cb *cb = ATH11K_SKB_CB(skb);
+ 
+ 	if (cb->flags & ATH11K_SKB_HW_80211_ENCAP)
+-		return skb->priority & IEEE80211_QOS_CTL_TID_MASK;
++		return skb->priority & IEEE80211_QOS_CTL_TAG1D_MASK;
+ 	else if (!ieee80211_is_data_qos(hdr->frame_control))
+ 		return HAL_DESC_REO_NON_QOS_TID;
+ 	else
+-		return skb->priority & IEEE80211_QOS_CTL_TID_MASK;
++		return skb->priority & IEEE80211_QOS_CTL_TAG1D_MASK;
+ }
+ 
+ enum hal_encrypt_type ath11k_dp_tx_get_encrypt_type(u32 cipher)

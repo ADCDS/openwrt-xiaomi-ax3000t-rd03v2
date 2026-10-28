@@ -230,6 +230,24 @@ for p in "$OV"/package/kernel/mac80211/patches/nss/ath11k/*.patch "$OV"/package/
 	chk "mac80211 $(basename "$p")" "$([ -n "$BP" ] && fp "$p" "$BP/drivers/net/wireless/ath/ath11k" || echo no)" yes
 done
 chk "our ath11k patches found in the overlay" "$([ "$n_ath" -gt 0 ] && echo yes || echo none)" yes
+# our mac80211 core patches (patches/nss-extra/subsys, applied before nss-extra/ath11k)
+for p in "$OV"/package/kernel/mac80211/patches/nss-extra/subsys/*.patch; do
+	[ -e "$p" ] || continue
+	chk "mac80211 $(basename "$p")" "$([ -n "$BP" ] && fp "$p" "$BP/net/mac80211" || echo no)" yes
+done
+# our ECM patches (feed-overlay/nss/qca-nss-ecm/patches). With the build directory gone
+# (AUTOREMOVE), the feed check above already proves each one sits in the feed's patches
+# directory, so the package build applied it: a patch that fails stops the build.
+EC=$(ls -d "$TREE"/build_dir/target-*/linux-qualcommax_ipq50xx/qca-nss-ecm-* 2>/dev/null | head -1)
+for p in "$V2"/feed-overlay/nss/qca-nss-ecm/patches/*.patch; do
+	[ -e "$p" ] || continue
+	if [ -n "$EC" ] && [ -d "$EC/frontends" ]; then
+		chk "ecm $(basename "$p")" "$(fp "$p" "$EC/frontends")" yes
+	else
+		chk "ecm $(basename "$p") is in the prepared feed" \
+			"$(yes_ cmp -s "$p" "$TREE/feeds/nss/qca-nss-ecm/patches/$(basename "$p")")" yes
+	fi
+done
 for p in "$OV"/target/linux/qualcommax/patches-6.18/*.patch; do
 	[ -e "$p" ] || continue
 	chk "kernel $(basename "$p")" "$([ -n "$LX" ] && fp "$p" "$LX/drivers" || echo no)" yes

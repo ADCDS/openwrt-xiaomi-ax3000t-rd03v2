@@ -1,0 +1,74 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] frontends: give both QoS tags of a ported connection a value
+
+ecm_ported_ipv{4,6}_process() keeps the classifiers' verdict in a
+struct ecm_classifier_process_response on the stack. For a uni-direction
+connection (every UDP connection by default, unidir_accel_en=1) only the
+sender's QoS tag is set, and the flow tag is then written to
+skb->priority for every packet. A DEST (reply) packet gets uninitialised
+stack as its priority whenever no classifier supplies a QoS tag, which is
+the case once the DSCP classifier unassigns itself after a failed offload
+(FAIL_RULE, e.g. a flow into a Wi-Fi interface that is not on the NSS
+plane).
+
+ath11k in host Wi-Fi mode uses skb->priority & 0xf as the TCL TID with
+TID override, and the mac80211 802.3 path it uses (HAS_TX_QUEUE) does not
+re-classify. Routed UDP into a Wi-Fi client then reaches the firmware with
+TIDs 8-15 and asserts it (ar_wal_tx_send.c:22193, WLAN_TX_DE;
+openwrt-xiaomi-ax3000t-rd03v2 #52). Measured with an nft counter after
+ECM's hook: 349 of 369 such packets had a priority above 7; with
+unidir_accel_en=0 none, and no assert.
+
+Start both tags from the packet's own priority, as the bi-directional
+branch does. The uni-direction branch is left as it is.
+---
+diff --git a/frontends/cmn/ecm_ported_ipv4.c b/frontends/cmn/ecm_ported_ipv4.c
+index eccbb68..0b875fb 100644
+--- a/frontends/cmn/ecm_ported_ipv4.c
++++ b/frontends/cmn/ecm_ported_ipv4.c
+@@ -1032,6 +1032,20 @@ done:
+ 	prevalent_pr.process_actions = 0;
+ 	prevalent_pr.drop = false;
+ 
++	/*
++	 * Both directions start from this packet's priority (rd03v2 #52). The
++	 * uni-direction branch below sets only the sender's tag, and the flow tag
++	 * is written to skb->priority for every packet further down: for a
++	 * DEST packet it was uninitialised stack, once no classifier (the DSCP
++	 * one leaves after a failed offload) supplies a QoS tag. A driver that
++	 * maps skb->priority straight to a TID (ath11k in host Wi-Fi mode) then
++	 * hands the firmware TIDs above 7.
++	 */
++	prevalent_pr.flow_qos_tag = skb->priority;
++	prevalent_pr.return_qos_tag = skb->priority;
++	prevalent_pr.flow_int_pri = 0;	/* skb->int_pri requires QSDK kernel patches */
++	prevalent_pr.return_int_pri = 0;	/* skb->int_pri requires QSDK kernel patches */
++
+ 	/*
+ 	 * In case of uni-direction acceleration, assign priority per direction
+ 	 */
+diff --git a/frontends/cmn/ecm_ported_ipv6.c b/frontends/cmn/ecm_ported_ipv6.c
+index 876afeb..de9e9d6 100644
+--- a/frontends/cmn/ecm_ported_ipv6.c
++++ b/frontends/cmn/ecm_ported_ipv6.c
+@@ -1059,6 +1059,20 @@ done:
+ 	prevalent_pr.process_actions = 0;
+ 	prevalent_pr.drop = false;
+ 
++	/*
++	 * Both directions start from this packet's priority (rd03v2 #52). The
++	 * uni-direction branch below sets only the sender's tag, and the flow tag
++	 * is written to skb->priority for every packet further down: for a
++	 * DEST packet it was uninitialised stack, once no classifier (the DSCP
++	 * one leaves after a failed offload) supplies a QoS tag. A driver that
++	 * maps skb->priority straight to a TID (ath11k in host Wi-Fi mode) then
++	 * hands the firmware TIDs above 7.
++	 */
++	prevalent_pr.flow_qos_tag = skb->priority;
++	prevalent_pr.return_qos_tag = skb->priority;
++	prevalent_pr.flow_int_pri = 0;	/* skb->int_pri requires QSDK kernel patches */
++	prevalent_pr.return_int_pri = 0;	/* skb->int_pri requires QSDK kernel patches */
++
+ 	/*
+ 	 * In case of uni-direction acceleration, assign priority per direction.
+ 	 */

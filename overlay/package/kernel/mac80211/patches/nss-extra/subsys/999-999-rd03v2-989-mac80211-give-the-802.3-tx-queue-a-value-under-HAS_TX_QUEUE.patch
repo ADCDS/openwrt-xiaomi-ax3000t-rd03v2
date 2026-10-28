@@ -1,0 +1,25 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] mac80211: give the 802.3 TX queue a value under HAS_TX_QUEUE
+
+ieee80211_8023_xmit() only assigns its local `queue` when the hardware is
+not HAS_TX_QUEUE (kuncy7's NSS set marks ath11k so in every Wi-Fi mode),
+and then uses it as an index: info->hw_queue = sdata->vif.hw_queue[queue].
+Under HAS_TX_QUEUE that reads an uninitialised value. Give it the access
+category of the frame's 802.1D tag instead.
+---
+diff --git a/net/mac80211/tx.c b/net/mac80211/tx.c
+index 9cb4807..8286dc2 100644
+--- a/net/mac80211/tx.c
++++ b/net/mac80211/tx.c
+@@ -4810,6 +4810,11 @@ static void ieee80211_8023_xmit(struct ieee80211_sub_if_data *sdata,
+ 	if (unlikely(!ieee80211_hw_check(&local->hw, HAS_TX_QUEUE))) {
+ 		queue = ieee80211_select_queue(sdata, sta, skb);
+ 		skb_set_queue_mapping(skb, queue);
++	} else {
++		/* no select_queue here: still give info->hw_queue below a
++		 * defined access category instead of an uninitialised index
++		 */
++		queue = ieee802_1d_to_ac[skb->priority & IEEE80211_QOS_CTL_TAG1D_MASK];
+ 	}
+ 
+ 	multicast = is_multicast_ether_addr(ra);
