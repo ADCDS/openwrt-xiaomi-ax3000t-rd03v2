@@ -136,10 +136,12 @@ if [ -f "$X/etc/rd03v2-release" ] && [ -f "$X/lib/apk/db/installed" ]; then
 		"$(grep -cF 'stats_disable_default=0' "$X/etc/init.d/qca-nss-pbuf")" 1
 	chk "statistics policy preserves explicit UCI override" \
 		"$(grep -cF 'config_get stats_disable opt stats_disable "$stats_disable_default"' "$X/etc/init.d/qca-nss-pbuf")" 1
-	# a station interface keeps Wi-Fi on the host path (0008, #48): one decision for the
-	# service and nss-dwmac-up
-	chk "station keeps Wi-Fi on the host path (0008)" \
+	# one Wi-Fi path decision for the service and nss-dwmac-up (0008): a station stays on
+	# the NSS path; nss.general.wifi_offload_sta=0 keeps Wi-Fi on the host path (#48 escape hatch)
+	chk "one Wi-Fi path decision for the service and nss-dwmac-up (0008)" \
 		"$(grep -lF 'nss_dwmac_wifi_offload' "$X/lib/nss/functions.sh" "$X/etc/init.d/nss" "$X/usr/sbin/nss-dwmac-up" 2>/dev/null | wc -l)" 3
+	chk "a station stays on the NSS path unless wifi_offload_sta=0 (0008)" \
+		"$(grep -cF '[ "$(uci -q get nss.general.wifi_offload_sta)" = 0 ] || return 0' "$X/lib/nss/functions.sh")" 1
 	chk "NSS script syntax" \
 		"$(yes_ sh -c 'for f; do sh -n "$f" || exit 1; done' _ "$X/lib/nss/functions.sh" "$X/etc/init.d/nss" "$X/usr/sbin/nss-dwmac-up" "$X/usr/sbin/nss-status")" yes
 	# PTK0 rekey becomes a reconnect by default, AP and station (0009, #49)
