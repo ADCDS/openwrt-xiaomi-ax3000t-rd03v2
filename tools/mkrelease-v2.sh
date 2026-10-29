@@ -55,9 +55,19 @@ OUT=${OUT:-$REPO/rel-v2-$TAG}
 mkdir -p "$(dirname "$OUT")"
 STAGE=$(mktemp -d "$(dirname "$OUT")/.v2-assets.XXXXXX")
 for f in "$P-squashfs-sysupgrade.bin" "$P-initramfs-factory.ubi" "$P-initramfs-uImage.itb" "$P-initramfs-factory-wifi.ubi" "$P-initramfs-uImage-wifi.itb" config.buildinfo feeds.buildinfo version.buildinfo; do cp -p "$T/$f" "$STAGE/"; done
+# The buildinfo files name build-host paths: the NSS feed comes from the local mirror, and the
+# ccache directory is set. Publish the fork the pinned NSS commit lives in, and no ccache path.
+NSS_PUBLIC=$(. "$V2/upstream.lock" && echo "$NSS_URL")
+[ -n "$NSS_PUBLIC" ] || die 'no NSS_URL in upstream.lock'
+sed -i "s#^src-git nss [^^]*\^#src-git nss $NSS_PUBLIC^#" "$STAGE/feeds.buildinfo"
+sed -i '/^CONFIG_CCACHE_DIR=/d' "$STAGE/config.buildinfo"
 awk '/^P:/ {n=substr($0,3)} /^V:/ {print n " - " substr($0,3)}' "$X/r/lib/apk/db/installed" | LC_ALL=C sort > "$STAGE/$P.manifest"
 "$V2/tools/mknand-support.sh" "$TREE" > "$STAGE/nand-support.txt"
 tar -C "$T" -czf "$STAGE/$P-packages-$TAG.tar.gz" --transform "s#^packages#packages-$TAG#" packages
+# no build-host path in any text asset (they are published as they are)
+for f in config.buildinfo feeds.buildinfo version.buildinfo "$P.manifest" nand-support.txt; do
+	! grep -qE '/home/|/root/|/tmp/' "$STAGE/$f" || die "a build-host path is left in $f"
+done
 (cd "$STAGE" && sha256sum -- * > sha256sums.txt)
 "$V2/tools/verify-v2.sh" --release "$STAGE" --apk "$TREE/staging_dir/host/bin/apk" || die 'assembled artifacts failed verification'
 mv -T "$STAGE" "$OUT"; STAGE=''
