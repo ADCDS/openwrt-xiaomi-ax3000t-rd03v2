@@ -45,23 +45,31 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
 - **802.11s mesh needs host Wi-Fi mode** (`nss.general.wifi_offload='0'`). With NSS Wi-Fi
   offload on, a mesh interface does not come up and takes its radio's AP down until it is
   removed. v2.0.0 resets in host mode whenever a device connects: use v2.0.1 or later (#47).
-- **From v2.1.0 a client (station) interface stays on the NSS path**: on this base a station
-  sends full-size frames on both bands (#48 no longer reproduces). `nss.general.wifi_offload_sta='0'`
-  keeps Wi-Fi on the host path while one is configured, from the next boot; `nss-status` says
-  when a reboot is needed. v2.0.1 and v2.0.2 put Wi-Fi in host mode whenever a station existed.
+  Host Wi-Fi mode leaves less memory free: under sustained Wi-Fi traffic about 20 MB less
+  than NSS mode (20-26 MB available on the bench, against 40-42).
+- **From v2.1.0 a client (station) interface stays on the NSS path**, also on an upgrade
+  from v2.0.1 or v2.0.2, which put Wi-Fi in host mode whenever a station existed. On this
+  base a station sends full-size frames against HE and HT-only APs (#48 no longer
+  reproduces); a VHT-only (Wi-Fi 5) 5 GHz AP was not tested. `nss.general.wifi_offload_sta='0'`
+  (or `off`) keeps Wi-Fi on the host path while one is configured, from the next boot;
+  `nss-status` says when a reboot is needed.
 - **On v2.0.0 to v2.0.2, routed UDP into a Wi-Fi client can crash the Wi-Fi firmware in host
   Wi-Fi mode** (#52): a station on v2.0.1 and v2.0.2, or `nss.general.wifi_offload='0'`.
-  YouTube over QUIC does it within seconds. ECM gave reply packets an uninitialised priority,
-  which the driver passed on as an invalid traffic ID. Fixed in v2.1.0; on an older release,
-  `echo 0 > /proc/sys/net/ecm/unidir_accel_en` avoids it and keeps wired offload.
+  YouTube over QUIC did it within seconds on 5 GHz. ECM gave reply packets an uninitialised
+  priority, which the driver passed on as an invalid traffic ID. Fixed in v2.1.0; on an older
+  release, `echo 0 > /proc/sys/net/ecm/unidir_accel_en` avoids it and keeps wired offload
+  until the next reboot (put it in `/etc/rc.local` to keep it).
 - **On v2.0.0 to v2.0.2, a Wi-Fi client that sends fragmented frames can stop its radio**
   (#53): after 63 received 802.11 fragments that radio receives nothing more, its clients
-  drop off and cannot rejoin, and memory runs out within hours. Few clients ever fragment;
-  a v2.0.2 AP hit it after 42 hours. Only a reboot clears it. Fixed in v2.1.0: with NSS
-  Wi-Fi offload (the default) fragments are reassembled normally; in host Wi-Fi mode they
-  get through, but late or partly.
+  drop off and cannot rejoin, and its memory runs out over the following days. Few clients
+  ever fragment; a v2.0.2 AP stopped after 42 hours. Only a reboot clears it. Fixed in
+  v2.1.0. With NSS Wi-Fi offload (the default) fragments are reassembled normally (tested on
+  2.4 GHz; the 5 GHz radio gets the same setting, no fragmenting 5 GHz client was
+  tried). In host Wi-Fi mode the radio no longer stops, but most fragmented frames are lost
+  (large ones entirely).
 - **With NSS Wi-Fi offload, reloading the Wi-Fi driver breaks Wi-Fi until a reboot**: the radios
-  come back, but no client or station completes the WPA handshake on either radio. The
+  come back, but no client or station completes the WPA handshake on either radio, with or
+  without a station configured. The
   watchdog reloaded the driver as a recovery step on v2.0.0 to v2.0.2; from v2.1.0 it reboots
   instead with offload on. Do not `rmmod`/`modprobe` ath11k by hand with offload on; host Wi-Fi
   mode reloads cleanly.
@@ -72,12 +80,14 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
   instead of waiting for the AP to give up on the handshake.
 - **On v2.0.0 and v2.0.1, every LuCI login leaks about 175 KiB of `rpcd` memory** (json-c
   0.19, #50), until `rpcd` restarts. Fixed in v2.0.2.
-- **The CPU runs at up to 1296 MHz** (from v2.1.0, kuncy7's change), above the IPQ5018's rated
-  1008 MHz at the same fixed voltage. On this board it held a 4-hour full-load soak at 59 °C
-  with no computation error. To keep the rated clock:
+- **The CPU runs at up to 1296 MHz** (from v2.1.0, kuncy7's change), 29 % above the IPQ5018's
+  rated 1008 MHz at the same fixed voltage, and about 25 % faster on CPU-bound work. One unit
+  held a 4-hour full-load soak at 59 °C with no computation error; no longer runs, no boot
+  cycling and no Wi-Fi or NSS load at that clock were tested. To keep the rated clock:
   `echo 1008000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq` (in `/etc/rc.local`).
-- **No multi-day soak yet.** The longest runs: 6.3 hours of CPU load at 1008 and 1296 MHz,
-  and 100 minutes of Wi-Fi traffic, firmware-crash recoveries and driver reloads.
+- **No multi-day soak yet.** The longest runs: 6.3 hours of CPU load at 1008 and 1296 MHz;
+  on v2.1.0, 30 minutes of fragmented Wi-Fi traffic in each Wi-Fi mode; on v2.0.0, 100
+  minutes of Wi-Fi traffic, firmware-crash recoveries and driver reloads.
 - **2.4 GHz signal readings are checked to about ±10 dB only.** 5 GHz agrees with the test
   client within 3 dB.
 - `n2h_rx_queue[0]_drops` rise during offloaded PPPoE uploads: that NSS queue has 256 entries
