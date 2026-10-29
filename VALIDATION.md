@@ -1,6 +1,6 @@
 # v2 validation
 
-What v2.0.0 to v2.1.0 were tested on before release, and what they were not. Everything
+What v2.0.0 to v2.1.1 were tested on before release, and what they were not. Everything
 here ran on one Xiaomi AX3000T (RD03v2, 256 MB), installed on NAND, with:
 
 - a wired client on a LAN port (1 GbE), the WAN port on an upstream LAN with
@@ -18,12 +18,13 @@ and a reworked wifi-scripts. On that base (b22, then the v2.0.0 build) the check
 those changes touch ran again: see
 [On ipq50xx-2026.10.15-2](#on-ipq50xx-20261015-2-b22-v200). v2.0.2 moves to his
 `ipq50xx-2026.10.19`: see [v2.0.2](#v202). v2.1.0 moves to his branch head of 2026-10-27
-(`c36db6321c`): see [v2.1.0](#v210).
+(`c36db6321c`): see [v2.1.0](#v210). v2.1.1 adds three fixes on the same base: see
+[v2.1.1](#v211).
 
 Each result names the build it ran on. The test builds (`v2.0.0-local.bN`) come
 from the same tree as the release, built with `build.sh`; a release build
 differs from its test build only in its version stamp and repository address, except
-where the table below says it adds changes (v2.1.0 does).
+where the table below says it adds changes (v2.1.0 and v2.1.1 do).
 
 | Build | What it adds |
 |---|---|
@@ -46,6 +47,8 @@ where the table below says it adds changes (v2.1.0 does).
 | DEV-c36db-b1 | his `c3po-tag-8021q` head `c36db6321c`, tree patches 0010 and 0011 dropped (in his tree), 984 reworked onto his 999-997, the #52 fixes (ECM 9001, ath11k 988, mac80211 989) |
 | DEV-c36db-b2 | b1 with tree patch 0008 reworked: a station stays on the NSS path (#48) |
 | v2.1.0 | the release: b2's sources plus the watchdog's reboot instead of a driver reload under NSS offload, 990 (#53), and the review fixes (991, the guard in 990, `wifi_offload_sta` spellings, the watchdog's offload decision before ath11k loads), built fresh; see [v2.1.0](#v210) |
+| DEV-v2.1.1-b1 | v2.1.0 plus 992 (#55) and the v1.x migration change (#51); bench-only additions for the #54 and #55 tests (see [v2.1.1](#v211)) |
+| v2.1.1 | the release: b1's sources plus tree patch 0012 (#54), built fresh; see [v2.1.1](#v211) |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -71,6 +74,76 @@ by hand on rc1 (C8, C14).
 | C13 | Upgrade from a realistic v1.x install | pass | b16 | not re-run; the migration's assumptions checked against his nss-tools |
 | C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 | not re-run (no hardware or device tree change) |
 | C15 | Package signature failures | pass, 8 checks | b9 | not re-run (same signing) |
+
+## v2.1.1
+
+The same base as v2.1.0 (kuncy7's `c36db6321c`, the same feeds), plus three fixes.
+
+**#54 (a client cut off for about 30 s after a firmware recovery).** Diagnosed on
+DEV-v2.1.1-b1, with hostapd and wpa_supplicant at debug level (bench only) and the client's
+disconnect reasons logged. Asserts alternated between the radios; "back" is the time until
+the client answers pings and both APs and the station are up again.
+
+| Arm | Events | Back after |
+|---|---|---|
+| E1: client on 5 GHz, the station uplink on 5 GHz (as in v2.1.0's C9) | 10 | 8.4-10.5 s in 7; 32.6-34.6 s in 3, all after a 2.4 GHz assert (which restarts both radios) |
+| E2: client on 2.4 GHz, the uplink on 5 GHz | 10 | 6.5-6.6 s in all |
+| E3: the uplink disabled, APs only (as the home APs run) | 8 | 6.4-6.5 s in all |
+| P1: as E1, with the change below on the bench | 14 | 6.6-10.5 s in all; the client got the driver's disassociation (reason 34) in 10 and the new deauthentication (reason 2) in 4 |
+
+- **The mechanism:** after a restart, the driver (his 999-9962, our former 960) reports each
+  AP station to hostapd as having lost too many ACKs; hostapd sends it one disassociation and
+  sends a deauthentication 30 s later (`AP_MAX_INACTIVITY_AFTER_DISASSOC`). The restart also
+  drops the station uplink. When it reconnects, wpa_supplicant tells hostapd (`apsta_state`),
+  which stops the APs on that radio and starts them again on the uplink's channel; stopping
+  flushes the kernel's stations, while hostapd keeps its own. A disassociation that races that
+  stop is lost, and the client keeps an association that carries nothing until the 30 s
+  deauthentication. Under NSS offload, frames from a station the kernel does not know never
+  reach hostapd, so nothing ends it earlier. In these runs only clients on the radio that
+  carries the uplink were affected.
+- **The fix (tree patch 0012):** when `apsta_state` starts an AP it had stopped, hostapd
+  deauthenticates that BSS's stations (`DEAUTHENTICATE ff:ff:ff:ff:ff:ff reason=2`), as it does
+  when it sets up a BSS. Clients rejoin as soon as the AP beacons again. `verify-v2` checks
+  the image's `hostapd.uc`.
+
+**#55 (host-mode defragmentation: a double free when a 64-byte allocation fails).** 992
+copies the first fragment's descriptor before the fragment is queued. A bench-only module
+parameter made that copy fail every third first fragment, in host Wi-Fi mode (a station with
+`wifi_offload_sta='0'`), with the Ralink client fragmenting at 256 bytes on 2.4 GHz:
+
+| Run | Result |
+|---|---|
+| b1's modules, no forced failure | as v2.1.0 in host mode: 2000 pings of 1000 B, 1.45 % lost; 3000 B, 99.5 % lost; a 20 s upload at 8.86 Mbit/s |
+| b1's modules (992), failures forced for 10 minutes: 1000 fragmented pings a minute, an upload every 2 minutes | 3,859 forced failures; no oops or warning, the same boot; about 35 % of pings lost and uploads at 105 kbit/s (one fragmented frame in three dropped, as intended); `SUnreclaim` flat at 22.8-22.9 MB; available memory 5-16 MB, as host mode under traffic in v2.1.0 |
+| The same parameter on the code before 992 | the router crashed and rebooted within seconds, twice |
+
+**#51 (the v1.x migration).** The script now removes only the `qca-nss-ecm` line of
+`10_disable_services` and writes what it did to `/etc/rd03v2-migrate.log`. On v2.0.2 and
+v2.1.0, `qca-nss-ecm` has no `START` (ECM is loaded by `nss-dwmac-up`), so that line was a
+no-op and ECM was never off; the issue's "no flow is accelerated" does not hold on v2.
+`tools/test-migrate-v1x.py` runs eight cases (the dumb-AP file from the issue, the v1.x file
+with only the NSS lines, ECM line variants, no file, an already migrated install, the
+logger call) on the host shell and on the image's BusyBox; 8 / 8 on both, 7 fail against
+the v2.1.0 script. `verify-v2` runs it against the image's copy.
+
+**The release** (e232b47), `verify-v2` 180 / 180 (new: the 0012 fingerprint, the migration
+cases on the image's BusyBox, 992's fingerprint and its order in the built source), installed
+on NAND from its assets as an update with the bench settings kept: 47 / 47 configuration files
+identical (against a fresh `sysupgrade -b`), NSS with the 5 GHz station, both APs, no warning,
+41.7 MB available.
+
+| Check | Result |
+|---|---|
+| #54, firmware events with the client on 5 GHz, the station uplink's radio (7 asserts and 2 hw-restarts on 2.4 GHz, 4 asserts and 1 hw-restart on 5 GHz) | 14 / 14 back in 6.5-10.5 s, same boot, no warning, a 50 Mbit/s TCP download after each; the client got the driver's disassociation (reason 34) in 6 and 0012's deauthentication (reason 2) in 8 |
+| #53, a client fragmenting at 256 bytes on 2.4 GHz | the fragment register holds 7; 2000 pings of 1000 B: 1.75 % lost; 300-1472 B: 0-6 %; 500 bridged to a wired host: 1.2 %; 200 of 3000 B: 5.5 %; a 10.9 Mbit/s upload, 3 reconnects of 1 s; 151,582 fragments reassembled into 22,187 frames, none out of order or invalid, `REO2FW_DEST_RING` empty |
+| #52, UDP 20 Mbit/s for 60 s into a client | 2.4 GHz and 5 GHz: 125,000 packets each, no loss, no assert; the same on both bands in host mode |
+| C4, client to a wired host | 245 / 322 Mbit/s on 5 GHz, 44.5 / 57.9 on 2.4 GHz |
+| The watchdog, end to end | ath11k unloaded by hand with offload on: an incident ("a driver reload does not recover NSS Wi-Fi offload", health not checked) and a reboot, 171 s after the unload (it came within the watchdog's 120 s pause after its previous incident, a report of a crash the kernel had recovered); after it everything up |
+| Host mode (`wifi_offload_sta='0'`, reboot) | as v2.1.0: no stall; 1000-byte pings 2.25 % lost, 3000-byte ones all lost; a 7.4 Mbit/s fragmented upload; available memory 8.8-12.3 MB after it, `SUnreclaim` 22.7 MB; 4 asserts recovered in 6.5-12.5 s on the same boot |
+| Back to NSS, reboot | APs, station and client back 64 s after the reboot command; no warning, 41.5 MB available; 47 / 47 configuration files as before the tests |
+
+The migration (#51) was not run on NAND: the bench settings are already migrated, and a v1.x
+install was not repeated; the host test above runs the image's script.
 
 ## v2.1.0
 

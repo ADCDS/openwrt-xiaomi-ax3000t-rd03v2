@@ -67,6 +67,17 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
   2.4 GHz; the 5 GHz radio gets the same setting, no fragmenting 5 GHz client was
   tried). In host Wi-Fi mode the radio no longer stops, but most fragmented frames are lost
   (large ones entirely).
+- **On v2.1.0, a Wi-Fi client can be cut off for about 30 s after a Wi-Fi firmware recovery**
+  (#54), when it is on a radio that also carries the router's station uplink (a WISP or
+  repeater): about one recovery in three. The restart drops the uplink too, its AP stops for
+  a moment, and the message telling the client to reconnect can be lost then; the client
+  keeps an association that carries nothing until hostapd drops it 30 s later. Access points
+  without a station uplink recover in about 6 s. Fixed in v2.1.1. Releases before v2.1.0
+  were not checked.
+- **Before v2.1.1, host Wi-Fi mode could crash the router while receiving fragmented frames**
+  (#55), if a small memory allocation failed at the first fragment (the buffer was freed
+  twice). Rare: not seen in use, only forced on the bench. NSS Wi-Fi offload (the default)
+  does not use that code. Fixed in v2.1.1; the same code is in upstream Linux.
 - **With NSS Wi-Fi offload, reloading the Wi-Fi driver breaks Wi-Fi until a reboot**: the radios
   come back, but no client or station completes the WPA handshake on either radio, with or
   without a station configured. The
