@@ -1,0 +1,77 @@
+From dad34dfe56e39505b1740f86d2f77860a9609cc7 Mon Sep 17 00:00:00 2001
+From: Adriel Santos <adriel@adriel.eu>
+Date: Thu, 29 Oct 2026 10:56:13 -0300
+Subject: [PATCH] hostapd: deauthenticate a BSS's stations when an apsta
+ restart starts it again
+
+apsta_state stops a radio's APs when its station interface loses its
+link (iface.stop(): hostapd_drv_stop_ap() drops the stations in the
+kernel, hostapd keeps them) and starts them again once the link is back.
+Nothing tells a client that was associated before the stop. If the last
+frame it should have received was lost in that window, it keeps an
+association the AP no longer has, and only hostapd's timers end it: 30 s
+after a disassociation, up to ap_max_inactivity otherwise (with NSS Wi-Fi
+offload its frames never reach hostapd to trigger an earlier deauth).
+
+A Wi-Fi firmware restart does exactly this on a radio that carries a
+station uplink: the driver kicks every AP station (one disassociation
+each) while the restart also drops the station's link, and the
+disassociation races the stop. On an IPQ5018 bench, 3 of 10 restarts left
+a client on that radio without traffic for 32-35 s; none on the other
+radio, and none without a station.
+
+When apsta_state starts an AP that it had stopped, deauthenticate and
+drop the BSS's stations (DEAUTHENTICATE ff:ff:ff:ff:ff:ff reason=2), as
+hostapd does when it sets up a BSS, so those clients rejoin as soon as
+the AP is back.
+
+Refs: ADCDS/openwrt-xiaomi-ax3000t-rd03v2#54
+---
+ .../network/services/hostapd/files/hostapd.uc | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/package/network/services/hostapd/files/hostapd.uc b/package/network/services/hostapd/files/hostapd.uc
+index 4031beb5ac..52a48b5ebe 100644
+--- a/package/network/services/hostapd/files/hostapd.uc
++++ b/package/network/services/hostapd/files/hostapd.uc
+@@ -1007,6 +1007,22 @@ function iface_macaddr_move(phydev, config, old_config, bss_list_cfg)
+ 	return true;
+ }
+ 
++// iface.stop() for a lost station link drops the BSSes' stations in the kernel but
++// not in hostapd. A client whose last frame from the AP was lost in that window (a
++// disassociation sent just before the stop, as after a firmware restart) still
++// thinks it is associated, and nothing reaches it until hostapd's own timers, up to
++// 30 s (with NSS offload its frames never reach hostapd to trigger a deauth). When
++// the AP starts again, deauthenticate and drop them all, as hostapd does when it
++// sets up a BSS, so they rejoin at once.
++function iface_flush_stations(phy, config)
++{
++	for (let bss_config in config.bss) {
++		let bss = hostapd.bss[phy]?.[bss_config.ifname];
++		if (bss)
++			bss.ctrl("DEAUTHENTICATE ff:ff:ff:ff:ff:ff reason=2");
++	}
++}
++
+ // A failed start leaves the interface DISABLED until a restart. apsta_state
+ // can also leave it DISABLED, while it waits for its station.
+ function iface_start_failed(name)
+@@ -2085,11 +2101,14 @@ let main_obj = {
+ 				}
+ 			}
+ 
++			let was_stopped = hostapd.data.apsta_stopped[phy];
+ 			let ret = iface.start(freq_info);
+ 			if (!ret)
+ 				return libubus.STATUS_UNKNOWN_ERROR;
+ 
+ 			delete hostapd.data.apsta_stopped[phy];
++			if (was_stopped)
++				iface_flush_stations(phy, config);
+ 			return 0;
+ 		}
+ 	},
+-- 
+2.47.3
+

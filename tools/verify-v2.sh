@@ -167,6 +167,10 @@ EOS
 			"$X/usr/share/schema/wireless.wifi-iface.json" 2>/dev/null)" 1
 	chk "wpa_deny_ptk0_rekey reaches hostapd and wpa_supplicant" \
 		"$(grep -lF "wpa_deny_ptk0_rekey" "$X/usr/share/ucode/wifi/ap.uc" "$X/usr/share/ucode/wifi/supplicant.uc" 2>/dev/null | wc -l)" 2
+	# an AP that apsta_state stopped for a lost station link deauthenticates its BSSes'
+	# stations when it starts again (0012, #54)
+	chk "apsta restart deauthenticates the stations hostapd kept (0012)" \
+		"$(grep -cF 'iface_flush_stations(phy, config);' "$X/usr/share/hostap/hostapd.uc")$(grep -cF 'DEAUTHENTICATE ff:ff:ff:ff:ff:ff reason=2' "$X/usr/share/hostap/hostapd.uc")" 11
 	chk "early Q6 policy service" "$(yes_ test -L "$X/etc/rc.d/S18rd03v2-q6")" yes
 	chk "early RAM installer service" "$(yes_ test -L "$X/etc/rc.d/S17rd03v2-installer")" yes
 	# first-boot scripts
