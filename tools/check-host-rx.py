@@ -90,6 +90,13 @@ checks = [
     ('CE RX replenish timer stopped before the pipes are cleaned (991)', bool(re.search(
         r'void ath11k_ce_cleanup_pipes\(struct ath11k_base \*ab\)\s*\{[^}]*?timer_delete_sync\(&ab->rx_replenish_retry\);'
         r'[^}]*?ath11k_ce_rx_pipe_cleanup\(', ce))),
+    # fragment 0's REO descriptor is copied before the fragment is queued: a failed copy must
+    # not leave a queued msdu that the caller frees (992, #55)
+    ('first fragment descriptor copied before queuing (992)', bool(re.search(
+        r'static int ath11k_dp_rx_frag_h_mpdu\(.*?rx_tid->dst_ring_desc = kmemdup\(ring_desc,.*?'
+        r'__skb_queue_tail\(&rx_tid->rx_frags, msdu\);.*?\n\}', rx, re.S))
+     and not re.search(r'static int ath11k_dp_rx_frag_h_mpdu\(.*?__skb_queue_tail\(&rx_tid->rx_frags, msdu\);'
+                       r'.*?rx_tid->dst_ring_desc = kmemdup\(ring_desc,.*?\n\}', rx, re.S)),
     ('IPQ5018 ops fill the 802.11 header ops the RX path calls',
      all(re.search(r'\.' + op + r'\s*=', ipq5018) for op in dot11_called) if ipq5018 else False),
 ]

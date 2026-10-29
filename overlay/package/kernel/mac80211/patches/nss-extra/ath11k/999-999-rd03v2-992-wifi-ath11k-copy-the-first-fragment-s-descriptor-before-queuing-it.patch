@@ -1,0 +1,64 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: copy the first fragment's descriptor before queuing it
+
+ath11k_dp_rx_frag_h_mpdu() queues a received fragment on rx_tid->rx_frags
+and only then, for fragment 0, copies its REO destination descriptor with
+kmemdup(GFP_ATOMIC). If that copy fails it returns -ENOMEM, and its
+caller, ath11k_dp_process_rx_err_buf(), frees the msdu and returns its
+link descriptor, while the msdu is still on rx_frags with its bit set in
+rx_frag_bitmap. The next flush (a new sequence number, or the fragment
+timer) purges the list and frees it a second time; if the remaining
+fragments of the MPDU arrive first, ath11k_dp_rx_h_defrag() uses the
+freed skb and the reinject path reads the NULL dst_ring_desc.
+
+Copy the descriptor before the fragment is queued, so a failure leaves
+nothing behind and the caller's free is the only one. Fragments other
+than 0 still return their link descriptor after being queued, as before.
+
+Host Wi-Fi mode only: with NSS offload, fragments go to NSS. Upstream
+ath11k has the same code (openwrt-xiaomi-ax3000t-rd03v2 #55).
+---
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.c
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c
+@@ -4476,6 +4476,21 @@
+ 		goto out_unlock;
+ 	}
+ 
++	/* Copy the first fragment's REO descriptor before the fragment is
++	 * queued. On failure the caller frees msdu and returns its link
++	 * descriptor, so msdu must not be on rx_frags by then: purging the
++	 * list would free it again, and completing the MPDU would use it.
++	 */
++	if (frag_no == 0) {
++		rx_tid->dst_ring_desc = kmemdup(ring_desc,
++						sizeof(*rx_tid->dst_ring_desc),
++						GFP_ATOMIC);
++		if (!rx_tid->dst_ring_desc) {
++			ret = -ENOMEM;
++			goto out_unlock;
++		}
++	}
++
+ 	if (!rx_tid->rx_frag_bitmap || (frag_no > __fls(rx_tid->rx_frag_bitmap)))
+ 		__skb_queue_tail(&rx_tid->rx_frags, msdu);
+ 	else
+@@ -4485,18 +4500,9 @@
+ 	if (!more_frags)
+ 		rx_tid->last_frag_no = frag_no;
+ 
+-	if (frag_no == 0) {
+-		rx_tid->dst_ring_desc = kmemdup(ring_desc,
+-						sizeof(*rx_tid->dst_ring_desc),
+-						GFP_ATOMIC);
+-		if (!rx_tid->dst_ring_desc) {
+-			ret = -ENOMEM;
+-			goto out_unlock;
+-		}
+-	} else {
++	if (frag_no != 0)
+ 		ath11k_dp_rx_link_desc_return(ab, ring_desc,
+ 					      HAL_WBM_REL_BM_ACT_PUT_IN_IDLE);
+-	}
+ 
+ 	if (!rx_tid->last_frag_no ||
+ 	    rx_tid->rx_frag_bitmap != GENMASK(rx_tid->last_frag_no, 0)) {
