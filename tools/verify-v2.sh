@@ -194,6 +194,14 @@ EOS
 	init_status=$?
 	cp "$W/watchdog-init-tests" "$TREE/watchdog-init-host-tests.log"
 	chk "watchdog init lifecycle scenarios" "$init_status" 0
+	# the v1.x settings migration (#51): only qca-nss-ecm leaves 10_disable_services, the
+	# actions are logged to /etc/rd03v2-migrate.log; on the host's shell and the image's BusyBox
+	python3 "$V2/tools/test-migrate-v1x.py" --script "$X/etc/uci-defaults/00-rd03v2-migrate-v1x" > "$W/migrate-tests" 2>&1
+	m_host=$?
+	python3 "$V2/tools/test-migrate-v1x.py" --script "$X/etc/uci-defaults/00-rd03v2-migrate-v1x" --env target --rootfs "$X" >> "$W/migrate-tests" 2>&1
+	m_target=$?
+	cp "$W/migrate-tests" "$TREE/migrate-v1x-tests.log"
+	chk "v1.x migration scenarios (host shell, image BusyBox)" "$m_host$m_target" 00
 	# UK 5.8 GHz band (964): its one-entry table compiles to immediates, the "GB" compare
 	# (0x4247) and the low half of 5725000 kHz (0x5b48)
 	od=$(ls "$TREE"/staging_dir/toolchain-*/bin/*-linux-musl-objdump 2>/dev/null | head -1)

@@ -5,14 +5,19 @@ Boot the release's RAM installer and run `sysupgrade` from there, keeping settin
 fit kuncy7's NSS stack, which the release is built on. On the first boot,
 `00-rd03v2-migrate-v1x` runs before every other first-boot script:
 
-- It defuses v1.x's `/etc/uci-defaults/10_disable_services`, which v1.x `-nss` config
-  backups carry. That script disables `qca-nss-ecm`, which loads ECM on his stack.
+- It removes the `qca-nss-ecm` line from `/etc/uci-defaults/10_disable_services`, which
+  `sysupgrade -b` writes into every config backup: one `/etc/init.d/<name> disable` line per
+  service disabled at backup time. Every other line stays, so services you had disabled (a
+  dumb AP's `dnsmasq`, `firewall` and `odhcpd`, for example) stay disabled. On v2 the
+  `qca-nss-ecm` line does nothing (ECM is loaded by the NSS bring-up, not by that init
+  script), and `qca-nss-drv disable` is what v2 does anyway (#51).
 - It unsets `nss.general.topology`, so his `99-nss-topology` sets up the NSS plane as on a
   fresh install. The other `nss` options are the same on both.
 - It removes `options ecm front_end_selection=0` from `/etc/modules.conf`.
 - It removes the boot-flag and NSS-knob blocks from `/etc/rc.local` when they are unchanged.
 
-It then sets `rd03v2.v2.migrated`, so later v2 upgrades skip it. The radio paths
+It then sets `rd03v2.v2.migrated`, so later v2 upgrades skip it. What it did is in
+`/etc/rd03v2-migrate.log` (from v2.1.1; the system log is not running yet when it runs). The radio paths
 (`platform/soc@0/c000000.wifi`, `.../b00a040.wifi`) and port names are the same in both trees.
 
 Signal readings drop by 31 dB on 2.4 GHz and 24 dB on 5 GHz against v1.x, for stations,

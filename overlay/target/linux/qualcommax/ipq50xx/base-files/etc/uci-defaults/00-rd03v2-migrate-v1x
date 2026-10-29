@@ -3,10 +3,13 @@
 # stack. Runs before every other uci-defaults script, after every flash; once the settings are
 # migrated, rd03v2.v2.migrated marks them, so an upgrade from v2 to v2 changes nothing.
 #
-# - /etc/uci-defaults/10_disable_services (v1.x -nss images ship it, and their config backups
-#   carry it) disables the qca-nss-drv and qca-nss-ecm init scripts. This tree loads ECM from
-#   qca-nss-ecm's init script, so it would leave every flow unaccelerated. Defused here: it is
-#   emptied, runs, and is removed.
+# - /etc/uci-defaults/10_disable_services: sysupgrade -b writes it into every config backup, one
+#   "/etc/init.d/<name> disable" line per init script disabled at backup time. A v1.x -nss
+#   install has qca-nss-drv and qca-nss-ecm among them, and a dumb AP also dnsmasq, firewall and
+#   odhcpd. On this tree "qca-nss-ecm disable" does nothing (that init script has no START; ECM
+#   is loaded by nss-dwmac-up) and "qca-nss-drv disable" is what 99-nss-topology does anyway.
+#   Only the qca-nss-ecm line is removed, so the file no longer reads as turning ECM off; every
+#   other line stays, and the services the user had disabled stay disabled (#51).
 # - nss.general.topology: v1.x sets the same nss options as this tree's 99-nss-topology, which
 #   returns early when topology is set and so would skip the rest of its setup (disabling
 #   qca-nss-drv's init script, which writes an IRQ layout for other SoCs, and moving all DSA
@@ -17,17 +20,27 @@
 # - /etc/rc.local: v1.x's two blocks, removed if unchanged. The U-Boot boot flags are kept by
 #   this tree's /etc/init.d/bootcount; the NSS runtime knobs (redirect, IPv4/IPv6 accel_mode)
 #   are v1.x's driver setup, which this stack does not use.
+#
+# What it does goes to /etc/rd03v2-migrate.log as well as to logger: uci-defaults run from
+# /etc/init.d/boot (START=10), before logd (START=12), so the logger lines are lost. The log is
+# kept across later upgrades (/lib/upgrade/keep.d/rd03v2-migrate). ROOT prefixes every path, for
+# the host test (tools/test-migrate-v1x.py).
+R=${ROOT:-}
 [ "$(uci -q get rd03v2.v2.migrated)" = 1 ] && exit 0
-log() { logger -t rd03v2-migrate "$*"; }
+did=0
+log() {
+	did=1
+	echo "$(date '+%F %T' 2>/dev/null) $*" >> "$R/etc/rd03v2-migrate.log"
+	logger -t rd03v2-migrate "$*" 2>/dev/null
+}
 
-f=/etc/uci-defaults/10_disable_services
-if [ -f "$f" ]; then
-	if [ -z "$(grep -v -x -E '[[:space:]]*(#.*)?|/etc/init\.d/qca-nss-(drv|ecm) disable|exit 0' "$f")" ]; then
-		echo 'exit 0' > "$f"
-		log "defused v1.x $f (it disables qca-nss-ecm, which loads ECM on this stack)"
-	else
-		log "left $f alone: it is not v1.x's; check that it does not disable qca-nss-ecm"
-	fi
+f=$R/etc/uci-defaults/10_disable_services
+ecm='[[:space:]]*/etc/init\.d/qca-nss-ecm[[:space:]]+disable([[:space:]].*)?'
+if [ -f "$f" ] && grep -q -x -E "$ecm" "$f"; then
+	{ grep -v -x -E "$ecm" "$f" || :; } > "$f.rd03v2" && mv "$f.rd03v2" "$f"
+	kept=$(sed -n 's#^[[:space:]]*/etc/init\.d/\([^[:space:]]*\)[[:space:]][[:space:]]*disable.*#\1#p' "$f" | tr '\n' ' ')
+	kept=${kept% }
+	log "removed qca-nss-ecm from ${f#$R}; kept disabled: ${kept:-nothing}"
 fi
 
 if [ -n "$(uci -q get nss.general.topology)" ]; then
@@ -36,10 +49,10 @@ if [ -n "$(uci -q get nss.general.topology)" ]; then
 	log "unset the v1.x nss.general.topology so that 99-nss-topology sets up this stack"
 fi
 
-f=/etc/modules.conf
+f=$R/etc/modules.conf
 if grep -q -x 'options ecm front_end_selection=0' "$f" 2>/dev/null; then
 	grep -v -x 'options ecm front_end_selection=0' "$f" > "$f.rd03v2" && mv "$f.rd03v2" "$f"
-	log "removed v1.x's ecm front_end_selection from $f"
+	log "removed v1.x's ecm front_end_selection from ${f#$R}"
 fi
 
 # The v1.x blocks, verbatim (the NSS one, and the blank line after it, only on -nss images).
@@ -70,17 +83,18 @@ if [ -e /etc/fw_env.config ]; then
 	fw_setenv flag_try_sys2_failed 8 2>/dev/null
 fi
 '
-f=/etc/rc.local
+f=$R/etc/rc.local
 for name in nss flags; do
 	[ -f "$f" ] || break
 	eval "block=\$v1_$name"
 	# awk index() on the whole file: an exact match or nothing
 	awk -v b="$block" 'BEGIN { RS = "\001" } { i = index($0, b); if (!i) exit 1; printf "%s%s", substr($0, 1, i - 1), substr($0, i + length(b)) }' \
-		"$f" > "$f.rd03v2" && mv "$f.rd03v2" "$f" && log "removed v1.x's $name block from $f"
+		"$f" > "$f.rd03v2" && mv "$f.rd03v2" "$f" && log "removed v1.x's $name block from ${f#$R}"
 	rm -f "$f.rd03v2"
 done
 
-f=/etc/config/rd03v2
+[ "$did" = 1 ] || log "nothing from v1.x to migrate"
+f=$R/etc/config/rd03v2
 [ -f "$f" ] || touch "$f"
 uci -q batch <<-EOF
 	set rd03v2.v2=v2
