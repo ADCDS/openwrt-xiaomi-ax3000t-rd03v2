@@ -4,7 +4,17 @@ The image lists our repository first, then OpenWrt's snapshot feeds `base`, `luc
 `packages`, `routing`, `telephony` and `video`. The official kmods feed is left out, because
 its kernel is not ours. Kernel modules come from our repository, which is built with the
 image and signed with our key. A kmod installs only on the image of the same build, since
-it depends on `kernel=<version>~<vermagic>` exactly.
+it depends on `kernel=<version>~<vermagic>` exactly. That is also why a module missing from a
+release cannot be added to its repository later: building it changes the kernel
+configuration, and with it vermagic.
+
+pppd plugins (`ppp-mod-*`) load only into the pppd they were built for: pppd reads them from
+`/usr/lib/pppd/<its version>/`. Our repository carries the image's own builds of
+`ppp-mod-pppol2tp` and `ppp-mod-pptp` (and `xl2tpd`), but `apk` installs the highest
+version on offer, which is OpenWrt's snapshot build while its ppp has the same version
+(on v2.1.2: the snapshot's 2.5.4-r6, the image's pppd 2.5.4-r2). Should the snapshot's ppp
+move to a newer version, its plugins would not load into the image's pppd until
+`apk upgrade ppp` brings pppd along.
 
 Userspace comes from OpenWrt's snapshot feeds and drifts with them. That is the point: it
 is maintained there. The exception is the packages kuncy7's tree changes without a version

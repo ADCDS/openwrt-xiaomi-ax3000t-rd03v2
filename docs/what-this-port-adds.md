@@ -31,6 +31,7 @@ port adds what follows: tree patches (`tree-patches/`, applied with `git am`), n
 | LuCI, full `wpad-mbedtls`, `i2c-tools` (for the NFC tool) in the image. `kmod-tun`, `kmod-inet-diag` and `kmod-nft-tproxy`, in the v1.x image, are in our repository instead (`apk add`) | `config/rd03v2.config` | as v1.x |
 | `luci-app-nss` in the image | `config/rd03v2.config` | his package; his image has no LuCI |
 | AmneziaWG (kmod, tools, LuCI) in our repository | `build.sh` (feed, `awg_pin`) | as v1.x, #39 |
+| L2TP and PPTP clients in our repository (from v2.1.2): `kmod-pppol2tp`, `kmod-pptp`, `kmod-mppe`, and the image's builds of `ppp-mod-pppol2tp`, `ppp-mod-pptp` and `xl2tpd`. Not offloaded: his ECM is built without its L2TPv2 and PPTP front ends | `config/kmods.config`, `config/rd03v2.config` | #56, [L2TP and PPTP](l2tp-pptp.md) |
 | ath11k: calibrated survey noise floor (the noise-floor half of 952) | `overlay/.../nss-extra/ath11k/999-999-rd03v2-952-*` | v1.x 952 |
 | ath11k: UK 5.8 GHz band (964) | `overlay/.../nss-extra/ath11k/999-999-rd03v2-964-*` | v1.x, #34 |
 | smp2p: clear cached inbound bits across a Q6 restart (0918), so `rmmod`/`insmod` and crash recovery can start the Q6 again | `overlay/target/linux/qualcommax/patches-6.18/0918-*` | v1.x 0918, moved into his `wcss_sec_start()` |

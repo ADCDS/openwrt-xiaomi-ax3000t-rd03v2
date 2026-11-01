@@ -1,6 +1,6 @@
 # v2 validation
 
-What v2.0.0 to v2.1.1 were tested on before release, and what they were not. Everything
+What v2.0.0 to v2.1.2 were tested on before release, and what they were not. Everything
 here ran on one Xiaomi AX3000T (RD03v2, 256 MB), installed on NAND, with:
 
 - a wired client on a LAN port (1 GbE), the WAN port on an upstream LAN with
@@ -19,7 +19,7 @@ those changes touch ran again: see
 [On ipq50xx-2026.10.15-2](#on-ipq50xx-20261015-2-b22-v200). v2.0.2 moves to his
 `ipq50xx-2026.10.19`: see [v2.0.2](#v202). v2.1.0 moves to his branch head of 2026-10-27
 (`c36db6321c`): see [v2.1.0](#v210). v2.1.1 adds three fixes on the same base: see
-[v2.1.1](#v211).
+[v2.1.1](#v211). v2.1.2 adds the L2TP and PPTP client packages: see [v2.1.2](#v212).
 
 Each result names the build it ran on. The test builds (`v2.0.0-local.bN`) come
 from the same tree as the release, built with `build.sh`; a release build
@@ -49,6 +49,7 @@ where the table below says it adds changes (v2.1.0 and v2.1.1 do).
 | v2.1.0 | the release: b2's sources plus the watchdog's reboot instead of a driver reload under NSS offload, 990 (#53), and the review fixes (991, the guard in 990, `wifi_offload_sta` spellings, the watchdog's offload decision before ath11k loads), built fresh; see [v2.1.0](#v210) |
 | DEV-v2.1.1-b1 | v2.1.0 plus 992 (#55) and the v1.x migration change (#51); bench-only additions for the #54 and #55 tests (see [v2.1.1](#v211)) |
 | v2.1.1 | the release: b1's sources plus tree patch 0012 (#54), built fresh; see [v2.1.1](#v211) |
+| v2.1.2 | the release: v2.1.1's sources plus `kmod-pppol2tp`, `kmod-pptp`, `kmod-mppe`, `ppp-mod-pppol2tp`, `ppp-mod-pptp` and `xl2tpd` in our repository (#56), built fresh; see [v2.1.2](#v212) |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -70,10 +71,76 @@ by hand on rc1 (C8, C14).
 | C9 | Recovery from Q6 firmware crashes, both Wi-Fi modes | pass, in place; a DFS AP stays up (b21, rc1); **2 board resets in 45 recoveries with a station passing traffic, cause not found** | b18-rc1 | pass, in place, about 20 events with no reset and no warning; a DFS AP stays up (b22, v2.0.0) |
 | C10 | Watchdog against user actions | pass | b16 | pass (b22); from v2.1.0, with NSS Wi-Fi offload, a reboot where it reloaded ath11k (see [v2.1.0](#v210)) |
 | C11 | Memory | 42 MB available idle, 34-36 MB in use, no drift; a multi-day soak not run | b19 | 42 MB available idle at 5 / 15 / 25 min; 100 min of Wi-Fi traffic: flat at 40 MB (b22) |
-| C12 | Packages from our repository, tunnels, SQM | pass | b9 | kmods and AmneziaWG from the build's repository (b22); AmneziaWG from the published repository, with traffic, a reboot and the LuCI import (v2.0.0) |
+| C12 | Packages from our repository, tunnels, SQM | pass | b9 | kmods and AmneziaWG from the build's repository (b22); AmneziaWG from the published repository, with traffic, a reboot and the LuCI import (v2.0.0); L2TP and PPTP sessions with routed traffic and a reboot, from the release's repository (v2.1.2) |
 | C13 | Upgrade from a realistic v1.x install | pass | b16 | not re-run; the migration's assumptions checked against his nss-tools |
 | C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 | not re-run (no hardware or device tree change) |
 | C15 | Package signature failures | pass, 8 checks | b9 | not re-run (same signing) |
+
+## v2.1.2
+
+v2.1.1's sources (kuncy7's `c36db6321c`, the same feeds) plus the L2TP and PPTP client
+packages (#56). The kernel modules need a new image: building them changes the kernel
+configuration (`CONFIG_PPPOL2TP`, `CONFIG_PPTP`, `CONFIG_PPP_MPPE`, all `=m`), and with it
+vermagic, so they could not be added to v2.1.1's repository.
+
+**What changed in the image.** No built-in kernel code tests the three options. The
+kernel's `.text` is byte-identical to v2.1.1's; the rest of `vmlinux` differs only in the
+build time (`linux_banner`, `init_uts_ns`, the vDSO, kallsyms) and 10 bytes in two boot-time
+functions. The image holds the same 200 packages at the same versions as v2.1.1, apart from
+`kernel` (the new vermagic) and `base-files` (the tree revision). `verify-v2` 186/186 (new:
+the six packages in the repository). Built in 60 min; assets from `mkrelease-v2` (tree
+verification passed, no build-host paths in the text assets).
+
+**NAND run** on rd03v2-ap2 with its home configuration: a dumb AP whose uplink is the `wan`
+port, so the RAM installer could not be reached by cable.
+
+- **Install**, the documented update without a cable: the `-wifi` RAM installer written into
+  `ubi_kernel` from the running v2.1.1, then the sysupgrade over the installer's Wi-Fi from
+  another room (2.4 GHz, -79 dBm; 185 s to upload the image), settings kept. The installer
+  answered 55 s after the reboot. v2.1.2 came up with NSS Wi-Fi offload, the four APs and no
+  warnings, 42-43 MB available; 49 of 49 configuration files identical to a `sysupgrade -b`
+  taken before.
+- **Packages:** `apk add xl2tpd ppp-mod-pptp` from the release's repository (the packages
+  asset, served from the bench host before Pages had it): 13 packages, every kernel module
+  from ours. apk chose OpenWrt's snapshot `ppp-mod-pppol2tp` and `ppp-mod-pptp` (2.5.4-r6)
+  over ours (2.5.4-r2, built with the image's pppd); pppd 2.5.4 loads them. After
+  `/etc/init.d/network restart` netifd offers `l2tp` and `pptp`, and LuCI has both forms
+  (`luci-proto-ppp`).
+- **Sessions** to an L2TP LNS (xl2tpd 1.3.18, CHAP) and a PPTP server (pptpd 1.5.0,
+  MS-CHAPv2, MPPE-128) on the bench host, as interfaces of their own with `defaultroute 0`.
+  L2TP came up at once. **PPTP did not:** OpenWrt's `/etc/ppp/options.pptp` says
+  `mppe required,no40,no56,stateless`, which pppd 2.5.4 does not know (`unrecognized option
+  'mppe'`, `OPTION_ERROR`); the snapshot's pppd 2.5.4-r6 does not either. With
+  `require-mppe-128` and `nomppe-stateful` in its place the session came up, "MPPE 128-bit
+  stateless compression enabled". [The guide](docs/l2tp-pptp.md#pptp) has the line.
+- **Traffic:** a wired client in a second subnet on AP2's LAN, masqueraded through each
+  tunnel to an iperf3 server behind it; TCP, 20 s per direction, one connection:
+
+| Path | Up | Down | AP2 CPU |
+|---|---|---|---|
+| no tunnel (ECM accelerated the connections) | 75.4-83.3 Mbit/s | 75.3-75.5 Mbit/s | 2-4 % |
+| L2TP | 43.2-45.9 | 55.6-56.7 | the second core 99-100 %, softirq |
+| PPTP | 55.3-56.4 | 38.4-40.8 | the second core 99 %, softirq |
+
+  ECM accelerated none of the tunnel connections: his ECM is built without its L2TPv2 and PPTP
+  front ends, and `ppp_channel_get_protocol()` returns -1 for these channels, so ECM sees an
+  unknown interface. No warning, assert or crash in any run. Two later L2TP pairs measured
+  30.4-47.3 Mbit/s with that core at 59-83 %; not looked into further. Four connections: 52-55
+  Mbit/s with receive processing on the second core only (`rps_cpus` 2, the default on every
+  interface); 72-74 with `rps_cpus` 3 on the tunnel and LAN devices (bench only, reverted),
+  close to what the path carried without a tunnel.
+- **Default route:** with `defaultroute 1` and metric 5, the tunnel's default route sat next to
+  AP2's own. With metric 0, the same as AP2's, it replaced it, and when the tunnel's route
+  went away AP2 was left with no IPv4 default route (netifd still listed it) until it was
+  added back by hand. Hence the WAN metric in [the guide](docs/l2tp-pptp.md#configuring).
+- **Reboot:** both sessions came back by themselves, about 20 s after SSH answered, and carried
+  traffic again.
+- **Back to the home configuration:** the packages and the test interfaces removed (200
+  packages), 49 of 49 configuration files identical, a clean boot.
+
+**Not tested:** a real ISP's server (the reporter's), IPv6 inside the tunnels, the LuCI forms
+beyond their presence, and an L2TP server that is not on the WAN's own subnet (the bench's
+was; the host route the protocol adds was therefore not exercised).
 
 ## v2.1.1
 

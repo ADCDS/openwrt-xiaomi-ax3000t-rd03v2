@@ -89,6 +89,10 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
   and ended in a deauthentication. With the option the client reconnects instead, in about a
   second. As a client of an AP that rekeys, the router reconnects by itself, in about 5 s,
   instead of waiting for the AP to give up on the handshake.
+- **L2TP and PPTP are not offloaded** (from v2.1.2, #56): the CPU carries tunnel traffic, about
+  40-57 Mbit/s for one connection on the bench. **PPTP also needs one line of
+  `/etc/ppp/options.pptp` changed**: OpenWrt's file uses an option pppd 2.5 no longer has
+  (`unrecognized option 'mppe'`). See [L2TP and PPTP](docs/l2tp-pptp.md#pptp).
 - **On v2.0.0 and v2.0.1, every LuCI login leaks about 175 KiB of `rpcd` memory** (json-c
   0.19, #50), until `rpcd` restarts. Fixed in v2.0.2.
 - **The CPU runs at up to 1296 MHz** (from v2.1.0, kuncy7's change), 29 % above the IPQ5018's
@@ -112,6 +116,8 @@ Details are in [VALIDATION.md](VALIDATION.md).
   longer carries because his tree has it
 - [Packages](docs/packages.md): the repositories, kernel modules and pinned packages
 - [AmneziaWG](docs/amneziawg.md): install, LuCI import, full tunnel
+- [L2TP and PPTP](docs/l2tp-pptp.md): for ISPs that give Internet access inside a tunnel
+  (from v2.1.2)
 - [Upgrading from v1.x](docs/upgrading-from-v1.md)
 - [Building](docs/building.md)
 - [VALIDATION.md](VALIDATION.md): what was tested on hardware, and what was not
