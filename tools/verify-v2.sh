@@ -297,7 +297,8 @@ chk "package index" "$(ls "$T/packages/packages.adb" 2>/dev/null | wc -l)" 1
 chk "package index signed with our key" \
 	"$("$TREE/staging_dir/host/bin/apk" verify --keys-dir "$V2/keys" "$T/packages/packages.adb" 2>&1 | sed 's/.*: //')" OK
 for n in kmod-wireguard luci-app-nss kmod-amneziawg amneziawg-tools luci-proto-amneziawg \
-         wireguard-tools luci-proto-wireguard luci-app-sqm luci-lib-uqr resolveip; do
+         wireguard-tools luci-proto-wireguard luci-app-sqm luci-lib-uqr resolveip \
+         kmod-pppol2tp ppp-mod-pppol2tp xl2tpd kmod-pptp kmod-mppe ppp-mod-pptp; do
 	chk "repo has $n" "$(ls "$T/packages/$n"-[0-9]*.apk 2>/dev/null | wc -l)" 1
 done
 # the pinned packages, in exactly the image's versions

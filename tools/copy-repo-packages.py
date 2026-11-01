@@ -12,7 +12,8 @@ import tempfile
 
 REPO = Path(__file__).resolve().parents[1]
 SUPPORT = ('luci-app-nss', 'amneziawg-tools', 'luci-proto-amneziawg',
-           'wireguard-tools', 'luci-proto-wireguard', 'luci-app-sqm', 'luci-lib-uqr', 'resolveip')
+           'wireguard-tools', 'luci-proto-wireguard', 'luci-app-sqm', 'luci-lib-uqr', 'resolveip',
+           'ppp-mod-pppol2tp', 'xl2tpd', 'ppp-mod-pptp')
 PREFIX = 'openwrt-qualcommax-ipq50xx-xiaomi_mi-router-ax3000t-v2'
 
 

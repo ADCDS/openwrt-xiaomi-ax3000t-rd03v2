@@ -190,8 +190,10 @@ def verify_release(directory, apk, keys):
                      for p in indexes[0].parent.glob('*.apk')}
         require({'kmod-wireguard', 'kmod-amneziawg', 'amneziawg-tools',
                  'luci-proto-amneziawg', 'luci-app-nss', 'wireguard-tools',
-                 'luci-proto-wireguard', 'luci-app-sqm', 'luci-lib-uqr', 'resolveip'} <= available,
-                'WireGuard, AmneziaWG and NSS LuCI packages available')
+                 'luci-proto-wireguard', 'luci-app-sqm', 'luci-lib-uqr', 'resolveip',
+                 'kmod-pppol2tp', 'ppp-mod-pppol2tp', 'xl2tpd',
+                 'kmod-pptp', 'kmod-mppe', 'ppp-mod-pptp'} <= available,
+                'WireGuard, AmneziaWG, L2TP, PPTP and NSS LuCI packages available')
         pin_script = root / 'etc/uci-defaults/95-rd03v2-apk-pins'
         pins = re.search(r"^PINS='([^']+)'", pin_script.read_text(), re.M).group(1).split()
         for name in pins:
