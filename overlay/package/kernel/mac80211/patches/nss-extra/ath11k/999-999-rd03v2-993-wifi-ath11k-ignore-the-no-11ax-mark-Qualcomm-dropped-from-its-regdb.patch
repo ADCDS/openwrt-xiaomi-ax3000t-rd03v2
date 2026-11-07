@@ -1,0 +1,84 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] wifi: ath11k: ignore the no-11ax mark Qualcomm dropped from its regdb
+
+ath11k is a self-managed wiphy: the PHY restrictions of a country come
+from the firmware, in the phybitmap of its regulatory event. Qualcomm's
+regulatory database marked Belarus, Russia and Ukraine
+REGULATORY_PHYMODE_NO11AX in June 2020. ath11k turns that into
+NL80211_RRF_NO_HE on every rule, and cfg80211 then refuses a beacon with
+an HE Operation element (-EOPNOTSUPP). With country RU and any HE htmode,
+on either band, the AP does not start:
+
+  hostapd: Failed to set beacon parameters
+  hostapd: phy0-ap0: AP-DISABLED
+
+while US, with the same modules, works (openwrt-xiaomi-ax3000t-rd03v2 #57).
+
+Qualcomm took the mark off again: regulatory database v35, of June 2021,
+says "Add 11ax support for Russia & Ukraine", and v37, of November 2021,
+drops it for Belarus. WLAN.HK.2.7.0.1-01744, built in August 2022 and the
+newest firmware known for IPQ5018/QCN6122, still behaves as before them:
+on this board, RU has NO-HE on every rule of both radios. Annex 2 of
+Russia's GKRCh decision 07-20-03-001 sets limits for these bands by
+modulation and power, and names no Wi-Fi standard.
+
+Ignore NO11AX for these three countries. Their channels and power limits
+stay the firmware's. Stations on them also stop being downgraded to VHT;
+mesh never was, because mac80211 doesn't check the flag for it.
+
+Tested on this board, with the image installed to NAND: on RU, BY and UA
+an AP in an HE mode starts on both radios, with no NO-HE rules and HE in
+the beacons a receiver could hear, and on RU a station passes traffic at
+HE-MCS rates to an HE AP on both bands, with no firmware errors. An HE
+client on such an AP has not been tested (docs/regulatory-ru-he.md).
+---
+--- a/drivers/net/wireless/ath/ath11k/reg.c
++++ b/drivers/net/wireless/ath/ath11k/reg.c
+@@ -363,9 +363,28 @@ static u32 ath11k_map_fw_reg_flags(u16 reg_flags)
+ 	return flags;
+ }
+ 
+-static u32 ath11k_map_fw_phy_flags(u32 phy_flags)
++/* Countries where the firmware's built-in regulatory database appears to still
++ * forbid 802.11ax (NO11AX in the event's phybitmap), although Qualcomm's own
++ * database has dropped that. The database is compiled into the Q6 image, so it
++ * lags: database v35 of June 2021 says "Add 11ax support for Russia & Ukraine",
++ * v37 of November 2021 drops the mark for Belarus, and WLAN.HK.2.7.0.1-01744,
++ * from August 2022, behaves as before them.
++ */
++static const char ath11k_reg_fw_he_allowed[][3] = {
++	"BY",
++	"RU",
++	"UA",
++};
++
++static u32 ath11k_map_fw_phy_flags(const struct cur_regulatory_info *reg_info)
+ {
++	u32 phy_flags = reg_info->phybitmap;
+ 	u32 flags = 0;
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(ath11k_reg_fw_he_allowed); i++)
++		if (!memcmp(ath11k_reg_fw_he_allowed[i], reg_info->alpha2, 2))
++			phy_flags &= ~ATH11K_REG_PHY_BITMAP_NO11AX;
+ 
+ 	if (phy_flags & ATH11K_REG_PHY_BITMAP_NO11AX)
+ 		flags |= NL80211_RRF_NO_HE;
+@@ -567,7 +586,7 @@ static u8 ath11k_reg_add_fw_gaps(struct ath11k_base *ab,
+ 				       gap->start_freq, gap->end_freq,
+ 				       gap->max_bw, 0, gap->reg_power, 0,
+ 				       NL80211_RRF_AUTO_BW | gap->flags |
+-				       ath11k_map_fw_phy_flags(reg_info->phybitmap));
++				       ath11k_map_fw_phy_flags(reg_info));
+ 		n_rules++;
+ 
+ 		ath11k_dbg(ab, ATH11K_DBG_REG,
+@@ -686,7 +705,7 @@ ath11k_reg_build_regd(struct ath11k_base *ab,
+ 		}
+ 
+ 		flags |= ath11k_map_fw_reg_flags(reg_rule->flags);
+-		flags |= ath11k_map_fw_phy_flags(reg_info->phybitmap);
++		flags |= ath11k_map_fw_phy_flags(reg_info);
+ 
+ 		ath11k_reg_update_rule(new_regd->reg_rules + i,
+ 				       reg_rule->start_freq,
