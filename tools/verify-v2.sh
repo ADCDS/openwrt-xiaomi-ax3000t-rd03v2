@@ -171,6 +171,9 @@ EOS
 	# stations when it starts again (0012, #54)
 	chk "apsta restart deauthenticates the stations hostapd kept (0012)" \
 		"$(grep -cF 'iface_flush_stations(phy, config);' "$X/usr/share/hostap/hostapd.uc")$(grep -cF 'DEAUTHENTICATE ff:ff:ff:ff:ff:ff reason=2' "$X/usr/share/hostap/hostapd.uc")" 11
+	# an AP on a channel whose regulatory rule has NO-HE starts without HE (hostapd 994, #57)
+	chk "hostapd starts without HE where regulatory rules forbid it (994)" \
+		"$(yes_ grep -qaF 'do not allow HE (802.11ax)' "$X/usr/sbin/wpad")" yes
 	chk "early Q6 policy service" "$(yes_ test -L "$X/etc/rc.d/S18rd03v2-q6")" yes
 	chk "early RAM installer service" "$(yes_ test -L "$X/etc/rc.d/S17rd03v2-installer")" yes
 	# first-boot scripts
