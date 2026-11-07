@@ -214,6 +214,9 @@ EOS
 		chk "ath11k.ko adds GB 5725-5850 MHz (964)" \
 			"$("$od" -d "$ko" | grep -oE 'mov[[:space:]]+w[0-9]+, #0x(4247|5b48)\b' | grep -oE '0x[0-9a-f]+$' | sort -u | xargs)" \
 			"0x4247 0x5b48"
+		# BY, RU and UA keep HE (993): the table's bytes, in the module's read-only data
+		chk "ath11k.ko ignores the firmware's no-802.11ax flag for BY, RU and UA (993)" \
+			"$(python3 -I -c 'import sys; print("yes" if b"BY\0RU\0UA\0" in open(sys.argv[1], "rb").read() else "no")' "$ko")" yes
 	else
 		echo "FAIL ath11k.ko or the tree's objdump not found"; fail=$((fail + 1))
 	fi

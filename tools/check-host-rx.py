@@ -18,6 +18,37 @@ helper = re.search(r'void ath11k_nss_ext_rx_stats\([^}]+?if \(ab->nss.enabled\)\
                    r'tlv_filter->rx_filter \|= ([^;]+);', nss)
 hw = (root / 'hw.c').read_text()
 hw_header, ce = (root / 'hw.h').read_text(), (root / 'ce.c').read_text()
+reg = (root / 'reg.c').read_text()
+def squeezed(code):
+    return ' '.join(code.split())
+reg_code = squeezed(re.sub(r'/\*.*?\*/', ' ', reg, flags=re.S))
+REG_993_TABLE_AND_FUNCTION = """
+static const char ath11k_reg_fw_he_allowed[][3] = {
+	"BY",
+	"RU",
+	"UA",
+};
+
+static u32 ath11k_map_fw_phy_flags(const struct cur_regulatory_info *reg_info)
+{
+	u32 phy_flags = reg_info->phybitmap;
+	u32 flags = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ath11k_reg_fw_he_allowed); i++)
+		if (!memcmp(ath11k_reg_fw_he_allowed[i], reg_info->alpha2, 2))
+			phy_flags &= ~ATH11K_REG_PHY_BITMAP_NO11AX;
+
+	if (phy_flags & ATH11K_REG_PHY_BITMAP_NO11AX)
+		flags |= NL80211_RRF_NO_HE;
+
+	return flags;
+}
+"""
+REG_993_CALLS = (
+	'NL80211_RRF_AUTO_BW | gap->flags | ath11k_map_fw_phy_flags(reg_info));',
+	'flags |= ath11k_map_fw_phy_flags(reg_info);',
+)
 ce_alloc = re.search(r'static struct sk_buff \*ath11k_ce_rx_alloc_skb\(.*?\n\}', ce, re.S)
 ce_alloc = ce_alloc[0] if ce_alloc else ''
 ipq5018 = re.search(r'const struct ath11k_hw_ops ipq5018_ops = \{(.*?)\n\};', hw, re.S)
@@ -97,6 +128,12 @@ checks = [
         r'__skb_queue_tail\(&rx_tid->rx_frags, msdu\);.*?\n\}', rx, re.S))
      and not re.search(r'static int ath11k_dp_rx_frag_h_mpdu\(.*?__skb_queue_tail\(&rx_tid->rx_frags, msdu\);'
                        r'.*?rx_tid->dst_ring_desc = kmemdup\(ring_desc,.*?\n\}', rx, re.S)),
+    # the firmware's NO11AX is ignored for these three, and only them, wherever rule flags are built (993, #57).
+    # The whole function, with comments out, so that an edit inside it or a call turned into a no-op fails.
+    ('BY, RU and UA keep HE, at both places that build rule flags (993)',
+     squeezed(REG_993_TABLE_AND_FUNCTION) in reg_code
+     and all(reg_code.count(squeezed(call)) == 1 for call in REG_993_CALLS)
+     and reg_code.count('ath11k_map_fw_phy_flags(') == 3),
     ('IPQ5018 ops fill the 802.11 header ops the RX path calls',
      all(re.search(r'\.' + op + r'\s*=', ipq5018) for op in dot11_called) if ipq5018 else False),
 ]
