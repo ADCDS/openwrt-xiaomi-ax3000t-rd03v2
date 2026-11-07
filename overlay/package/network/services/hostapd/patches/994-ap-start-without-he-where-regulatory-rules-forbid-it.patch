@@ -1,0 +1,189 @@
+From: Adriel Santos <adriel@adriel.eu>
+Subject: [PATCH] AP: start without HE on a channel where regulatory rules forbid it
+
+Regulatory rules can carry NO-HE: ath11k firmware marks whole countries
+that way, and a driver can do the same for any rule. cfg80211 refuses a
+Beacon frame with an HE Operation element on such a channel (-EOPNOTSUPP).
+hostapd does not read the flag, so with an HE configuration the AP does
+not start, and the log names no cause:
+
+  hostapd: Failed to set beacon parameters
+  hostapd: Interface initialization failed
+  hostapd: phy0-ap0: AP-DISABLED
+
+Read NL80211_FREQUENCY_ATTR_NO_HE, and when the channel to use has it,
+disable HE (and EHT, which needs it) with a warning that names the reason,
+as is already done for channel 14. VHT or HT then run at the configured
+width. This runs in hostapd_check_chans(), which fixed channels and ACS
+both go through, before the channel checks and DFS.
+
+Also turn off what depends on HE. hostapd_config_check() refuses multiple
+BSSID and FILS discovery without it, and it runs again each time the
+interface is enabled, so an interface that gets disabled could not be
+enabled again. The spatial reuse settings are sent to the driver whatever
+the mode.
+
+A mesh is left alone: cfg80211 doesn't refuse it, and mac80211 builds its
+beacons, with HE, whatever hostapd's configuration says.
+
+A reload keeps the channel without going through channel selection, and
+would otherwise take ieee80211ax=1 from the file again, so it checks the
+new configuration too.
+
+HE stays configured, and the AP keeps failing with an error that says so,
+on 6 GHz, which requires HE, and for an AP MLD, which requires EHT.
+
+Refs: openwrt-xiaomi-ax3000t-rd03v2 #57
+---
+--- a/src/ap/hostapd.c
++++ b/src/ap/hostapd.c
+@@ -375,6 +375,10 @@ int hostapd_reload_config(struct hostapd_iface *iface)
+ 		return res;
+ 	}
+ 
++	/* The new configuration keeps the channel in use, without going through
++	 * channel selection again. */
++	hostapd_disable_he_if_not_allowed(iface, newconf);
++
+ 	for (j = 0; j < iface->num_bss; j++) {
+ 		hapd = iface->bss[j];
+ 		if (!hapd->conf->config_id || !newconf->bss[j]->config_id ||
+--- a/src/ap/hw_features.c
++++ b/src/ap/hw_features.c
+@@ -1298,6 +1298,76 @@ int hostapd_determine_mode(struct hostapd_iface *iface)
+ }
+ 
+ 
++/**
++ * hostapd_disable_he_if_not_allowed - Drop HE where regulatory rules forbid it
++ * @iface: Pointer to interface data, with the channel to use in iface->freq
++ * @conf: The configuration to update: iface->conf, or one about to replace it
++ *
++ * Regulatory rules can forbid HE on a channel: ath11k firmware marks whole
++ * countries that way. cfg80211 then refuses a Beacon frame with an HE Operation
++ * element, which only shows as "Failed to set beacon parameters" and leaves the
++ * interface disabled. HE is optional outside 6 GHz, so start without it, as on
++ * channel 14.
++ */
++void hostapd_disable_he_if_not_allowed(struct hostapd_iface *iface,
++				       struct hostapd_config *conf)
++{
++	struct hostapd_channel_data *chan;
++	size_t i __maybe_unused;
++
++	if (!conf->ieee80211ax || !iface->current_mode)
++		return;
++
++#ifdef CONFIG_MESH
++	/* cfg80211 doesn't refuse a mesh, and mac80211 builds its beacons */
++	if (iface->mconf)
++		return;
++#endif /* CONFIG_MESH */
++
++	chan = hw_get_channel_freq(iface->current_mode->mode, iface->freq, NULL,
++				   iface->hw_features, iface->num_hw_features);
++	if (!chan || !(chan->flag & HOSTAPD_CHAN_NO_HE))
++		return;
++
++	if (is_6ghz_freq(iface->freq)) {
++		wpa_printf(MSG_ERROR,
++			   "Regulatory rules do not allow HE on %d MHz, and 6 GHz requires it",
++			   iface->freq);
++		return;
++	}
++
++#ifdef CONFIG_IEEE80211BE
++	for (i = 0; i < iface->num_bss; i++) {
++		if (!iface->bss[i]->conf->mld_ap)
++			continue;
++		wpa_printf(MSG_ERROR,
++			   "Regulatory rules do not allow HE on %d MHz, and an AP MLD requires it",
++			   iface->freq);
++		return;
++	}
++#endif /* CONFIG_IEEE80211BE */
++
++	hostapd_logger(iface->bss[0], NULL, HOSTAPD_MODULE_IEEE80211,
++		       HOSTAPD_LEVEL_WARNING,
++		       "Regulatory rules do not allow HE (802.11ax) on %d MHz: starting without it",
++		       iface->freq);
++	conf->ieee80211ax = 0;
++	conf->ieee80211be = 0;
++
++	/* hostapd_config_check() refuses these without HE, and it runs again
++	 * each time the interface is enabled. */
++	conf->mbssid = MBSSID_DISABLED;
++#ifdef CONFIG_FILS
++	for (i = 0; i < conf->num_bss; i++)
++		conf->bss[i]->fils_discovery_max_int = 0;
++#endif /* CONFIG_FILS */
++#ifdef CONFIG_IEEE80211AX
++	/* Spatial reuse settings reach the driver whatever the mode. */
++	conf->spr.sr_control = 0;
++#endif /* CONFIG_IEEE80211AX */
++}
++
++
+ static enum hostapd_chan_status
+ hostapd_check_chans(struct hostapd_iface *iface)
+ {
+@@ -1306,6 +1376,10 @@ hostapd_check_chans(struct hostapd_iface *iface)
+ 
+ 		hostapd_determine_mode(iface);
+ 
++		/* Before the channel checks and DFS, which use the channel
++		 * width of the modes left enabled. */
++		hostapd_disable_he_if_not_allowed(iface, iface->conf);
++
+ 		err = hostapd_is_usable_chans(iface);
+ 		if (err <= 0) {
+ 			if (!err)
+--- a/src/ap/hw_features.h
++++ b/src/ap/hw_features.h
+@@ -33,7 +33,15 @@ int hostapd_determine_mode(struct hostapd_iface *iface);
+ void hostapd_free_multi_hw_info(struct hostapd_multi_hw_info *multi_hw_info);
+ int hostapd_set_current_hw_info(struct hostapd_iface *iface, int oper_freq);
+ int hostapd_is_usable_chans(struct hostapd_iface *iface);
++void hostapd_disable_he_if_not_allowed(struct hostapd_iface *iface,
++				       struct hostapd_config *conf);
+ #else /* NEED_AP_MLME */
++static inline void
++hostapd_disable_he_if_not_allowed(struct hostapd_iface *iface,
++				  struct hostapd_config *conf)
++{
++}
++
+ static inline void
+ hostapd_free_hw_features(struct hostapd_hw_modes *hw_features,
+ 			 size_t num_hw_features)
+--- a/src/drivers/driver.h
++++ b/src/drivers/driver.h
+@@ -53,6 +53,7 @@ struct pr_pasn_ranging_params;
+ #define HOSTAPD_CHAN_INDOOR_ONLY 0x00010000
+ #define HOSTAPD_CHAN_GO_CONCURRENT 0x00020000
+ #define HOSTAPD_CHAN_AUTO_BW 0x00040000
++#define HOSTAPD_CHAN_NO_HE 0x00080000
+ 
+ /* Allowed bandwidth mask */
+ enum hostapd_chan_width_attr {
+--- a/src/drivers/driver_nl80211_capa.c
++++ b/src/drivers/driver_nl80211_capa.c
+@@ -2193,6 +2193,9 @@ static void phy_info_freq(struct hostapd_hw_modes *mode,
+ 	if (tb_freq[NL80211_FREQUENCY_ATTR_GO_CONCURRENT])
+ 		chan->flag |= HOSTAPD_CHAN_GO_CONCURRENT;
+ 
++	if (tb_freq[NL80211_FREQUENCY_ATTR_NO_HE])
++		chan->flag |= HOSTAPD_CHAN_NO_HE;
++
+ 	if (tb_freq[NL80211_FREQUENCY_ATTR_NO_10MHZ])
+ 		chan->allowed_bw &= ~HOSTAPD_CHAN_WIDTH_10;
+ 	if (tb_freq[NL80211_FREQUENCY_ATTR_NO_20MHZ])
+@@ -2309,7 +2312,7 @@ static int phy_info_freqs(struct phy_info_arg *phy_info,
+ 		[NL80211_FREQUENCY_ATTR_NO_80MHZ] = { .type = NLA_FLAG },
+ 		[NL80211_FREQUENCY_ATTR_NO_160MHZ] = { .type = NLA_FLAG },
+ 		[NL80211_FREQUENCY_ATTR_NO_320MHZ] = { .type = NLA_FLAG },
+-
++		[NL80211_FREQUENCY_ATTR_NO_HE] = { .type = NLA_FLAG },
+ 	};
+ 	int new_channels = 0;
+ 	struct hostapd_channel_data *channel;

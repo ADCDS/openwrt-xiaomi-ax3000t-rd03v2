@@ -42,6 +42,13 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
 
 ## Known issues
 
+- **Country `RU` with an HE mode: no Wi-Fi on v2.1.2** (#57). The firmware still has an old mark
+  from Qualcomm's regulatory database that forbids 802.11ax there, so both radios stay off with
+  `Failed to set beacon parameters` and `AP-DISABLED`. HE is the default mode. `BY` and `UA` carry
+  the same mark, and earlier releases weren't run. On a released image, keep your country and set
+  `htmode` to `HT20` on 2.4 GHz and `VHT80` on 5 GHz, which gives up Wi-Fi 6; this is confirmed on
+  `RU`. Don't use another country's code to get Wi-Fi back: you would get that country's channels
+  and power limits. The fix is not released yet ([details](docs/regulatory-ru-he.md)).
 - **802.11s mesh needs host Wi-Fi mode** (`nss.general.wifi_offload='0'`). With NSS Wi-Fi
   offload on, a mesh interface does not come up and takes its radio's AP down until it is
   removed. v2.0.0 resets in host mode whenever a device connects: use v2.0.1 or later (#47).
@@ -124,6 +131,7 @@ Details are in [VALIDATION.md](VALIDATION.md).
 - [NFC tag](docs/nfc.md)
 - [Updating without UART](docs/no-uart-reflash.md)
 - [UK 5.8 GHz channels and the firmware's regulatory database](docs/regulatory-gb-5ghz.md)
+- [Countries BY, RU, UA and 802.11ax](docs/regulatory-ru-he.md)
 
 ## v1.x
 
