@@ -66,6 +66,10 @@ shows the firmware's grouping:
 | 5.8 GHz at 20-33 dBm | US, CA, MX, BR, AR, CL, CO, PE, AU, NZ, IN, CN, HK, TW, SG, MY, TH, PH, VN, ID, KR, UA, RU, SA, QA, ZA, NG, PK |
 | no 5.8 GHz | JP, EG |
 
+These rows compare channel ranges and power only: the test did not record the other flags on
+each rule. RU and UA, in the third row, also carry one that forbids HE on this firmware
+([Countries BY, RU, UA and 802.11ax](regulatory-ru-he.md)).
+
 GB gets nothing the EU does not. The firmware's tables can be listed without a
 router: [`ath11k-fw-regdb.py`](https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2/blob/v1.14/tools/ath11k-fw-regdb.py) (in the v1.x tools) finds the
 5 GHz rule and domain tables in the Q6 image (they sit in each user PD's data
