@@ -292,8 +292,10 @@ for p in "$OV"/target/linux/qualcommax/patches-6.18/*.patch; do
 done
 if [ -n "$BP" ]; then
 	python3 "$V2/tools/check-host-rx.py" "$BP/drivers/net/wireless/ath/ath11k" > "$W/host-rx" 2>&1
+	host_rx_rc=$?
 	cat "$W/host-rx"
-	chk "host RX buffer byte semantics" "$(grep -c '^FAIL' "$W/host-rx")" 0
+	# its exit status too: a crash prints no FAIL line
+	chk "host RX buffer byte semantics" "$host_rx_rc $(grep -c '^FAIL' "$W/host-rx")" "0 0"
 fi
 
 echo "=== package repository"
