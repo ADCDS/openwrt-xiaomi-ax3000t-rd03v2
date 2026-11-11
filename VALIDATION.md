@@ -50,6 +50,7 @@ where the table below says it adds changes (v2.1.0 and v2.1.1 do).
 | DEV-v2.1.1-b1 | v2.1.0 plus 992 (#55) and the v1.x migration change (#51); bench-only additions for the #54 and #55 tests (see [v2.1.1](#v211)) |
 | v2.1.1 | the release: b1's sources plus tree patch 0012 (#54), built fresh; see [v2.1.1](#v211) |
 | v2.1.2 | the release: v2.1.1's sources plus `kmod-pppol2tp`, `kmod-pptp`, `kmod-mppe`, `ppp-mod-pppol2tp`, `ppp-mod-pptp` and `xl2tpd` in our repository (#56), built fresh; see [v2.1.2](#v212) |
+| DEV-inplace-b1 | v2.1.2's sources plus tree patch 0013 (an in-place sysupgrade is allowed), built fresh; see [In-place updates](#in-place-updates) |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -75,6 +76,57 @@ by hand on rc1 (C8, C14).
 | C13 | Upgrade from a realistic v1.x install | pass | b16 | not re-run; the migration's assumptions checked against his nss-tools |
 | C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 | not re-run (no hardware or device tree change) |
 | C15 | Package signature failures | pass, 8 checks | b9 | not re-run (same signing) |
+
+## In-place updates
+
+The refusal of an in-place `sysupgrade` (from issue #4, July 2026) rested on one unit that
+stopped booting after a scripted in-place upgrade, which was never reproduced. Retested on
+2026-11-11 on rd03v2-ap2 (stock loader, `0:APPSBL` md5 `e651d6fc067c1fbb9fca6310ec318c7d`), a
+dumb AP on the v2.1.2 release with its home configuration and no UART: seven in-place
+sysupgrades in a row, each keeping settings, with the release images of v2.1.2 and v2.1.1. Each
+run was checked from the raw UBI headers of both partitions and from the system after boot.
+
+| Run | Image | `platform.sh` on the running system | Booted | Settings |
+|---|---|---|---|---|
+| 1-3 | v2.1.2, v2.1.1, v2.1.2 | refusal removed; `ubi_kernel` reformatted before `nand_do_upgrade` | 3 / 3, 62-72 s to SSH, four APs (run 1: seen by hand at 99 s, not in its log) | `/etc/config` identical to the backup taken before |
+| 4-6 | v2.1.2, v2.1.1, v2.1.2 | refusal removed only (what the AX6000 and Redmi AX5400 run, and what tree patch 0013 ships) | 3 / 3, 67-68 s | identical |
+| 7 | v2.1.2 | the release's, unmodified, with `sysupgrade -F` | yes, 68 s | identical |
+
+In runs 4-7, `ubi_kernel` kept its image sequence number while the kernel and layout volumes
+moved to other eraseblocks every time: `nand_do_upgrade` rewrote the kernel UBI in place, the
+case the refusal was there for, and the stock loader booted it. The rootfs UBI was never
+reformatted, in any run. Every boot had the boot flags as `sysupgrade` sets them (slot 0,
+`flag_last_success=1`, both try counters 8). Every boot logs `cannot attach mtd19` (the command
+line names `ubi.mtd=rootfs` twice).
+
+**The built image.** DEV-inplace-b1: v2.1.2's sources plus tree patch 0013, built fresh in
+99 min, `verify-v2` 0 failures, the same image packages as v2.1.2 apart from `base-files` (the
+tree revision); its `platform.sh` has no refusal. On the same unit, settings kept each time:
+
+| Run | From -> to | Command | Booted | Settings |
+|---|---|---|---|---|
+| N1 | v2.1.2 -> DEV-inplace-b1 | `sysupgrade -F` (the one update from a release that refuses) | yes, 68 s to SSH, four APs | identical |
+| N2 | DEV-inplace-b1 -> DEV-inplace-b1 | `sysupgrade` (its `-T` passes without `-F`) | yes, 67 s | identical |
+| N3 | DEV-inplace-b1 -> v2.1.2 | `sysupgrade` | yes, 67 s | identical |
+
+The kernel UBI kept its image sequence number in all three, with the volumes on other
+eraseblocks. On DEV-inplace-b1 a random 4 MB file is still refused (`Image metadata not
+present`, `invalid sysupgrade file`); with `-F` `sysupgrade -T` lets it through, as on every
+release. With the image in `/tmp`, 24-27 MB `MemAvailable` was left before the upgrades where
+it was recorded (runs 1-4 and N1-N3).
+
+**`UBI init error 22`.** The stock loader's slot selection, from its disassembly: with
+`flag_ota_reboot=0`, it reads the try counter of the slot that `flag_last_success` names
+(`flag_try_sys1_failed` for slot 0, `flag_try_sys2_failed` for slot 1), and boots the other
+slot when that counter is over 5. With v1.x's flags (`flag_last_success=0`, both counters 8)
+it starts slot 1, the stock `rootfs_1` window: the first 36 MiB of the 81 MiB rootfs UBI, which
+cannot attach there (its volumes reserve all 652 eraseblocks; the window holds 288), so it
+prints `UBI init error 22`, and then, as v1.x installs showed, boots slot 0 (that fallback was
+not traced in the disassembly). That is the single error 22 that v1.x's
+documentation called harmless on a first boot. So on its own, the message doesn't show that the
+kernel UBI was the problem.
+The 30 MiB UBI attach that the loader also contains is in its TFTP recovery (the
+anti-rollback check), not in the boot path.
 
 ## v2.1.2
 
@@ -656,6 +708,7 @@ boot (SSID, WPA2 key and country BR on both radios, both APs up, the root passwo
 |---|---|---|
 | v1.14-nss -> v2 through the RAM installer, keeping a v1.x config (VLANs, the v1.x NSS knobs and disabled services that the migration handles) | pass | b5, b10, rc1-a |
 | v2 -> v2, keeping settings | pass | b10, and every candidate since (b12 -> b16) |
+| v2 -> v2 in place (`sysupgrade` from the installed system), keeping settings | pass: 10 / 10, see [In-place updates](#in-place-updates) | v2.1.2, v2.1.1, DEV-inplace-b1 |
 | v2 -> v1.14-nss (rollback), with a v1.x config | pass: v1.14-nss boots with it, both APs, NSS and ECM loaded, no warnings | b16 |
 | offline RAM installer from a release cache (`install.py nss-v2 --offline`) | pass | b9 |
 | v2 -> stock 2.0.28 with `xiaomi-openwrt-install` (`revert.py`, wired) | pass: stock written and read back, setup wizard back (`inited=0`) | rc1 (twice) |

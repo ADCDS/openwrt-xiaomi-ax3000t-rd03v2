@@ -1,8 +1,9 @@
 # Upgrading from v1.x
 
-Boot the release's RAM installer and run `sysupgrade` from there, keeping settings
-([updating without UART](no-uart-reflash.md)). Such a sysupgrade carries v1.x files that do not
-fit kuncy7's NSS stack, which the release is built on. On the first boot,
+Boot the release's RAM installer and run `sysupgrade` from there, keeping settings ([the RAM
+installer without UART](no-uart-reflash.md)). v1.1 to v1.14 refuse an in-place sysupgrade (v1.0
+does not); either way, an in-place update from v1.x has not been tested. That sysupgrade carries
+v1.x files that do not fit kuncy7's NSS stack, which the release is built on. On the first boot,
 `00-rd03v2-migrate-v1x` runs before every other first-boot script:
 
 - It removes the `qca-nss-ecm` line from `/etc/uci-defaults/10_disable_services`, which
@@ -28,8 +29,11 @@ usteer or DAWN settings, scripts) need the same amount taken off.
 ## Back to v1.x
 
 The same route in the other direction: boot a v1.x RAM installer and run `sysupgrade` with a
-v1.x image from there ([updating without UART](no-uart-reflash.md)). Restore a v1.x
-configuration backup, not one taken on v2. The v1.x `standard` image is the one without NSS
+v1.x image from there ([the RAM installer without UART](no-uart-reflash.md)). Restore a v1.x
+configuration backup, not one taken on v2. Don't flash a v1.x image in place, neither with
+`sysupgrade` nor in LuCI: from the release after v2.1.2 nothing refuses it any more (v1.x has
+the same board name), that has not been tested, and keeping settings, LuCI's default, would
+carry a v2 configuration into v1.x. The v1.x `standard` image is the one without NSS
 offload.
 
 ## Compared with v1.x

@@ -1,27 +1,80 @@
-# Reflashing without UART (remote initramfs pivot)
+# In-place updates, and the RAM installer without UART
 
-> TL;DR: the "flash only from a RAM-booted initramfs" rule does **not** require
-> serial access. `ubi_kernel` is a separate MTD partition that the running
-> system never attaches, so you can `ubiformat` the `initramfs-factory.ubi` into
-> it from the installed system, reboot into the RAM installer, and run the
-> sanctioned `sysupgrade` from there. Serial stays the recovery net, not the
-> entry ticket.
+Updates between v2 releases are a plain `sysupgrade` from the installed system. The RAM
+installer is for what isn't supported in place: coming from v1.x or another OpenWrt build,
+and going back to v1.x. It needs no serial access either: `ubi_kernel` is a
+separate MTD partition that the running system never attaches, so you can `ubiformat` the
+`initramfs-factory.ubi` into it from the installed system, reboot into the RAM installer, and
+run `sysupgrade` from there.
 
 From stock firmware,
 [xiaomi-openwrt-install](https://github.com/ADCDS/xiaomi-openwrt-install) does all of
-this for you. This page is the manual route from an installed OpenWrt (v2, v1.x or
-another build).
+this for you.
 
-## Why in-place sysupgrade is refused
+## In-place updates
 
-The stock locked U-Boot only attaches a kernel/rootfs UBI produced by a clean
-`ubiformat`, and `xiaomi_initramfs_prepare` can only reformat the rootfs UBI
-when not running from it, so `platform_check_image` refuses a sysupgrade unless
-the root filesystem is the RAM installer's (`tmpfs`). That constraint is about the
-**rootfs** partition. The **kernel** partition has no such problem: it is
-unattached at runtime, and `initramfs-factory.ubi` (built by `ubinize-kernel`) is
-a complete pre-built UBI image for it, a single volume named `kernel`, the same
-layout the working system boots from.
+```sh
+sysupgrade -v /tmp/new.bin    # settings kept; -n starts from a clean configuration
+```
+
+Use this board's `...-squashfs-sysupgrade.bin`. The image, about 17 MB, sits in RAM during the
+upgrade (`sysupgrade` copies one stored anywhere else into `/tmp` first), next to the running
+system: a plain access point had 24-27 MB `MemAvailable` left with it in `/tmp`. On a box
+running memory-hungry services (sing-box for Podkop, #46), stop them first. As with any flash,
+don't cut the power or kill `sysupgrade` while it writes: an interrupted write can leave nothing
+bootable, and the box then needs the stock TFTP recovery or UART.
+
+**v2.0.0 to v2.1.2 refuse it** with `Boot the initramfs image and run sysupgrade from there.`
+On those, add `-F` for that one update. `-F` turns the refusal into a warning (`Image check
+failed but --force given - will update anyway!`), but it also overrides every other image
+check, including the one that the image is meant for this board. So check first:
+
+```sh
+sha256sum /tmp/new.bin        # compare with the release's sha256sums.txt
+sysupgrade -T /tmp/new.bin    # the refusal must be the only error
+sysupgrade -F -v /tmp/new.bin
+```
+
+The releases after v2.1.2 take a plain `sysupgrade`.
+
+### Why those releases refused it
+
+In July 2026 a unit stopped booting after a script ran an in-place sysupgrade on it, with
+`UBI init error 22` on every boot. We concluded that the stock U-Boot attaches only a kernel UBI
+freshly made by `ubiformat`, and made `platform.sh` refuse any sysupgrade not started from the
+RAM installer. That was never reproduced, and it was wrong:
+
+- An RD03v2 with the stock loader upgraded in place 10 times out of 10, settings kept. Seven
+  used the v2.1.2 and v2.1.1 images: three with the refusal removed, once on the unmodified
+  v2.1.2 with `-F` overriding it, and three with `ubi_kernel` reformatted first. Three used a
+  build with the fix: onto it with `-F`, onto itself, and back to v2.1.2
+  ([VALIDATION.md](../VALIDATION.md#in-place-updates)). In every run without the reformat,
+  `nand_do_upgrade` rewrote the kernel volume in place, which is what the refusal was meant to
+  prevent.
+- OpenWrt upgrades the AX6000 and the Redmi AX5400 in place, with the same NAND layout and the
+  same upgrade code, and has no such check for them.
+- The stock loader prints `UBI init error 22` whenever it tries slot 1. With
+  `flag_last_success=0` and `flag_try_sys1_failed=8` (what v1.x and the AX6000 set) it starts
+  `rootfs_1` first. On this layout that is the first 36 MiB of OpenWrt's 81 MiB rootfs UBI,
+  which cannot attach there (its volumes reserve all 652 eraseblocks; the window holds 288), so
+  it then falls back to slot 0. So on its own the message doesn't show that the kernel UBI was
+  the problem. v2 sets the flags so that it starts slot 0.
+
+Why the July unit stopped booting is not known: its logs were not kept. An interrupted write
+would explain it.
+
+## When you still need the RAM installer
+
+- Coming from v1.x ([upgrading from v1.x](upgrading-from-v1.md)) or from another OpenWrt build
+  for this board. v1.1 to v1.14 refuse an in-place sysupgrade too (v1.0 does not), other builds
+  may have another board name, and an in-place update from them has not been tested.
+- Going back to v1.x. An in-place flash of a v1.x image is no longer refused, but it has not
+  been tested and would keep the v2 settings ([back to v1.x](upgrading-from-v1.md#back-to-v1x)).
+
+From the RAM installer, `sysupgrade` runs `xiaomi_initramfs_prepare`, which reformats both UBI
+partitions before writing. The kernel partition can be written from the installed system: it
+is unattached at runtime, and `initramfs-factory.ubi` (built by `ubinize-kernel`) is a complete
+UBI image for it, a single volume named `kernel`, the same layout the working system boots from.
 
 ## Procedure (all over SSH)
 
@@ -52,7 +105,7 @@ layout the working system boots from.
    a little longer than the `.itb` (a whole number of 126,976-byte LEBs); that
    difference is expected, not a bad flash.
 
-   Set the boot flags the sanctioned path sets: `boot_wait on`, `uart_en 1`,
+   Set the boot flags that `sysupgrade` sets: `boot_wait on`, `uart_en 1`,
    `flag_boot_rootfs 0`, `flag_last_success 1`, `flag_boot_success 1`,
    `flag_try_sys1_failed 8`, `flag_try_sys2_failed 8`.
 3. **Reboot.** The box comes up in the RAM installer with **default config**:
@@ -61,9 +114,8 @@ layout the working system boots from.
    `192.168.1.1 → <box MAC>` as a static ARP/neigh entry (in a network namespace
    if the driving host's own gateway is `.1.1`), SSH in (root, no password) the
    moment dropbear answers, stop dnsmasq and move the IP off `.1.1`.
-4. **Flash from the RAM installer** (the sanctioned path: `rootfs_type` is now
-   `tmpfs`): check memory first (below), upload the sysupgrade image and the
-   config backup, `sysupgrade -T`, then
+4. **Flash from the RAM installer** (`rootfs_type` is now `tmpfs`): check
+   memory first (below), upload the sysupgrade image and the config backup, `sysupgrade -T`, then
    `sysupgrade -f /tmp/config-backup.tar.gz /tmp/new.bin`. It reformats both
    UBIs, writes kernel and rootfs, restores the config, and reboots into the
    final system. A v1.x configuration is migrated on the first boot of v2

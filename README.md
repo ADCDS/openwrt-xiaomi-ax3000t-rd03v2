@@ -22,17 +22,20 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
   latest release over Ethernet or Wi-Fi **without opening the case or connecting UART**,
   validates the board and NAND, and verifies the images it writes. Its `--wifi-ssid`,
   `--wifi-key`, `--wifi-country` and `--root-password` options set up the installed system.
-- **From an installed OpenWrt, v1.x included:** boot the release's RAM installer and run
-  `sysupgrade` from there, never in place ([updating without UART](docs/no-uart-reflash.md)).
-  Keeping settings carries a v1.x configuration over ([upgrading from v1.x](docs/upgrading-from-v1.md)).
+- **From an installed v2:** `sysupgrade` in place, settings kept, as on any OpenWrt device.
+  v2.0.0 to v2.1.2 refuse it by mistake: on those, run `sysupgrade -F` with this board's
+  image once ([in-place updates](docs/no-uart-reflash.md#in-place-updates)).
+- **From v1.x or another OpenWrt build:** boot the release's RAM installer and run
+  `sysupgrade` from there ([the RAM installer without UART](docs/no-uart-reflash.md)). Keeping
+  settings carries a v1.x configuration over ([upgrading from v1.x](docs/upgrading-from-v1.md)).
 - **Back to stock:** `revert.py` from xiaomi-openwrt-install.
 
 ## After installing
 
 - Connect to a LAN port and open **http://192.168.1.1** for LuCI. Set a root password.
   Wi-Fi stays off until it is configured, unless the installer was given Wi-Fi settings.
-- **Every flash, including updates, runs from the RAM installer.** `sysupgrade` from the
-  installed NAND system is refused.
+- **Updates are a plain `sysupgrade`** from the installed system, settings kept. As with any
+  flash, don't cut the power or kill it while it writes.
 - Packages: `apk update`, then `apk add <package>`. Userspace comes from OpenWrt's snapshot
   feeds; kernel modules (`kmod-*`) and AmneziaWG come from this port's signed repository for
   the release ([packages](docs/packages.md)). A sysupgrade keeps the configuration but not
@@ -122,7 +125,7 @@ Details are in [VALIDATION.md](VALIDATION.md).
 - [Building](docs/building.md)
 - [VALIDATION.md](VALIDATION.md): what was tested on hardware, and what was not
 - [NFC tag](docs/nfc.md)
-- [Updating without UART](docs/no-uart-reflash.md)
+- [In-place updates, and the RAM installer without UART](docs/no-uart-reflash.md)
 - [UK 5.8 GHz channels and the firmware's regulatory database](docs/regulatory-gb-5ghz.md)
 
 ## v1.x

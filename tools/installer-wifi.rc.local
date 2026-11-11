@@ -9,19 +9,19 @@
 #     normal build would fail the other way round.
 #
 # WHY
-#   The RAM initramfs is the only sanctioned way to write this board's NAND
-#   (sysupgrade runs *from* it, never in place), but it comes
+#   The RAM initramfs is how a first install, or a move from v1.x or another
+#   build, writes this board's NAND (sysupgrade runs *from* it), but it comes
 #   up with both radios disabled, so the flash needs a LAN cable. Beaconing here
 #   is what makes a fully over-the-air install possible.
 #
 # THE GATE
 #   rootfs_type = tmpfs means "we are running from RAM". It is the same test
-#   platform_check_image() already uses to refuse an in-place sysupgrade, so it
-#   is load-bearing on this board rather than a new idea. The squashfs the -wifi
-#   pass produces is discarded, but the gate costs nothing and means even a
-#   -wifi image that somehow reached NAND would not beacon: a box coming up with
-#   radios on before a root password is set is the thing to avoid. If the type
-#   cannot be determined we do NOT beacon.
+#   xiaomi_initramfs_prepare() uses to decide whether to reformat both UBI
+#   partitions, so it is load-bearing on this board rather than a new idea. The
+#   squashfs the -wifi pass produces is discarded, but the gate costs nothing
+#   and means even a -wifi image that somehow reached NAND would not beacon: a
+#   box coming up with radios on before a root password is set is the thing to
+#   avoid. If the type cannot be determined we do NOT beacon.
 #
 #   The window this opens is the flash itself: a few minutes, on a system whose
 #   root account has no password either way, with the operator next to the box.
