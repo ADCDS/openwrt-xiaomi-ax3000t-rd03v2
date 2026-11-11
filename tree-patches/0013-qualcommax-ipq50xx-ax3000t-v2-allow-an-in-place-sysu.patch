@@ -1,0 +1,65 @@
+From e0ab696456125b051600d0b09f6fc9916e6752c7 Mon Sep 17 00:00:00 2001
+From: Adriel Santos <adriel@adriel.eu>
+Date: Wed, 11 Nov 2026 14:51:54 -0300
+Subject: [PATCH] qualcommax: ipq50xx: ax3000t-v2: allow an in-place sysupgrade
+
+platform_check_image refused every sysupgrade on the AX3000T v2 that did
+not run from the RAM-booted initramfs: the stock U-Boot was taken to
+attach only a kernel UBI that was freshly ubiformatted, so an in-place
+upgrade would leave the device unbootable ("UBI init error 22"). That
+rested on one unit that stopped booting after a scripted in-place
+upgrade. It was never reproduced, and it does not hold.
+
+On an RD03v2 with the stock loader, in-place sysupgrades with the
+settings kept all booted: 3 times with the check removed (v2.1.2 to
+v2.1.2, v2.1.1 and v2.1.2 again), once on the unmodified v2.1.2 with
+sysupgrade -F overriding the check, and 3 more times with ubi_kernel
+reformatted before nand_do_upgrade. In the 4 runs without the reformat,
+nand_do_upgrade rewrote the kernel volume in place: ubi_kernel kept its
+image sequence number while the kernel and layout volumes moved to
+other eraseblocks.
+
+The loader prints "UBI init error 22" whenever it tries slot 1.
+With flag_last_success=0 and flag_try_sys1_failed=8 it starts rootfs_1
+first, which on this layout is the first 36 MiB of OpenWrt's rootfs
+UBI and cannot attach there, then falls back to slot 0. So on its own
+the message does not show that the kernel UBI was the problem.
+
+OpenWrt upgrades the AX6000 and the Redmi AX5400 in place, with this
+NAND layout and this upgrade case, and has no such check for them.
+Drop it. A
+first install from stock still runs from the initramfs, where
+xiaomi_initramfs_prepare reformats both UBI partitions.
+
+Link: https://forum.openwrt.org/t/252985/29
+---
+ .../ipq50xx/base-files/lib/upgrade/platform.sh       | 12 +-----------
+ 1 file changed, 1 insertion(+), 11 deletions(-)
+
+diff --git a/target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh b/target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
+index 9a78cfaff1..f8cb947deb 100644
+--- a/target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
++++ b/target/linux/qualcommax/ipq50xx/base-files/lib/upgrade/platform.sh
+@@ -354,18 +354,8 @@ linksys_mx_pre_upgrade() {
+ 
+ platform_check_image() {
+ 	case "$(board_name)" in
+-	cudy,p5)
+-		nand_do_platform_check "$(board_name)" "$1"
+-		;;
++	cudy,p5|\
+ 	xiaomi,mi-router-ax3000t-v2)
+-		# The stock U-Boot can only attach a kernel UBI that was freshly
+-		# ubiformatted, which xiaomi_initramfs_prepare only does when
+-		# running from the initramfs. An in-place sysupgrade leaves the
+-		# device unbootable ("UBI init error 22").
+-		if [ "$(rootfs_type)" != "tmpfs" ]; then
+-			v "Boot the initramfs image and run sysupgrade from there."
+-			return 1
+-		fi
+ 		nand_do_platform_check "$(board_name)" "$1"
+ 		;;
+ 	*)
+-- 
+2.47.3
+
