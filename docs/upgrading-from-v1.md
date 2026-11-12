@@ -31,7 +31,7 @@ usteer or DAWN settings, scripts) need the same amount taken off.
 The same route in the other direction: boot a v1.x RAM installer and run `sysupgrade` with a
 v1.x image from there ([the RAM installer without UART](no-uart-reflash.md)). Restore a v1.x
 configuration backup, not one taken on v2. Don't flash a v1.x image in place, neither with
-`sysupgrade` nor in LuCI: from the release after v2.1.2 nothing refuses it any more (v1.x has
+`sysupgrade` nor in LuCI: from v2.1.3 on nothing refuses it any more (v1.x has
 the same board name), that has not been tested, and keeping settings, LuCI's default, would
 carry a v2 configuration into v1.x. The v1.x `standard` image is the one without NSS
 offload.

@@ -35,7 +35,7 @@ sysupgrade -T /tmp/new.bin    # the refusal must be the only error
 sysupgrade -F -v /tmp/new.bin
 ```
 
-The releases after v2.1.2 take a plain `sysupgrade`.
+From v2.1.3 on, a plain `sysupgrade` does.
 
 ### Why those releases refused it
 

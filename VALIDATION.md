@@ -51,6 +51,7 @@ where the table below says it adds changes (v2.1.0 and v2.1.1 do).
 | v2.1.1 | the release: b1's sources plus tree patch 0012 (#54), built fresh; see [v2.1.1](#v211) |
 | v2.1.2 | the release: v2.1.1's sources plus `kmod-pppol2tp`, `kmod-pptp`, `kmod-mppe`, `ppp-mod-pppol2tp`, `ppp-mod-pptp` and `xl2tpd` in our repository (#56), built fresh; see [v2.1.2](#v212) |
 | DEV-inplace-b1 | v2.1.2's sources plus tree patch 0013 (an in-place sysupgrade is allowed), built fresh; see [In-place updates](#in-place-updates) |
+| v2.1.3 | the release: DEV-inplace-b1's sources, built fresh; see [v2.1.3](#v213) |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -76,6 +77,33 @@ by hand on rc1 (C8, C14).
 | C13 | Upgrade from a realistic v1.x install | pass | b16 | not re-run; the migration's assumptions checked against his nss-tools |
 | C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 | not re-run (no hardware or device tree change) |
 | C15 | Package signature failures | pass, 8 checks | b9 | not re-run (same signing) |
+
+## v2.1.3
+
+v2.1.2's sources plus tree patch 0013: an in-place `sysupgrade` is no longer refused (see
+[In-place updates](#in-place-updates)). The image holds the same packages at the same versions
+as v2.1.2 apart from `base-files` (the tree revision), with the same kernel package; its
+`platform.sh` has no refusal. `verify-v2` 0 failures. Built in 96 min; assets from
+`mkrelease-v2` (tree verification passed), the same twelve files as v2.1.2.
+
+**NAND run** on rd03v2-ap2 with its home configuration, the dumb AP whose only cable is its
+`wan` uplink, so both updates ran over that cable, in place:
+
+- **v2.1.2 -> v2.1.3** with `sysupgrade -F`, the update the release notes give for v2.0.0 to
+  v2.1.2: the image's sha256 matched `sha256sums.txt`, and `sysupgrade -T` showed only the
+  refusal. SSH answered 68 s after the flash began; `/etc/config` identical to before, the four
+  APs up, NSS Wi-Fi offload on (`nss_offload=1`, `frame_mode=2`), the boot flags as
+  `sysupgrade` sets them, the kernel UBI rewritten in place.
+- **v2.1.3 -> v2.1.3** with a plain `sysupgrade` (its `-T` passes without `-F`): 69 s,
+  the same checks.
+- **Package repository:** after publishing, `apk update` read the v2.1.3 repository from the
+  image's list, and `kmod-tun` resolved from it.
+- **Reboots:** a plain `reboot` came back. About two minutes later the board reset once by
+  itself, while `nss-status` ran: a hard reset (UBIFS recovered the overlay on the next boot),
+  with no watchdog receipt and nothing in pstore. Not reproduced: the board then stayed up
+  untouched for more than six minutes, and `nss-status` ran cleanly at 402 s and, after
+  another reboot, at 113 s. v2.1.3 has v2.1.2's kernel and modules, so this is not from the
+  release's change; it is recorded with the earlier unexplained resets ([C9](#c9-recovery-from-q6-firmware-crashes)).
 
 ## In-place updates
 
