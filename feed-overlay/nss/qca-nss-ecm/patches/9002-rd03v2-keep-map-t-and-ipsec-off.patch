@@ -1,0 +1,15 @@
+--- a/Makefile
++++ b/Makefile
+@@ -1,6 +1,12 @@
+ # ###################################################
+ # Makefile for the QCA NSS ECM
+ # ###################################################
++# rd03v2: interface types this port has never exercised stay off, as GRE and SIT already are
++# in the feed Makefile. kmod-nat46 and kmod-ipsec would otherwise switch MAP-T and IPsec on
++# (and make ecm.ko depend on nat46.ko) as soon as either is selected, even as a module.
++override ECM_INTERFACE_MAP_T_ENABLE := n
++override ECM_INTERFACE_IPSEC_ENABLE := n
++
+ ifeq ($(ECM_FRONT_END_SFE_ENABLE), y)
+ obj-m += examples/ecm_sfe_l2.o
+ endif

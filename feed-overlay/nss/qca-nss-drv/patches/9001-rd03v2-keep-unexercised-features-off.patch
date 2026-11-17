@@ -1,0 +1,19 @@
+--- a/Makefile
++++ b/Makefile
+@@ -2,6 +2,16 @@
+ # # Makefile for the NSS driver
+ # ###################################################
+ 
++# rd03v2: NSS features this port has never exercised stay off, whichever kmods the build
++# selects. The feed Makefile turns them on when kmod-ipsec, kmod-nat46 or kmod-sit is
++# selected, or when the mirror/mesh client kmods are; building all kernel modules would
++# then change the NSS driver that ships in the image.
++override NSS_DRV_IPSEC_ENABLE := n
++override NSS_DRV_MAPT_ENABLE := n
++override NSS_DRV_TUN6RD_ENABLE := n
++override NSS_DRV_MIRROR_ENABLE := n
++override NSS_DRV_WIFI_MESH_ENABLE := n
++
+ obj-m += qca-nss-drv.o
+ 
+ #
