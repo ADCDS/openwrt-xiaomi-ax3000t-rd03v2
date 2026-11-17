@@ -1,11 +1,11 @@
 # Countries BY, RU, UA and 802.11ax (issue #57)
 
 > TL;DR — with country `RU` and an HE mode, which is this board's default, both radios stay off
-> on v2.1.2, and nothing in the log says why. The firmware still carries an old mark from
+> on v2.1.2 and v2.1.3, and nothing in the log says why. The firmware still carries an old mark from
 > Qualcomm's regulatory database that forbids 802.11ax for Belarus, Russia and Ukraine, a mark
-> Qualcomm itself removed in 2021. Two changes, not yet in a release, fix this: ath11k patch
+> Qualcomm itself removed in 2021. Two changes, in v2.1.4, fix this: ath11k patch
 > `993` ignores that mark for those three countries, and hostapd patch `994` starts an AP without
-> HE wherever a regulatory rule forbids it, instead of leaving the radio off. On a released image,
+> HE wherever a regulatory rule forbids it, instead of leaving the radio off. On v2.1.3 and earlier,
 > `HT20` and `VHT80` bring both radios up without Wi-Fi 6. Whichever you use, the firmware's
 > channels and power limits for `RU` stay as they are, and [they go beyond Russia's published
 > rules](#channels-and-power-are-not-changed).
@@ -213,7 +213,7 @@ what your firmware applies, and a radio's own rules can differ from a country's 
 Choosing a legal channel and power remains your responsibility, so check them against the rules
 where you are.
 
-## On a released image
+## On v2.1.3 and earlier
 
 ```
 uci set wireless.radio0.htmode='HT20'

@@ -45,13 +45,18 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
 
 ## Known issues
 
-- **Country `RU` with an HE mode: no Wi-Fi on v2.1.2** (#57). The firmware still has an old mark
-  from Qualcomm's regulatory database that forbids 802.11ax there, so both radios stay off with
-  `Failed to set beacon parameters` and `AP-DISABLED`. HE is the default mode. `BY` and `UA` carry
-  the same mark, and earlier releases weren't run. On a released image, keep your country and set
-  `htmode` to `HT20` on 2.4 GHz and `VHT80` on 5 GHz, which gives up Wi-Fi 6; this is confirmed on
-  `RU`. Don't use another country's code to get Wi-Fi back: you would get that country's channels
-  and power limits. The fix is not released yet ([details](docs/regulatory-ru-he.md)).
+- **Country `RU` with an HE mode: no Wi-Fi up to v2.1.3** (#57, fixed in v2.1.4). The firmware
+  still has an old mark from Qualcomm's regulatory database that forbids 802.11ax there, so both
+  radios stayed off with `Failed to set beacon parameters` and `AP-DISABLED`; `BY` and `UA` carry
+  the same mark. From v2.1.4 these countries keep HE. Not tested: a Wi-Fi 6 client on such an AP.
+  On v2.1.3 or earlier, update, or keep your country and set `htmode` to `HT20` on 2.4 GHz and
+  `VHT80` on 5 GHz. Don't use another country's code to get Wi-Fi back: you would get that
+  country's channels and power limits ([details](docs/regulatory-ru-he.md)).
+- **Units whose NAND has a 128-byte spare area: releases up to v2.1.3 cannot read their flash**
+  (xiaomi-openwrt-install#7). Stock runs such chips with 8-bit error correction; our device tree
+  forced 4-bit, so every read failed and the installer stopped before flashing. From v2.1.4 the
+  error correction follows the chip, as in stock's loader. Units with a 64-byte spare area (all
+  units tested here) are configured exactly as before. No 128-byte unit has run v2.1.4 yet.
 - **802.11s mesh needs host Wi-Fi mode** (`nss.general.wifi_offload='0'`). With NSS Wi-Fi
   offload on, a mesh interface does not come up and takes its radio's AP down until it is
   removed. v2.0.0 resets in host mode whenever a device connects: use v2.0.1 or later (#47).

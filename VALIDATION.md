@@ -52,6 +52,7 @@ where the table below says it adds changes (v2.1.0 and v2.1.1 do).
 | v2.1.2 | the release: v2.1.1's sources plus `kmod-pppol2tp`, `kmod-pptp`, `kmod-mppe`, `ppp-mod-pppol2tp`, `ppp-mod-pptp` and `xl2tpd` in our repository (#56), built fresh; see [v2.1.2](#v212) |
 | DEV-inplace-b1 | v2.1.2's sources plus tree patch 0013 (an in-place sysupgrade is allowed), built fresh; see [In-place updates](#in-place-updates) |
 | v2.1.3 | the release: DEV-inplace-b1's sources, built fresh; see [v2.1.3](#v213) |
+| v2.1.4 | the release: v2.1.3's sources plus 993 and 994 (#57), tree patch 0014 (the NAND ECC follows the chip), every kernel module package with the NSS driver and ECM kept as before, and a one-line procd backport, built fresh; see [v2.1.4](#v214) |
 
 **Not tested:** a multi-day soak (the longest single runs were hours), more
 than one unit of the hardware, and RF performance beyond throughput at one
@@ -77,6 +78,70 @@ by hand on rc1 (C8, C14).
 | C13 | Upgrade from a realistic v1.x install | pass | b16 | not re-run; the migration's assumptions checked against his nss-tools |
 | C14 | Buttons and LEDs | pass: both LEDs, both buttons, reboot, failsafe, factory reset | b9, rc1 | not re-run (no hardware or device tree change) |
 | C15 | Package signature failures | pass, 8 checks | b9 | not re-run (same signing) |
+
+## v2.1.4
+
+v2.1.3's sources plus:
+
+- **#57:** ath11k 993 (countries `BY`, `RU` and `UA` keep HE) and hostapd 994 (an AP starts
+  without HE where a regulatory rule forbids it); see [the RU doc](docs/regulatory-ru-he.md).
+- **xiaomi-openwrt-install#7:** tree patch 0014. The device tree no longer forces 4-bit ECC,
+  so the NAND driver picks the strength from the chip's spare area, as the stock loader does.
+- **Every kernel module package** in the repository, with feed-overlay patches that keep the
+  NSS driver's IPsec, MAP-T, 6rd, mirror and Wi-Fi mesh support and ECM's MAP-T and IPsec off,
+  as in every release so far. `kmod-ipt-rtpengine` (its feed lacks a header) and the NSS
+  MAP-T, mirror and mesh client modules are left out.
+- **procd:** `ujail` does not lock `SECBIT_KEEP_CAPS` (procd 0d3c5dc1bb, one line), which
+  OpenWrt's snapshot dnsmasq packages need since 2026-11-01.
+
+**Build:** 119 min, no package failed, `verify-v2` 0 failures, including new checks for 993,
+994 and the device tree's ECC properties. Against v2.1.3:
+
+| | v2.1.3 | v2.1.4 |
+|---|---|---|
+| Image packages | 209 | the same at the same versions apart from `base-files` and `kernel`, plus `kmod-nat46` (his ECM Makefile depends on it once it is built; ECM does not use it) |
+| Device tree | | only `nand-ecc-step-size` and `nand-ecc-strength` removed |
+| Modules in the image | 95 | 96: `qca-nss-drv.ko` and `qca-nss-netlink.ko` with the same symbols and section sizes; `ecm.ko` and `mac80211.ko` the same symbols, 64 bytes more code; `ath11k.ko` 80 bytes more (993); `nf_conntrack`, `nf_nat` and `nft_ct` larger, from kernel options the new modules select; 21 differ in all, most by tens of bytes |
+| Kernel | | 247 more options built in, code +341 KB |
+| sysupgrade image | 16.90 MB | 17.12 MB |
+| Repository | 135 kmods, 169 packages, 11 MB | 1253 kmods, 1287 packages, 53 MB |
+
+**NAND run** on rd03v2-ap2 with its home configuration (a dumb AP, wired uplink on `wan`), all
+updates in place. The run used two builds of these sources: the first without the procd
+backport, the second (the release's image) with it; they differ in nothing else.
+
+- **v2.1.3 -> v2.1.4** (first build), plain `sysupgrade`, `-T` clean: SSH after 71 s.
+  `/etc/config` identical; the 12 boot-chain partitions match the stock manifest; boot flags
+  unchanged; all 20 MTD partitions at 4-bit ECC, 64-byte spare area, 0 failures and 0
+  corrections, as on v2.1.3: for this chip 0014 picks what was forced before. NSS Wi-Fi
+  offload on (`nss_offload=1`, `frame_mode=2`), four APs up.
+- **A reboot** (47 s), **v2.1.4 -> v2.1.4** (73 s), and **first build -> the release's image**
+  (76 s): the same checks each time.
+- **Memory (C11):** 42.3 / 41.7 MB available at 5 / 10 min, against 42.7-43.7 MB for v2.1.3
+  on the same unit the day before: about 1 MB less, from the kernel.
+- **#57:** v2.1.3 as the control: `RU` gives `NO-HE` on every rule, `Failed to set beacon
+  parameters` and no radio up in 240 s. v2.1.4, on both builds: `RU`, `BY` and `UA` with HE20
+  on channel 6 and HE80 on channel 100 have no `NO-HE` rule, both radios `ENABLED` (`BY`
+  after its 60 s CAC) with `ieee80211ax=1`, four APs, and no 994 warning. The home
+  configuration back byte for byte, both radios up after the CAC. Beacons were not captured on
+  this run, and no client was associated; the PR's runs on DEV-i57-b1 did both.
+- **Wired (C3):** a client routed through the unit: 931 / 932 Mbit/s with ECM accelerating the
+  connections and the CPU 95 % idle (v2.1.3: 938); 1 GB from the internet at 672 Mbit/s, the
+  line's speed.
+- **Packages (C12)**, from the build's repository served locally, since v2.1.4's was not
+  published yet: `apk del dnsmasq; apk add dnsmasq-full` installs OpenWrt's snapshot
+  `dnsmasq-full` 2.93-r12 with `kmod-nf-conntrack-netlink`; it starts in its jail, answers
+  DNS, and a uci `config ipset` section fills an nftables set from the answers. On the first
+  build, without the procd backport, the same package failed with `setting capabilities
+  failed: Operation not permitted`. hostapd and wpa_supplicant, the other jails with a
+  capabilities file, run as before. Afterwards the pinned `dnsmasq` 2.93-r6 was put back.
+
+**Not tested:** a unit with a 128-byte spare area, the case 0014 exists for (none here; the
+reporter's unit is the first). A Wi-Fi 6 client on an `RU`, `BY` or `UA` AP. Wi-Fi throughput
+(C4), host Wi-Fi mode, firmware-crash recovery (C9) and a soak were not re-run: ath11k changes
+only in 993's regulatory flags, and the NSS driver is unchanged. Of the new kernel modules
+only `nf_conntrack_netlink` and `nat46` were loaded on a router. `apk` from the published
+repository is checked after publishing.
 
 ## v2.1.3
 
