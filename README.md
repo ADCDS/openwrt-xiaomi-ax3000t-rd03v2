@@ -56,7 +56,10 @@ tested on hardware, and what was not, is in [VALIDATION.md](VALIDATION.md).
   (xiaomi-openwrt-install#7). Stock runs such chips with 8-bit error correction; our device tree
   forced 4-bit, so every read failed and the installer stopped before flashing. From v2.1.4 the
   error correction follows the chip, as in stock's loader. Units with a 64-byte spare area (all
-  units tested here) are configured exactly as before. No 128-byte unit has run v2.1.4 yet.
+  units tested here) are configured exactly as before. **No 128-byte unit has run v2.1.4 yet**:
+  whether its bootloader reads what OpenWrt writes with 8-bit correction is not known, so the
+  installer refuses such a unit unless told to go ahead (`--allow-untested-8bit-nand`), and a
+  failed install there needs Xiaomi's TFTP recovery or a UART adapter.
 - **802.11s mesh needs host Wi-Fi mode** (`nss.general.wifi_offload='0'`). With NSS Wi-Fi
   offload on, a mesh interface does not come up and takes its radio's AP down until it is
   removed. v2.0.0 resets in host mode whenever a device connects: use v2.0.1 or later (#47).

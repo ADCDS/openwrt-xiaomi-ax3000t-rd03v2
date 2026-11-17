@@ -12,8 +12,9 @@ From v2.1.4 the repository holds every kernel module package the target can buil
 1250), as OpenWrt's own builds do; before, it held the ones someone had asked for. Left out:
 `kmod-ipt-rtpengine`, which does not build, and the NSS client modules for MAP-T, mirroring and
 Wi-Fi mesh management. The NSS driver and ECM in the image are built without IPsec, MAP-T and
-6rd support, as before, whichever modules are in the repository: `kmod-ipsec`, `kmod-nat46`
-and `kmod-sit` work on the CPU and their traffic is not offloaded. The modules were built, not
+6rd support, as before, whichever modules are in the repository, so `kmod-ipsec`, `kmod-nat46`
+and `kmod-sit` should work on the CPU without offload; none of the three was tried, and IPsec
+next to ECM in particular is untested. The modules were built, not
 each one tried: only the ones named in [VALIDATION](../VALIDATION.md) were loaded on a router.
 
 pppd plugins (`ppp-mod-*`) load only into the pppd they were built for: pppd reads them from

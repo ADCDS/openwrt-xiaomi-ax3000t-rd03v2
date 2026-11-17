@@ -99,16 +99,16 @@ v2.1.3's sources plus:
 
 | | v2.1.3 | v2.1.4 |
 |---|---|---|
-| Image packages | 209 | the same at the same versions apart from `base-files` and `kernel`, plus `kmod-nat46` (his ECM Makefile depends on it once it is built; ECM does not use it) |
+| Image packages | 200 | 201: the same at the same versions apart from `base-files` and `kernel`, plus `kmod-nat46` (his ECM Makefile depends on it once it is built; ECM does not use it). `wpad` is built differently at the same version: the Wi-Fi 7 driver modules now in the repository switch on hostapd's 802.11be and OCV support (82 KB larger) |
 | Device tree | | only `nand-ecc-step-size` and `nand-ecc-strength` removed |
-| Modules in the image | 95 | 96: `qca-nss-drv.ko` and `qca-nss-netlink.ko` with the same symbols and section sizes; `ecm.ko` and `mac80211.ko` the same symbols, 64 bytes more code; `ath11k.ko` 80 bytes more (993); `nf_conntrack`, `nf_nat` and `nft_ct` larger, from kernel options the new modules select; 21 differ in all, most by tens of bytes |
+| Modules in the image | 95 | 96: `qca-nss-drv.ko` and `qca-nss-netlink.ko` with the same symbols and section sizes; `ecm.ko` and `mac80211.ko` the same symbols, 64 bytes larger; `ath11k.ko` 80 bytes more (993); `nf_conntrack`, `nf_nat` and `nft_ct` larger, from kernel options the new modules select; 21 differ in all, most by tens of bytes |
 | Kernel | | 247 more options built in, code +341 KB |
 | sysupgrade image | 16.90 MB | 17.12 MB |
 | Repository | 135 kmods, 169 packages, 11 MB | 1253 kmods, 1287 packages, 53 MB |
 
 **NAND run** on rd03v2-ap2 with its home configuration (a dumb AP, wired uplink on `wan`), all
 updates in place. The run used two builds of these sources: the first without the procd
-backport, the second (the release's image) with it; they differ in nothing else.
+backport, the second (the release's image) with it. Their root filesystems differ only in `ujail`, the version stamps and a rebuilt `qca-nss-netlink.ko`.
 
 - **v2.1.3 -> v2.1.4** (first build), plain `sysupgrade`, `-T` clean: SSH after 71 s.
   `/etc/config` identical; the 12 boot-chain partitions match the stock manifest; boot flags
@@ -117,6 +117,15 @@ backport, the second (the release's image) with it; they differ in nothing else.
   offload on (`nss_offload=1`, `frame_mode=2`), four APs up.
 - **A reboot** (47 s), **v2.1.4 -> v2.1.4** (73 s), and **first build -> the release's image**
   (76 s): the same checks each time.
+- **RAM installer (C1):** a RAM installer built from these sources (the first build's, with a
+  test-only addition that answers SSH on the uplink cable) written to the kernel UBI and
+  booted: SSH after 54 s. Its live device tree forces no ECC strength; all 20 partitions at
+  4-bit with 0 failures; reading the 13 boot-chain and calibration partitions end to end adds
+  no ECC failure, and the boot chain matches the stock manifest 12/12; the U-Boot environment
+  reads without a CRC error. These are the checks a unit with a 128-byte spare area would be
+  asked to pass before anything is written. Then the release's sysupgrade image, installed
+  from that RAM system with the saved configuration: the home AP again two minutes after the
+  flash began, `/etc/config` identical, NSS Wi-Fi offload active.
 - **Memory (C11):** 42.3 / 41.7 MB available at 5 / 10 min, against 42.7-43.7 MB for v2.1.3
   on the same unit the day before: about 1 MB less, from the kernel.
 - **#57:** v2.1.3 as the control: `RU` gives `NO-HE` on every rule, `Failed to set beacon
@@ -124,7 +133,11 @@ backport, the second (the release's image) with it; they differ in nothing else.
   on channel 6 and HE80 on channel 100 have no `NO-HE` rule, both radios `ENABLED` (`BY`
   after its 60 s CAC) with `ieee80211ax=1`, four APs, and no 994 warning. The home
   configuration back byte for byte, both radios up after the CAC. Beacons were not captured on
-  this run, and no client was associated; the PR's runs on DEV-i57-b1 did both.
+  this run; the PR's runs on DEV-i57-b1 did that.
+- **Wi-Fi clients (C4, short):** because `wpad` is built differently, a phone (Wi-Fi 5) joined a
+  test network on each band of the release's image: on 5 GHz at VHT-MCS 9, 80 MHz, with 195 MB
+  up and 278 MB down in 30 s; on 2.4 GHz about 50 MB each way in 85 s. WPA2 handshakes
+  completed, no errors logged. No Wi-Fi 6 or Wi-Fi 7 client was available.
 - **Wired (C3):** a client routed through the unit: 931 / 932 Mbit/s with ECM accelerating the
   connections and the CPU 95 % idle (v2.1.3: 938); 1 GB from the internet at 672 Mbit/s, the
   line's speed.
@@ -140,7 +153,7 @@ backport, the second (the release's image) with it; they differ in nothing else.
 reporter's unit is the first). A Wi-Fi 6 client on an `RU`, `BY` or `UA` AP. Wi-Fi throughput
 (C4), host Wi-Fi mode, firmware-crash recovery (C9) and a soak were not re-run: ath11k changes
 only in 993's regulatory flags, and the NSS driver is unchanged. Of the new kernel modules
-only `nf_conntrack_netlink` and `nat46` were loaded on a router. `apk` from the published
+only `nf_conntrack_netlink` and `nat46` were loaded on a router. Among the kernel options now built in are XFRM, the GRE conntrack helper, conntrack labels, the netfilter egress hook, netpoll and TLS device support: IPsec next to ECM, and GRE or PPTP passthrough with the GRE helper, were not tried. A station (uplink) interface was not run on this build. `apk` from the published
 repository is checked after publishing.
 
 ## v2.1.3

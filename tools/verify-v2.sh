@@ -223,6 +223,20 @@ EOS
 	else
 		echo "FAIL ath11k.ko or the tree's objdump not found"; fail=$((fail + 1))
 	fi
+	# The NSS driver and ECM keep the features no release exercised off, whichever kmods the
+	# build selects (feed-overlay qca-nss-drv 9001, qca-nss-ecm 9002): a feed that renames a
+	# switch would turn those overrides into silent no-ops.
+	nm=$(ls "$TREE"/staging_dir/toolchain-*/bin/*-linux-musl-nm 2>/dev/null | head -1)
+	drv=$(find "$X/lib/modules" -name qca-nss-drv.ko 2>/dev/null | head -1)
+	ecm=$(find "$X/lib/modules" -name ecm.ko 2>/dev/null | head -1)
+	if [ -n "$nm" ] && [ -n "$drv" ] && [ -n "$ecm" ]; then
+		chk "qca-nss-drv.ko has no IPsec, MAP-T, 6rd, mirror or Wi-Fi mesh code (9001)" \
+			"$("$nm" --defined-only "$drv" | grep -ciE ' nss_(ipsec|map_t|tun6rd|mirror|wifi_mesh)')" 0
+		chk "ecm.ko has no MAP-T or IPsec interface code and does not need nat46 (9002)" \
+			"$("$nm" "$ecm" | grep -ciE 'map_t|nat46|ipsec_tunnel')" 0
+	else
+		echo "FAIL qca-nss-drv.ko, ecm.ko or the tree's nm not found"; fail=$((fail + 1))
+	fi
 else
 	echo "FAIL cannot unpack the root squashfs of the sysupgrade image"; fail=$((fail + 1))
 fi
