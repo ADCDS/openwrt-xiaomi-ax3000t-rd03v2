@@ -53,7 +53,7 @@ for f in "$T"/*-initramfs-uImage-wifi.itb "$T"/*-initramfs-factory-wifi.ubi; do
 	echo "removing the previous build's $(basename "$f")"; rm -f "$f"
 done
 start=$(date +%s)
-(cd "$TREE" && nice make -j"$JOBS" BUILD_LOG=1 >"$TREE/build.log" 2>&1) || die "make failed (see $TREE/build.log, logs/)"
+(cd "$TREE" && nice make -j"$JOBS" BUILD_LOG=1 ${V2_IGNORE_ERRORS:+IGNORE_ERRORS="$V2_IGNORE_ERRORS"} >"$TREE/build.log" 2>&1) || die "make failed (see $TREE/build.log, logs/)"
 echo "build: $(( $(date +%s) - start )) s"
 
 # 9. the repository: packages of feeds outside the official ones land outside the target dir
