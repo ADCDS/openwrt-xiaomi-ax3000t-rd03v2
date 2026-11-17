@@ -234,6 +234,11 @@ if [ -n "$dtb" ]; then
 	chk "DTB i2c@78b7000 clock-frequency" "$(fdtget -t u "$dtb" /soc@0/i2c@78b7000 clock-frequency 2>&1)" 100000
 	chk "DTB i2c@78b7000 dmas" "$(fdtget -t x "$dtb" /soc@0/i2c@78b7000 dmas 2>&1 | awk '{print $2, $4}')" "8 9"
 	chk "DTB i2c@78b7000 dma-names" "$(fdtget -t s "$dtb" /soc@0/i2c@78b7000 dma-names 2>&1 | tr '\0' ' ' | xargs)" "tx rx"
+	# tree patch 0014: the ECC strength follows the chip's OOB size, as in the stock loader
+	nand=/soc@0/spi@79b0000/nand@0
+	chk "DTB nand@0 ECC engine" "$(fdtget "$dtb" $nand nand-ecc-engine >/dev/null 2>&1 && echo set || echo missing)" set
+	chk "DTB nand@0 forces no ECC strength" "$(fdtget "$dtb" $nand nand-ecc-strength >/dev/null 2>&1 && echo forced || echo absent)" absent
+	chk "DTB nand@0 forces no ECC step" "$(fdtget "$dtb" $nand nand-ecc-step-size >/dev/null 2>&1 && echo forced || echo absent)" absent
 else
 	echo "FAIL DTB not found in the tree"; fail=$((fail + 1))
 fi

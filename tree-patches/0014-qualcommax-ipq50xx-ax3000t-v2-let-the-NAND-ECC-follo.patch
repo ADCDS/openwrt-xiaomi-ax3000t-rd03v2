@@ -1,0 +1,51 @@
+From e337727f6dd5a48403c99ab5b8cd7cc9b90ce4a8 Mon Sep 17 00:00:00 2001
+From: Adriel Santos <adriel@adriel.eu>
+Date: Tue, 17 Nov 2026 01:44:33 -0300
+Subject: [PATCH] qualcommax: ipq50xx: ax3000t-v2: let the NAND ECC follow the
+ chip
+
+The board forced 4-bit ECC on its SPI-NAND. The stock bootloader does
+not use one strength for every unit: it looks the chip up in its own
+serial-NAND table and runs 8-bit ECC on the parts with a 128-byte spare
+area, 4-bit on those with 64 bytes. In the table of the stock U-Boot on
+this board (13 parts), the four 8-bit parts (GigaDevice c8 c1, c8 41,
+c8 81, Micron 2c 15) are exactly the ones with 128 bytes of spare.
+
+A unit built with one of those parts has its whole flash written with
+8-bit codewords, from SBL1 to ART and the U-Boot environment. With the
+forced 4-bit setting, every written page there reads back as an
+uncorrectable ECC error and wrong data: 532-byte codewords are decoded
+as 528-byte ones, so each page goes wrong at offsets 516-519,
+1032-1039 and 1548-1559. One unit in the field shows exactly this on
+every partition in the RAM installer, while it boots stock normally. An
+image installed there would be written in a layout its own loader cannot
+read.
+
+Without the two properties, spi-qpic-snand picks the strength from the
+OOB size (0422): 4-bit below 80 bytes, 8-bit from 80, which is the
+bootloader's rule for every part both know. The Linux tables give each
+of them the spare size the bootloader table gives. On the 64-byte parts
+(the ESMT F50D1G41LB most units carry) the result is the same 4-bit,
+512-byte-step configuration as before.
+
+Link: https://github.com/ADCDS/xiaomi-openwrt-install/issues/7
+---
+ target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts b/target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
+index 2a77d95efd..f4d06b2182 100644
+--- a/target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
++++ b/target/linux/qualcommax/dts/ipq5018-mi-router-ax3000t-v2.dts
+@@ -156,8 +156,6 @@
+ 		reg = <0>;
+ 
+ 		nand-ecc-engine = <&qpic_nand>;
+-		nand-ecc-step-size = <512>;
+-		nand-ecc-strength = <4>;
+ 		nand-bus-width = <8>;
+ 
+ 		partitions {
+-- 
+2.47.3
+
